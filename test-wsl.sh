@@ -102,7 +102,7 @@ fi
 echo ""
 echo "Test 3: Viewing history"
 echo "----------------------"
-node dist/index.js history --limit 1
+node dist/index.js history
 
 echo ""
 echo "========================================="

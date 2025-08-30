@@ -51,7 +51,7 @@ class AutomaticClaudeCode {
     }
     
     if (options.workDir) {
-      args.push('--cwd', options.workDir);
+      args.push('--add-dir', options.workDir);
     }
     
     if (options.allowedTools) {
@@ -74,6 +74,7 @@ class AutomaticClaudeCode {
       const claudeProcess = spawn('claude --dangerously-skip-permissions', args, {
         shell: true,
         env: { ...process.env },
+        cwd: options.workDir || process.cwd(),
       });
 
       let output = '';

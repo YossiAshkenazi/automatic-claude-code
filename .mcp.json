@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "C:/Users/יוסי/AppData/Roaming/npm/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
+      ],
+      "env": {}
+    },
+    "github": {
+      "type": "stdio", 
+      "command": "node",
+      "args": [
+        "C:/Users/יוסי/AppData/Roaming/npm/node_modules/@modelcontextprotocol/server-github/dist/index.js"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": ""
+      }
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "C:/Users/יוסי/AppData/Roaming/npm/node_modules/@modelcontextprotocol/server-memory/dist/index.js"
+      ],
+      "env": {}
+    }
+  }
+}

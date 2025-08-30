@@ -83,7 +83,7 @@ class ConfigManager {
     }
   }
 
-  get(key: keyof Config): any {
+  get<K extends keyof Config>(key: K): Config[K] {
     return this.config[key];
   }
 

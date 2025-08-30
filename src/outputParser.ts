@@ -8,10 +8,32 @@ export interface ParsedOutput {
   commands?: string[];
 }
 
+interface ToolCall {
+  tool: string;
+  parameters?: Record<string, unknown>;
+}
+
+interface ClaudeJsonOutput {
+  result?: string;
+  output?: string;
+  session_id?: string;
+  sessionId?: string;
+  total_cost_usd?: number;
+  totalCost?: number;
+  error?: string;
+  tools_used?: string[];
+  tool_calls?: ToolCall[];
+  files_modified?: string[];
+  files_created?: string[];
+  files_read?: string[];
+  commands_executed?: string[];
+  bash_commands?: string[];
+}
+
 export class OutputParser {
   parse(output: string): ParsedOutput {
     try {
-      const jsonOutput = JSON.parse(output);
+      const jsonOutput: ClaudeJsonOutput = JSON.parse(output);
       
       return {
         result: jsonOutput.result || jsonOutput.output || '',
@@ -60,7 +82,7 @@ export class OutputParser {
     return result;
   }
 
-  private extractTools(jsonOutput: any): string[] {
+  private extractTools(jsonOutput: ClaudeJsonOutput): string[] {
     const tools: string[] = [];
     
     if (jsonOutput.tools_used) {
@@ -68,13 +90,13 @@ export class OutputParser {
     }
     
     if (jsonOutput.tool_calls) {
-      tools.push(...jsonOutput.tool_calls.map((tc: any) => tc.tool));
+      tools.push(...jsonOutput.tool_calls.map((tc) => tc.tool));
     }
     
     return [...new Set(tools)];
   }
 
-  private extractFiles(jsonOutput: any): string[] {
+  private extractFiles(jsonOutput: ClaudeJsonOutput): string[] {
     const files: string[] = [];
     
     if (jsonOutput.files_modified) {
@@ -92,7 +114,7 @@ export class OutputParser {
     return [...new Set(files)];
   }
 
-  private extractCommands(jsonOutput: any): string[] {
+  private extractCommands(jsonOutput: ClaudeJsonOutput): string[] {
     const commands: string[] = [];
     
     if (jsonOutput.commands_executed) {

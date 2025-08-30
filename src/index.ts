@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
-import { spawn, ChildProcess } from 'child_process';
-import * as fs from 'fs/promises';
+import { spawn } from 'child_process';
 import * as path from 'path';
-import * as readline from 'readline/promises';
+import * as fs from 'fs';
+import * as os from 'os';
 import chalk from 'chalk';
 import { Command } from 'commander';
-import { config } from './config';
 import { SessionManager } from './sessionManager';
-import { OutputParser } from './outputParser';
+import { OutputParser, ParsedOutput } from './outputParser';
 import { PromptBuilder } from './promptBuilder';
+import { Logger } from './logger';
 
 interface LoopOptions {
   maxIterations?: number;
@@ -21,10 +21,18 @@ interface LoopOptions {
   allowedTools?: string;
 }
 
+interface AnalysisResult {
+  isComplete: boolean;
+  hasError: boolean;
+  needsMoreWork: boolean;
+  suggestions?: string[];
+}
+
 class AutomaticClaudeCode {
   private sessionManager: SessionManager;
   private outputParser: OutputParser;
   private promptBuilder: PromptBuilder;
+  private logger: Logger;
   private iteration: number = 0;
   private sessionHistory: string[] = [];
 
@@ -32,6 +40,7 @@ class AutomaticClaudeCode {
     this.sessionManager = new SessionManager();
     this.outputParser = new OutputParser();
     this.promptBuilder = new PromptBuilder();
+    this.logger = new Logger();
   }
 
   async runClaudeCode(prompt: string, options: LoopOptions): Promise<{ output: string; exitCode: number }> {
@@ -62,7 +71,7 @@ class AutomaticClaudeCode {
     }
 
     return new Promise((resolve, reject) => {
-      const claudeProcess = spawn('claude', args, {
+      const claudeProcess = spawn('claude --dangerously-skip-permissions', args, {
         shell: true,
         env: { ...process.env },
       });
@@ -73,6 +82,13 @@ class AutomaticClaudeCode {
       claudeProcess.stdout.on('data', (data) => {
         const chunk = data.toString();
         output += chunk;
+        
+        // Log real-time output
+        const lines = chunk.split('\n').filter((line: string) => line.trim());
+        lines.forEach((line: string) => {
+          this.logger.progress(`Claude output: ${line.substring(0, 200)}`);
+        });
+        
         if (options.verbose) {
           process.stdout.write(chalk.gray(chunk));
         }
@@ -81,6 +97,10 @@ class AutomaticClaudeCode {
       claudeProcess.stderr.on('data', (data) => {
         const chunk = data.toString();
         errorOutput += chunk;
+        
+        // Log errors in real-time
+        this.logger.error(`Claude error: ${chunk}`);
+        
         if (options.verbose) {
           process.stderr.write(chalk.red(chunk));
         }
@@ -108,15 +128,28 @@ class AutomaticClaudeCode {
     console.log(chalk.blue.bold('\n🚀 Starting Automatic Claude Code Loop\n'));
     console.log(chalk.cyan(`Initial Task: ${initialPrompt}`));
     console.log(chalk.cyan(`Max Iterations: ${maxIterations}`));
-    console.log(chalk.cyan(`Working Directory: ${options.workDir || process.cwd()}\n`));
+    console.log(chalk.cyan(`Working Directory: ${options.workDir || process.cwd()}`));
+    console.log(chalk.cyan(`Log File: ${this.logger.getLogFilePath()}\n`));
+    
+    this.logger.info('Starting Automatic Claude Code Loop', {
+      initialPrompt,
+      maxIterations,
+      workDir: options.workDir || process.cwd(),
+      options
+    });
 
     await this.sessionManager.createSession(initialPrompt, options.workDir || process.cwd());
 
     while (this.iteration < maxIterations) {
       this.iteration++;
+      this.logger.setIteration(this.iteration);
       
       console.log(chalk.yellow.bold(`\n━━━ Iteration ${this.iteration}/${maxIterations} ━━━`));
       console.log(chalk.gray(`Prompt: ${currentPrompt.substring(0, 100)}${currentPrompt.length > 100 ? '...' : ''}`));
+      
+      this.logger.info(`Starting iteration ${this.iteration}/${maxIterations}`, {
+        prompt: currentPrompt
+      });
 
       try {
         const startTime = Date.now();
@@ -130,6 +163,7 @@ class AutomaticClaudeCode {
         if (parsedOutput.sessionId && !sessionId) {
           sessionId = parsedOutput.sessionId;
           console.log(chalk.gray(`Session ID: ${sessionId}`));
+          this.logger.setSessionInfo(sessionId, this.iteration);
         }
 
         await this.sessionManager.addIteration({
@@ -142,15 +176,28 @@ class AutomaticClaudeCode {
 
         this.sessionHistory.push(parsedOutput.result || result.output);
 
+        // Log parsed output details
+        if (parsedOutput.files && parsedOutput.files.length > 0) {
+          this.logger.info(`Files modified: ${parsedOutput.files.join(', ')}`);
+        }
+        if (parsedOutput.commands && parsedOutput.commands.length > 0) {
+          this.logger.info(`Commands executed: ${parsedOutput.commands.join(', ')}`);
+        }
+        if (parsedOutput.tools && parsedOutput.tools.length > 0) {
+          this.logger.info(`Tools used: ${parsedOutput.tools.join(', ')}`);
+        }
+        
         const analysisResult = await this.analyzeOutput(parsedOutput, result.exitCode);
         
         if (analysisResult.isComplete) {
           console.log(chalk.green.bold('\n✅ Task completed successfully!'));
+          this.logger.success('Task completed successfully!');
           break;
         }
 
         if (analysisResult.hasError && !options.continueOnError) {
           console.log(chalk.red.bold('\n❌ Error detected. Stopping loop.'));
+          this.logger.error('Error detected, stopping loop', { analysisResult });
           break;
         }
 
@@ -167,8 +214,10 @@ class AutomaticClaudeCode {
 
       } catch (error) {
         console.error(chalk.red(`\n❌ Error in iteration ${this.iteration}:`), error);
+        this.logger.error(`Error in iteration ${this.iteration}`, { error: error instanceof Error ? error.message : error });
         
         if (!options.continueOnError) {
+          this.logger.close();
           throw error;
         }
         
@@ -183,15 +232,13 @@ class AutomaticClaudeCode {
     await this.sessionManager.saveSession();
     console.log(chalk.blue.bold('\n📊 Session Summary:'));
     await this.printSummary();
+    
+    this.logger.info('Session completed', { summary: await this.sessionManager.getSummary() });
+    this.logger.close();
   }
 
-  private async analyzeOutput(output: any, exitCode: number): Promise<{
-    isComplete: boolean;
-    hasError: boolean;
-    needsMoreWork: boolean;
-    suggestions?: string[];
-  }> {
-    const hasError = exitCode !== 0 || output.error;
+  private async analyzeOutput(output: ParsedOutput, exitCode: number): Promise<AnalysisResult> {
+    const hasError = exitCode !== 0 || Boolean(output.error);
     const result = output.result || '';
     
     const completionIndicators = [
@@ -224,7 +271,7 @@ class AutomaticClaudeCode {
     return {
       isComplete,
       hasError: hasError || hasErrorInOutput,
-      needsMoreWork: !isComplete && !hasError,
+      needsMoreWork: !isComplete && !(hasError || hasErrorInOutput),
     };
   }
 
@@ -286,6 +333,65 @@ async function main() {
     .action(async () => {
       const sessionManager = new SessionManager();
       await sessionManager.showHistory();
+    });
+
+  program
+    .command('logs [repo]')
+    .description('View logs for a repository')
+    .option('-t, --tail', 'Tail the latest log file in real-time')
+    .option('-l, --list', 'List all log files')
+    .action(async (repo, options) => {
+      const repoName = repo || path.basename(process.cwd());
+      
+      if (options.list) {
+        const logs = Logger.getRepoLogs(repoName);
+        if (logs.length === 0) {
+          console.log(chalk.yellow(`No logs found for repo: ${repoName}`));
+        } else {
+          console.log(chalk.blue.bold(`\nLogs for ${repoName}:\n`));
+          logs.forEach((log, index) => {
+            console.log(chalk.cyan(`${index + 1}. ${log}`));
+          });
+        }
+        return;
+      }
+      
+      const logs = Logger.getRepoLogs(repoName);
+      if (logs.length === 0) {
+        console.log(chalk.yellow(`No logs found for repo: ${repoName}`));
+        return;
+      }
+      
+      const latestLog = logs[0];
+      const logPath = path.join(
+        os.homedir(),
+        '.automatic-claude-code',
+        'logs',
+        repoName,
+        latestLog
+      );
+      
+      if (options.tail) {
+        console.log(chalk.blue.bold(`\nTailing log: ${latestLog}\n`));
+        console.log(chalk.gray('Press Ctrl+C to exit\n'));
+        
+        // Display current content
+        const content = fs.readFileSync(logPath, 'utf-8');
+        console.log(content);
+        
+        // Watch for changes
+        Logger.tailLog(logPath, (line: string) => {
+          console.log(line);
+        });
+        
+        // Keep process running
+        process.stdin.resume();
+      } else {
+        // Display log content
+        const content = fs.readFileSync(logPath, 'utf-8');
+        console.log(chalk.blue.bold(`\nLog: ${latestLog}\n`));
+        console.log(content);
+      }
     });
 
   program.parse();

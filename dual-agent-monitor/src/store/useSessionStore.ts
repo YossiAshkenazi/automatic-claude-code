@@ -16,8 +16,14 @@ interface SessionStore {
   sessions: DualAgentSession[];
   selectedSession: DualAgentSession | null;
   isLoading: boolean;
+  isLoadingSessions: boolean;
+  isCreatingSession: boolean;
+  isDeletingSession: string | null; // sessionId being deleted
+  isUpdatingSession: string | null; // sessionId being updated
   error: string | null;
+  connectionError: string | null;
   isConnected: boolean;
+  lastConnectionTime: Date | null;
   filters: SessionFilters;
   sortBy: 'startTime' | 'lastActivity' | 'messageCount';
   sortOrder: 'asc' | 'desc';
@@ -61,8 +67,14 @@ export const useSessionStore = create<SessionStore>()(
       sessions: [],
       selectedSession: null,
       isLoading: false,
+      isLoadingSessions: false,
+      isCreatingSession: false,
+      isDeletingSession: null,
+      isUpdatingSession: null,
       error: null,
+      connectionError: null,
       isConnected: false,
+      lastConnectionTime: null,
       filters: {},
       sortBy: 'startTime',
       sortOrder: 'desc',
@@ -196,69 +208,102 @@ export const useSessionStore = create<SessionStore>()(
       },
 
       setConnectionStatus: (connected) => {
-        set({ isConnected: connected });
-        if (connected) {
+        const currentState = get();
+        const wasConnected = currentState.isConnected;
+        
+        set({ 
+          isConnected: connected,
+          lastConnectionTime: connected ? new Date() : currentState.lastConnectionTime,
+          connectionError: connected ? null : currentState.connectionError
+        });
+        
+        // Only show toast if connection status actually changed
+        if (connected && !wasConnected) {
           toast.success('Connected to server');
-        } else {
+        } else if (!connected && wasConnected) {
+          set({ connectionError: 'Lost connection to server' });
           toast.error('Disconnected from server');
         }
       },
 
       // API actions
       loadSessions: async () => {
-        set({ isLoading: true, error: null });
+        set({ isLoadingSessions: true, error: null });
         try {
           const sessions = await apiClient.getSessions();
-          set({ sessions, isLoading: false });
+          set({ 
+            sessions, 
+            isLoadingSessions: false,
+            error: null 
+          });
           
-          // Auto-select most recent active session
-          const activeSession = sessions.find(s => s.status === 'running' || s.status === 'paused');
-          if (activeSession && !get().selectedSession) {
-            get().setSelectedSession(activeSession.id);
+          // Auto-select most recent active session if none selected
+          const currentState = get();
+          if (!currentState.selectedSession) {
+            const activeSession = sessions.find(s => s.status === 'running' || s.status === 'paused');
+            const recentSession = sessions.sort((a, b) => 
+              new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+            )[0];
+            
+            const sessionToSelect = activeSession || recentSession;
+            if (sessionToSelect) {
+              get().setSelectedSession(sessionToSelect.id);
+            }
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to load sessions';
-          set({ error: errorMessage, isLoading: false });
+          set({ 
+            error: errorMessage, 
+            isLoadingSessions: false,
+            sessions: get().sessions || [] // Keep existing sessions on error
+          });
           toast.error('Failed to load sessions', { description: errorMessage });
         }
       },
 
       createSession: async (task) => {
-        set({ isLoading: true, error: null });
+        set({ isCreatingSession: true, error: null });
         try {
           const session = await apiClient.createSession(task);
           get().addSession(session);
           get().setSelectedSession(session.id);
-          set({ isLoading: false });
+          set({ isCreatingSession: false });
           toast.success('Session created successfully');
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to create session';
-          set({ error: errorMessage, isLoading: false });
+          set({ error: errorMessage, isCreatingSession: false });
           toast.error('Failed to create session', { description: errorMessage });
+          throw error; // Re-throw to allow calling code to handle
         }
       },
 
       updateSessionStatus: async (sessionId, status) => {
+        set({ isUpdatingSession: sessionId });
         try {
           await apiClient.updateSessionStatus(sessionId, status);
-          get().updateSession(sessionId, { status });
+          get().updateSession(sessionId, { status, lastActivity: new Date().toISOString() });
+          set({ isUpdatingSession: null });
           toast.success(`Session ${status}`);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to update session status';
-          set({ error: errorMessage });
+          set({ error: errorMessage, isUpdatingSession: null });
           toast.error('Failed to update session status', { description: errorMessage });
+          throw error;
         }
       },
 
       deleteSession: async (sessionId) => {
+        set({ isDeletingSession: sessionId });
         try {
-          await apiClient.deleteSession?.(sessionId);
+          await apiClient.deleteSession(sessionId);
           get().removeSession(sessionId);
+          set({ isDeletingSession: null });
           toast.success('Session deleted');
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to delete session';
-          set({ error: errorMessage });
+          set({ error: errorMessage, isDeletingSession: null });
           toast.error('Failed to delete session', { description: errorMessage });
+          throw error;
         }
       },
 
@@ -375,15 +420,21 @@ export const useSessionStore = create<SessionStore>()(
       },
 
       // Utilities
-      clearError: () => set({ error: null }),
+      clearError: () => set({ error: null, connectionError: null }),
       
       reset: () =>
         set({
           sessions: [],
           selectedSession: null,
           isLoading: false,
+          isLoadingSessions: false,
+          isCreatingSession: false,
+          isDeletingSession: null,
+          isUpdatingSession: null,
           error: null,
+          connectionError: null,
           isConnected: false,
+          lastConnectionTime: null,
           filters: {},
           sortBy: 'startTime',
           sortOrder: 'desc',

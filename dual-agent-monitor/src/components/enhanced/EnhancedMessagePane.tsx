@@ -316,8 +316,30 @@ export function EnhancedMessagePane({
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4"
       >
-        <AnimatePresence initial={false}>
-          {filteredMessages.map((message, index) => {
+        {filteredMessages.length === 0 ? (
+          <div className="h-full">
+            <EmptyState
+              icon={<FileText className="w-12 h-12" />}
+              title={filters.search ? 'No matching messages' : 
+                     agentType === 'all' ? 'No messages yet' : `No ${agentType} messages`}
+              description={
+                filters.search 
+                  ? `No messages match "${filters.search}". Try adjusting your search or filters.`
+                  : agentType === 'all'
+                  ? 'Messages will appear here as agents communicate'
+                  : `Messages from the ${agentType} agent will appear here`
+              }
+              action={filters.search ? {
+                label: 'Clear Search',
+                onClick: () => setFilters({ ...filters, search: undefined }),
+                variant: 'outline'
+              } : undefined}
+              size="md"
+            />
+          </div>
+        ) : (
+          <AnimatePresence initial={false}>
+            {filteredMessages.map((message, index) => {
             const agentColors = getAgentColor(message.agentType);
             const isSelected = selectedMessageId === message.id;
             
@@ -391,20 +413,8 @@ export function EnhancedMessagePane({
                 </Card>
               </motion.div>
             );
-          })}
-        </AnimatePresence>
-
-        {filteredMessages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-            <FileText className="w-12 h-12 mb-4 opacity-50" />
-            <p className="text-lg font-medium">No messages found</p>
-            <p className="text-sm">
-              {agentType === 'all' 
-                ? 'No messages match your current filters'
-                : `No messages from ${agentType} agent yet`
-              }
-            </p>
-          </div>
+            })}
+          </AnimatePresence>
         )}
 
         <div ref={messagesEndRef} />

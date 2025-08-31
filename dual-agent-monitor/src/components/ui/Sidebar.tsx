@@ -249,8 +249,8 @@ export function Sidebar({
               <div className="flex items-center justify-between">
                 <span>Status</span>
                 <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-success-500 rounded-full animate-pulse" />
-                  <span className="text-success-600">Online</span>
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-green-600">Online</span>
                 </div>
               </div>
             </motion.div>

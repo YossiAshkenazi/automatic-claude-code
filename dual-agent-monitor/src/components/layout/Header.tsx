@@ -152,11 +152,11 @@ export function Header({ currentView = 'overview', onViewChange, className }: He
                         className={cn(
                           'w-2 h-2 rounded-full',
                           isConnected
-                            ? 'bg-success-500 animate-pulse'
-                            : 'bg-error-500'
+                            ? 'bg-green-500 animate-pulse'
+                            : 'bg-red-500'
                         )}
                       />
-                      <span className={isConnected ? 'text-success-600' : 'text-error-600'}>
+                      <span className={isConnected ? 'text-green-600' : 'text-red-600'}>
                         {isConnected ? 'Connected' : 'Disconnected'}
                       </span>
                     </div>

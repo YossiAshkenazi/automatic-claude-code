@@ -23,6 +23,8 @@ import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Input } from '../ui/Input';
+import { LoadingSpinner, CardSkeleton } from '../ui/LoadingSpinner';
+import { EmptyState } from '../ui/EmptyState';
 import { DualAgentSession } from '../../types';
 import { useSessionStore } from '../../store/useSessionStore';
 import { cn, formatRelativeTime, formatDuration, getStatusColor } from '../../lib/utils';
@@ -42,6 +44,9 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
   const {
     sessions,
     selectedSession,
+    isLoadingSessions,
+    isDeletingSession,
+    isUpdatingSession,
     updateSessionStatus,
     deleteSession,
     exportSession,
@@ -73,6 +78,10 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
   }, [getFilteredSessions, searchTerm]);
 
   const handleStatusChange = async (session: DualAgentSession, newStatus: DualAgentSession['status']) => {
+    if (isUpdatingSession === session.id) {
+      return; // Prevent multiple simultaneous updates
+    }
+    
     try {
       await updateSessionStatus(session.id, newStatus);
       toast.success(`Session ${newStatus}`);
@@ -82,6 +91,10 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
   };
 
   const handleDeleteSession = async (session: DualAgentSession) => {
+    if (isDeletingSession === session.id) {
+      return; // Prevent multiple delete attempts
+    }
+    
     try {
       await deleteSession(session.id);
       setDeleteDialogSession(null);
@@ -101,6 +114,7 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
 
   const getSessionStatusActions = (session: DualAgentSession) => {
     const actions = [];
+    const isUpdating = isUpdatingSession === session.id;
     
     if (session.status === 'paused') {
       actions.push({
@@ -108,6 +122,7 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
         icon: Play,
         action: () => handleStatusChange(session, 'running'),
         color: 'text-green-600',
+        disabled: isUpdating,
       });
     } else if (session.status === 'running') {
       actions.push({
@@ -115,6 +130,7 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
         icon: Pause,
         action: () => handleStatusChange(session, 'paused'),
         color: 'text-yellow-600',
+        disabled: isUpdating,
       });
     }
     
@@ -124,6 +140,7 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
         icon: Square,
         action: () => handleStatusChange(session, 'completed'),
         color: 'text-red-600',
+        disabled: isUpdating,
       });
     }
     
@@ -183,13 +200,18 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
                       key={index}
                       variant="ghost"
                       size="icon"
+                      disabled={action.disabled}
                       onClick={(e) => {
                         e.stopPropagation();
                         action.action();
                       }}
-                      className={action.color}
+                      className={cn(action.color, action.disabled && 'opacity-50 cursor-not-allowed')}
                     >
-                      <action.icon className="w-4 h-4" />
+                      {action.disabled && isUpdatingSession === session.id ? (
+                        <LoadingSpinner size="sm" />
+                      ) : (
+                        <action.icon className="w-4 h-4" />
+                      )}
                     </Button>
                   ))}
                   
@@ -324,13 +346,22 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
                   key={index}
                   variant="outline"
                   size="sm"
+                  disabled={action.disabled}
                   onClick={(e) => {
                     e.stopPropagation();
                     action.action();
                   }}
-                  className={cn('opacity-0 group-hover:opacity-100 transition-opacity', action.color)}
+                  className={cn(
+                    'opacity-0 group-hover:opacity-100 transition-opacity', 
+                    action.color,
+                    action.disabled && 'opacity-30 cursor-not-allowed'
+                  )}
                 >
-                  <action.icon className="w-3 h-3 mr-1" />
+                  {action.disabled && isUpdatingSession === session.id ? (
+                    <LoadingSpinner size="sm" className="w-3 h-3 mr-1" />
+                  ) : (
+                    <action.icon className="w-3 h-3 mr-1" />
+                  )}
                   {action.label}
                 </Button>
               ))}
@@ -441,11 +472,39 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
         
         {/* Sessions Grid/List */}
         <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
-          {filteredSessions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-              <MessageSquare className="w-12 h-12 mb-4 opacity-50" />
-              <p className="text-lg font-medium">No sessions found</p>
-              <p className="text-sm">Create a new session to get started</p>
+          {isLoadingSessions && sessions.length === 0 ? (
+            // Show skeletons while loading
+            <div className={cn(
+              viewMode === 'grid' 
+                ? 'grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                : 'space-y-2'
+            )}>
+              {Array.from({ length: 6 }, (_, i) => (
+                <CardSkeleton key={i} showActions={true} lines={2} />
+              ))}
+            </div>
+          ) : filteredSessions.length === 0 ? (
+            <div className="h-full">
+              <EmptyState
+                icon={<MessageSquare className="w-12 h-12" />}
+                title={searchTerm ? 'No matching sessions' : 'No sessions yet'}
+                description={
+                  searchTerm 
+                    ? `No sessions match "${searchTerm}". Try adjusting your search or filters.`
+                    : 'Create your first dual-agent session to get started with collaborative AI development'
+                }
+                action={searchTerm ? {
+                  label: 'Clear Search',
+                  onClick: () => setSearchTerm(''),
+                  variant: 'outline'
+                } : {
+                  label: 'Create Session',
+                  onClick: () => {
+                    // TODO: Implement session creation
+                    toast.info('Session creation coming soon!');
+                  }
+                }}
+              />
             </div>
           ) : (
             <div className={cn(
@@ -466,6 +525,13 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
                   </motion.div>
                 ))}
               </AnimatePresence>
+            </div>
+          )}
+          
+          {/* Loading indicator for additional sessions */}
+          {isLoadingSessions && sessions.length > 0 && (
+            <div className="flex justify-center py-4">
+              <LoadingSpinner text="Loading more sessions..." />
             </div>
           )}
         </div>
@@ -497,8 +563,12 @@ export function EnhancedSessionList({ onSelectSession, className }: EnhancedSess
               <AlertDialog.Action asChild>
                 <Button
                   variant="destructive"
+                  disabled={deleteDialogSession ? isDeletingSession === deleteDialogSession.id : false}
                   onClick={() => deleteDialogSession && handleDeleteSession(deleteDialogSession)}
                 >
+                  {deleteDialogSession && isDeletingSession === deleteDialogSession.id ? (
+                    <LoadingSpinner size="sm" className="mr-2" />
+                  ) : null}
                   Delete
                 </Button>
               </AlertDialog.Action>

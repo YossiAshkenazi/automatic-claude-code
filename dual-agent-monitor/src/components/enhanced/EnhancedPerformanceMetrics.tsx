@@ -64,8 +64,8 @@ function MetricCard({ title, value, change, icon: Icon, color, description }: Me
               {change !== undefined && (
                 <div className={cn(
                   'flex items-center gap-1 text-xs px-2 py-1 rounded-full',
-                  isPositive && 'bg-success-100 text-success-700 dark:bg-success-900/20 dark:text-success-400',
-                  isNegative && 'bg-error-100 text-error-700 dark:bg-error-900/20 dark:text-error-400',
+                  isPositive && 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400',
+                  isNegative && 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400',
                   !isPositive && !isNegative && 'bg-secondary text-secondary-foreground'
                 )}>
                   {isPositive ? (

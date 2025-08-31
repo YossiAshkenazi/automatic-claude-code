@@ -129,9 +129,10 @@ class AutomaticClaudeCode {
       args.push('--resume', options.sessionId);
     }
     
-    args.push('--output-format', 'json');
-    args.push('--permission-mode', 'acceptEdits');
-    args.push('--max-turns', '10');
+    // Temporarily remove problematic arguments that may cause hanging
+    // args.push('--output-format', 'json');
+    // args.push('--permission-mode', 'acceptEdits'); 
+    // args.push('--max-turns', '10');
     
     if (options.verbose) {
       args.push('--verbose');

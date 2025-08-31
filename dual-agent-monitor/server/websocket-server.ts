@@ -5,6 +5,7 @@ import cors from 'cors';
 import { InMemoryDatabaseService } from './database/InMemoryDatabaseService';
 import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from './types';
 import { AnalyticsService } from './analytics/AnalyticsService';
+import { SessionReplayManager } from './replay/SessionReplayManager';
 import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
@@ -20,6 +21,7 @@ const wss = new WebSocketServer({ server });
 // Initialize database service and analytics
 const dbService = new InMemoryDatabaseService();
 const analyticsService = new AnalyticsService(dbService);
+const replayManager = new SessionReplayManager(dbService);
 const clients = new Set<WebSocket>();
 
 // Initialize analytics service
@@ -791,6 +793,453 @@ app.post('/api/analytics/metrics', async (req, res) => {
     });
     
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Session Replay API Endpoints
+app.post('/api/replay/sessions/:id/prepare', async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const options = req.body || {};
+    
+    const replayId = await replayManager.prepareSessionForReplay(sessionId, options);
+    const replaySession = replayManager.getReplaySession(replayId);
+    
+    if (!replaySession) {
+      return res.status(500).json({ error: 'Failed to create replay session' });
+    }
+    
+    const state = replaySession.stateManager.getState();
+    const metadata = replaySession.metadata;
+    
+    res.json({
+      replayId,
+      state,
+      metadata,
+      success: true
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/replay/:replayId', async (req, res) => {
+  try {
+    await replayManager.closeReplaySession(req.params.replayId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/play', async (req, res) => {
+  try {
+    const replaySession = replayManager.getReplaySession(req.params.replayId);
+    if (!replaySession) {
+      return res.status(404).json({ error: 'Replay session not found' });
+    }
+    
+    const options = req.body || {};
+    replaySession.controls.play(options);
+    
+    // Broadcast state update to WebSocket clients
+    broadcast({
+      type: 'replay:state_update',
+      data: {
+        replayId: req.params.replayId,
+        state: replaySession.stateManager.getState()
+      }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/pause', async (req, res) => {
+  try {
+    const replaySession = replayManager.getReplaySession(req.params.replayId);
+    if (!replaySession) {
+      return res.status(404).json({ error: 'Replay session not found' });
+    }
+    
+    replaySession.controls.pause();
+    
+    // Broadcast state update to WebSocket clients
+    broadcast({
+      type: 'replay:state_update',
+      data: {
+        replayId: req.params.replayId,
+        state: replaySession.stateManager.getState()
+      }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/stop', async (req, res) => {
+  try {
+    const replaySession = replayManager.getReplaySession(req.params.replayId);
+    if (!replaySession) {
+      return res.status(404).json({ error: 'Replay session not found' });
+    }
+    
+    replaySession.controls.stop();
+    
+    // Broadcast state update to WebSocket clients
+    broadcast({
+      type: 'replay:state_update',
+      data: {
+        replayId: req.params.replayId,
+        state: replaySession.stateManager.getState()
+      }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/step', async (req, res) => {
+  try {
+    const replaySession = replayManager.getReplaySession(req.params.replayId);
+    if (!replaySession) {
+      return res.status(404).json({ error: 'Replay session not found' });
+    }
+    
+    const { direction, options } = req.body;
+    
+    if (direction === 'forward') {
+      replaySession.controls.stepForward(options);
+    } else if (direction === 'backward') {
+      replaySession.controls.stepBackward(options);
+    } else {
+      return res.status(400).json({ error: 'direction must be "forward" or "backward"' });
+    }
+    
+    // Broadcast state update to WebSocket clients
+    broadcast({
+      type: 'replay:state_update',
+      data: {
+        replayId: req.params.replayId,
+        state: replaySession.stateManager.getState()
+      }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/seek', async (req, res) => {
+  try {
+    const replaySession = replayManager.getReplaySession(req.params.replayId);
+    if (!replaySession) {
+      return res.status(404).json({ error: 'Replay session not found' });
+    }
+    
+    const { position } = req.body;
+    if (typeof position !== 'number') {
+      return res.status(400).json({ error: 'position must be a number' });
+    }
+    
+    replaySession.stateManager.setCurrentIndex(position);
+    
+    // Broadcast state update to WebSocket clients
+    broadcast({
+      type: 'replay:state_update',
+      data: {
+        replayId: req.params.replayId,
+        state: replaySession.stateManager.getState()
+      }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/speed', async (req, res) => {
+  try {
+    const replaySession = replayManager.getReplaySession(req.params.replayId);
+    if (!replaySession) {
+      return res.status(404).json({ error: 'Replay session not found' });
+    }
+    
+    const { speed } = req.body;
+    if (typeof speed !== 'number') {
+      return res.status(400).json({ error: 'speed must be a number' });
+    }
+    
+    replaySession.controls.setSpeed(speed);
+    
+    // Broadcast state update to WebSocket clients
+    broadcast({
+      type: 'replay:state_update',
+      data: {
+        replayId: req.params.replayId,
+        state: replaySession.stateManager.getState()
+      }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/jump', async (req, res) => {
+  try {
+    const replaySession = replayManager.getReplaySession(req.params.replayId);
+    if (!replaySession) {
+      return res.status(404).json({ error: 'Replay session not found' });
+    }
+    
+    const { type, value } = req.body;
+    if (!type || value === undefined) {
+      return res.status(400).json({ error: 'type and value are required' });
+    }
+    
+    replaySession.controls.jumpTo({ type, value });
+    
+    // Broadcast state update to WebSocket clients
+    broadcast({
+      type: 'replay:state_update',
+      data: {
+        replayId: req.params.replayId,
+        state: replaySession.stateManager.getState()
+      }
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bookmark management
+app.post('/api/replay/:replayId/bookmarks', async (req, res) => {
+  try {
+    const bookmark = await replayManager.addBookmark(req.params.replayId, req.body);
+    
+    // Broadcast bookmark added to WebSocket clients
+    broadcast({
+      type: 'replay:bookmark_added',
+      data: {
+        replayId: req.params.replayId,
+        bookmark
+      }
+    });
+    
+    res.json(bookmark);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/replay/:replayId/bookmarks/:bookmarkId', async (req, res) => {
+  try {
+    await replayManager.updateBookmark(req.params.replayId, req.params.bookmarkId, req.body);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/replay/:replayId/bookmarks/:bookmarkId', async (req, res) => {
+  try {
+    await replayManager.removeBookmark(req.params.replayId, req.params.bookmarkId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Annotation management
+app.post('/api/replay/:replayId/annotations', async (req, res) => {
+  try {
+    const annotation = await replayManager.addAnnotation(req.params.replayId, req.body);
+    
+    // Broadcast annotation added to WebSocket clients
+    broadcast({
+      type: 'replay:annotation_added',
+      data: {
+        replayId: req.params.replayId,
+        annotation
+      }
+    });
+    
+    res.json(annotation);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/replay/:replayId/annotations/:annotationId', async (req, res) => {
+  try {
+    await replayManager.updateAnnotation(req.params.replayId, req.params.annotationId, req.body);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/replay/:replayId/annotations/:annotationId', async (req, res) => {
+  try {
+    await replayManager.removeAnnotation(req.params.replayId, req.params.annotationId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Segment management
+app.post('/api/replay/:replayId/segments', async (req, res) => {
+  try {
+    const segment = await replayManager.addSegment(req.params.replayId, req.body);
+    res.json(segment);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Export functionality
+app.post('/api/replay/:replayId/export', async (req, res) => {
+  try {
+    const { format, includeBookmarks, includeAnnotations, includeSegments, timeRange, eventTypes } = req.body;
+    
+    const data = await replayManager.exportReplayData(req.params.replayId, {
+      format: format || 'json',
+      includeBookmarks: includeBookmarks !== false,
+      includeAnnotations: includeAnnotations !== false,
+      includeSegments: includeSegments !== false,
+      timeRange,
+      eventTypes
+    });
+    
+    if (format === 'csv') {
+      res.header('Content-Type', 'text/csv');
+      res.header('Content-Disposition', `attachment; filename="replay-${req.params.replayId}.csv"`);
+    } else if (format === 'markdown') {
+      res.header('Content-Type', 'text/markdown');
+      res.header('Content-Disposition', `attachment; filename="replay-${req.params.replayId}.md"`);
+    } else {
+      res.header('Content-Type', 'application/json');
+      res.header('Content-Disposition', `attachment; filename="replay-${req.params.replayId}.json"`);
+    }
+    
+    res.send(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/segments/:segmentId/export', async (req, res) => {
+  try {
+    const { format } = req.body;
+    
+    const data = await replayManager.exportSegment(
+      req.params.replayId, 
+      req.params.segmentId,
+      {
+        format: format || 'json',
+        includeBookmarks: true,
+        includeAnnotations: true,
+        includeSegments: true
+      }
+    );
+    
+    if (format === 'csv') {
+      res.header('Content-Type', 'text/csv');
+      res.header('Content-Disposition', `attachment; filename="segment-${req.params.segmentId}.csv"`);
+    } else if (format === 'markdown') {
+      res.header('Content-Type', 'text/markdown');
+      res.header('Content-Disposition', `attachment; filename="segment-${req.params.segmentId}.md"`);
+    } else {
+      res.header('Content-Type', 'application/json');
+      res.header('Content-Disposition', `attachment; filename="segment-${req.params.segmentId}.json"`);
+    }
+    
+    res.send(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Multi-session comparison
+app.post('/api/replay/compare', async (req, res) => {
+  try {
+    const { sessionIds } = req.body;
+    
+    if (!Array.isArray(sessionIds) || sessionIds.length < 2) {
+      return res.status(400).json({ error: 'sessionIds array with at least 2 sessions is required' });
+    }
+    
+    const comparisonData = await replayManager.compareSessionsForReplay(sessionIds);
+    res.json(comparisonData);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Collaborative features
+app.get('/api/replay/:replayId/collaborators', async (req, res) => {
+  try {
+    const sessionInfo = replayManager.getSessionInfo(req.params.replayId);
+    if (!sessionInfo) {
+      return res.status(404).json({ error: 'Replay session not found' });
+    }
+    
+    const replaySession = replayManager.getReplaySession(req.params.replayId);
+    res.json({
+      collaborators: replaySession?.collaborators || [],
+      isCollaborative: replaySession?.isCollaborative || false
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/collaborators', async (req, res) => {
+  try {
+    const { collaborators } = req.body;
+    
+    if (!Array.isArray(collaborators)) {
+      return res.status(400).json({ error: 'collaborators array is required' });
+    }
+    
+    await replayManager.enableCollaborativeMode(req.params.replayId, collaborators);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/replay/:replayId/collaborators/:collaboratorId', async (req, res) => {
+  try {
+    await replayManager.addCollaborator(req.params.replayId, req.params.collaboratorId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Replay status and management
+app.get('/api/replay/status', async (req, res) => {
+  try {
+    res.json({
+      activeSessionsCount: replayManager.getActiveSessionsCount(),
+      activeSessionIds: replayManager.getActiveSessionIds()
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

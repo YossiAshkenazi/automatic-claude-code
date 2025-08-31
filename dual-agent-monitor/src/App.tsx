@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Monitor, Plus, RefreshCw, Wifi, WifiOff, BarChart3, Clock, List } from 'lucide-react';
+import { Monitor, Plus, RefreshCw, Wifi, WifiOff, BarChart3, Clock, List, Globe } from 'lucide-react';
 import { DualAgentSession, AgentMessage, WebSocketMessage } from './types';
 import { useWebSocket } from './hooks/useWebSocket';
 import { apiClient } from './utils/api';
@@ -8,23 +8,41 @@ import { SessionControls } from './components/SessionControls';
 import { Timeline } from './components/Timeline';
 import { SessionList } from './components/SessionList';
 import { PerformanceMetrics } from './components/PerformanceMetrics';
+import { CrossProjectView } from './components/CrossProjectView';
 import { formatDate } from './utils/formatters';
 
-type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'sessions';
+type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'sessions' | 'cross-project';
 
 function App() {
   const [sessions, setSessions] = useState<DualAgentSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<DualAgentSession | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('dual-pane');
+  const [viewMode, setViewMode] = useState<ViewMode>('cross-project');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Cross-project state
+  const [allEvents, setAllEvents] = useState<any[]>([]);
+  const [activeProjects, setActiveProjects] = useState<string[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>('all');
 
-  const { isConnected, lastMessage } = useWebSocket('ws://localhost:6003');
+  const { isConnected, lastMessage } = useWebSocket('ws://localhost:4000/stream');
 
-  // Load initial sessions
+  // Load initial data
   useEffect(() => {
     loadSessions();
+    loadCrossProjectData();
   }, []);
+
+  // Refresh cross-project data every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (viewMode === 'cross-project') {
+        loadCrossProjectData();
+      }
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, [viewMode]);
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -54,6 +72,26 @@ function App() {
       console.error('Error loading sessions:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCrossProjectData = async () => {
+    try {
+      const [events, projects] = await Promise.all([
+        apiClient.getRecentEvents(120), // Last 2 hours
+        apiClient.getActiveProjects()
+      ]);
+      
+      setAllEvents(events);
+      setActiveProjects(projects);
+      
+      // Reset error on successful load
+      if (error && error.includes('cross-project')) {
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Error loading cross-project data:', err);
+      setError('Failed to load cross-project data - check if observability server is running');
     }
   };
 
@@ -185,6 +223,7 @@ function App() {
           <div className="flex items-center gap-2">
             {/* View Mode Buttons */}
             <div className="flex items-center gap-1 mr-4">
+              {getViewModeButton('cross-project', <Globe size={18} />, 'All Projects')}
               {getViewModeButton('sessions', <List size={18} />, 'Sessions')}
               {getViewModeButton('dual-pane', <Monitor size={18} />, 'Dual Pane')}
               {getViewModeButton('timeline', <Clock size={18} />, 'Timeline')}
@@ -237,7 +276,17 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex">
-        {viewMode === 'sessions' ? (
+        {viewMode === 'cross-project' ? (
+          <div className="w-full">
+            <CrossProjectView
+              events={allEvents}
+              activeProjects={activeProjects}
+              selectedProject={selectedProject}
+              onProjectChange={setSelectedProject}
+              onRefresh={loadCrossProjectData}
+            />
+          </div>
+        ) : viewMode === 'sessions' ? (
           <div className="w-full">
             <SessionList 
               sessions={sessions}

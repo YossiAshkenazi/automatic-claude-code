@@ -5,7 +5,7 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "node node_modules/concurrently/dist/bin/concurrently.js \"npm run server:dev\" \"npm run client:dev\"",
-    "build": "npm run client:build && npm run server:build",
+    "build": "npm run client:build",
     "start": "node dist/server/index.js",
     "server:dev": "node node_modules/tsx/dist/cli.mjs server/index.ts",
     "server:build": "tsc --project server/tsconfig.json",

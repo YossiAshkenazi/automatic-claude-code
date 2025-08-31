@@ -1,6 +1,7 @@
 import { DualAgentSession, AgentMessage } from '../types';
 
-const API_BASE = '/api';
+// Connect directly to observability server for cross-project event streaming
+const API_BASE = 'http://localhost:4000';
 
 interface ApiError {
   message: string;
@@ -141,6 +142,27 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(message),
     });
+  }
+
+  // Cross-project event streaming methods
+  async getAllEvents(limit?: number): Promise<any[]> {
+    const endpoint = limit ? `/events?limit=${limit}` : '/events';
+    return this.request<any[]>(endpoint);
+  }
+
+  async getEventsByProject(sourceApp: string, limit?: number): Promise<any[]> {
+    const endpoint = limit ? 
+      `/events?source_app=${sourceApp}&limit=${limit}` : 
+      `/events?source_app=${sourceApp}`;
+    return this.request<any[]>(endpoint);
+  }
+
+  async getRecentEvents(minutes: number = 60): Promise<any[]> {
+    return this.request<any[]>(`/events/recent?minutes=${minutes}`);
+  }
+
+  async getActiveProjects(): Promise<string[]> {
+    return this.request<string[]>('/projects');
   }
 }
 

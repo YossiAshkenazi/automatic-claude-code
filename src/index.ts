@@ -43,13 +43,13 @@ class AutomaticClaudeCode {
     this.logger = new Logger();
   }
 
-  private getClaudeCommand(): string {
+  private getClaudeCommand(): { command: string; baseArgs: string[] } {
     // For WSL/Linux compatibility, prefer npx approach first
     if (process.platform === 'linux' || process.env.WSL_DISTRO_NAME) {
       try {
         this.logger.info('Linux/WSL detected, using npx approach...');
         execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 15000 });
-        return 'npx @anthropic-ai/claude-code --dangerously-skip-permissions';
+        return { command: 'npx', baseArgs: ['@anthropic-ai/claude-code', '--dangerously-skip-permissions'] };
       } catch (error) {
         this.logger.error(`npx failed: ${error}`);
       }
@@ -58,34 +58,34 @@ class AutomaticClaudeCode {
     // Try to actually run claude --version to verify it works
     try {
       execSync('claude --version', { stdio: 'ignore' });
-      return 'claude --dangerously-skip-permissions';
+      return { command: 'claude', baseArgs: ['--dangerously-skip-permissions'] };
     } catch {
       // Try npx approach as fallback
       try {
         this.logger.info('Claude not directly accessible, trying npx...');
         execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 15000 });
-        return 'npx @anthropic-ai/claude-code --dangerously-skip-permissions';
+        return { command: 'npx', baseArgs: ['@anthropic-ai/claude-code', '--dangerously-skip-permissions'] };
       } catch {
         // Try to find claude-code instead of claude
         try {
           execSync('claude-code --version', { stdio: 'ignore' });
           this.logger.info('Using claude-code command');
-          return 'claude-code --dangerously-skip-permissions';
+          return { command: 'claude-code', baseArgs: ['--dangerously-skip-permissions'] };
         } catch {
           // Last resort - try direct npm global path
           try {
             const npmPrefix = execSync('npm config get prefix', { encoding: 'utf-8' }).trim();
             const possiblePaths = [
-              path.join(npmPrefix, 'bin', 'claude'),
-              path.join(npmPrefix, 'bin', 'claude-code'),
-              path.join(process.env.HOME || '', '.npm-global', 'bin', 'claude'),
-              path.join(process.env.HOME || '', '.npm-global', 'bin', 'claude-code')
+              { path: path.join(npmPrefix, 'bin', 'claude'), name: 'claude' },
+              { path: path.join(npmPrefix, 'bin', 'claude-code'), name: 'claude-code' },
+              { path: path.join(process.env.HOME || '', '.npm-global', 'bin', 'claude'), name: 'claude' },
+              { path: path.join(process.env.HOME || '', '.npm-global', 'bin', 'claude-code'), name: 'claude-code' }
             ];
             
-            for (const claudePath of possiblePaths) {
+            for (const { path: claudePath, name } of possiblePaths) {
               if (fs.existsSync(claudePath)) {
                 this.logger.info(`Found Claude at: ${claudePath}`);
-                return `"${claudePath}" --dangerously-skip-permissions`;
+                return { command: claudePath, baseArgs: ['--dangerously-skip-permissions'] };
               }
             }
           } catch {
@@ -126,11 +126,12 @@ class AutomaticClaudeCode {
     }
 
     return new Promise((resolve, reject) => {
-      const claudeCommand = this.getClaudeCommand();
-      this.logger.debug(`Using Claude command: ${claudeCommand}`);
+      const { command, baseArgs } = this.getClaudeCommand();
+      const allArgs = [...baseArgs, ...args];
+      this.logger.debug(`Using Claude command: ${command} ${allArgs.join(' ')}`);
       
-      const claudeProcess = spawn(claudeCommand, args, {
-        shell: true,
+      const claudeProcess = spawn(command, allArgs, {
+        shell: false, // Don't use shell for better compatibility
         env: { ...process.env },
         cwd: options.workDir || process.cwd(),
       });

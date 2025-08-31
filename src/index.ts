@@ -428,6 +428,123 @@ async function main() {
     });
 
   program
+    .command('examples')
+    .description('Show example prompts and usage patterns')
+    .action(async () => {
+      console.log(chalk.blue.bold('\n🚀 Automatic Claude Code - Example Prompts\n'));
+      
+      console.log(chalk.yellow.bold('💡 Development Tasks:'));
+      console.log(chalk.cyan('  acc run "add unit tests for all functions in src/utils.ts" -i 3'));
+      console.log(chalk.cyan('  acc run "implement error handling for network requests" -i 4'));
+      console.log(chalk.cyan('  acc run "add JSDoc comments to all exported functions" -i 2'));
+      console.log(chalk.cyan('  acc run "refactor the authentication module to use JWT" -i 5'));
+      
+      console.log(chalk.yellow.bold('\n🐛 Bug Fixes:'));
+      console.log(chalk.cyan('  acc run "fix the memory leak in the websocket connection" -i 3'));
+      console.log(chalk.cyan('  acc run "resolve TypeScript errors in the build process" -i 4'));
+      console.log(chalk.cyan('  acc run "fix the race condition in async data loading" -i 3'));
+      
+      console.log(chalk.yellow.bold('\n📚 Documentation:'));
+      console.log(chalk.cyan('  acc run "create comprehensive README with installation guide" -i 2'));
+      console.log(chalk.cyan('  acc run "add inline documentation for complex algorithms" -i 3'));
+      console.log(chalk.cyan('  acc run "generate API documentation from TypeScript interfaces" -i 2'));
+      
+      console.log(chalk.yellow.bold('\n🏗️ Architecture:'));
+      console.log(chalk.cyan('  acc run "migrate from Express to Fastify framework" -i 6'));
+      console.log(chalk.cyan('  acc run "implement dependency injection pattern" -i 4'));
+      console.log(chalk.cyan('  acc run "add database connection pooling and optimization" -i 3'));
+      
+      console.log(chalk.yellow.bold('\n⚙️ Useful Options:'));
+      console.log(chalk.gray('  -i, --iterations <num>   Set max iterations (default: 10)'));
+      console.log(chalk.gray('  -m, --model <model>      Use sonnet or opus (default: sonnet)'));
+      console.log(chalk.gray('  -v, --verbose           Show detailed output'));
+      console.log(chalk.gray('  -c, --continue-on-error Continue even if errors occur'));
+      console.log(chalk.gray('  -d, --dir <path>        Specify working directory'));
+      
+      console.log(chalk.yellow.bold('\n📋 Tips for Better Results:'));
+      console.log(chalk.green('  • Be specific about what you want to achieve'));
+      console.log(chalk.green('  • Include file names or modules when relevant'));
+      console.log(chalk.green('  • Start with smaller, focused tasks (2-3 iterations)'));
+      console.log(chalk.green('  • Use --verbose to see detailed progress'));
+      console.log(chalk.green('  • Check logs with "acc logs" to see full communication'));
+    });
+
+  program
+    .command('session [sessionId]')
+    .description('View detailed session data')
+    .option('-l, --list', 'List all sessions')
+    .action(async (sessionId, options) => {
+      const sessionManager = new SessionManager();
+      
+      if (options.list) {
+        const sessions = fs.readdirSync('.claude-sessions/').filter(f => f.endsWith('.json'));
+        if (sessions.length === 0) {
+          console.log(chalk.yellow('No sessions found.'));
+          return;
+        }
+        
+        console.log(chalk.blue.bold('\n📋 Available Sessions:\n'));
+        sessions.reverse().slice(0, 10).forEach((file, index) => {
+          const data = JSON.parse(fs.readFileSync(path.join('.claude-sessions/', file), 'utf-8'));
+          const duration = data.endTime ? Math.round((new Date(data.endTime).getTime() - new Date(data.startTime).getTime()) / 1000) : 'ongoing';
+          console.log(chalk.cyan(`${index + 1}. ${data.id}`));
+          console.log(chalk.gray(`   Task: ${data.initialPrompt.substring(0, 50)}${data.initialPrompt.length > 50 ? '...' : ''}`));
+          console.log(chalk.gray(`   Iterations: ${data.iterations?.length || 0} | Duration: ${duration}s\n`));
+        });
+        return;
+      }
+      
+      if (!sessionId) {
+        // Show latest session
+        const sessions = fs.readdirSync('.claude-sessions/').filter(f => f.endsWith('.json'));
+        if (sessions.length === 0) {
+          console.log(chalk.yellow('No sessions found.'));
+          return;
+        }
+        sessionId = sessions[sessions.length - 1].replace('.json', '');
+      }
+      
+      try {
+        const sessionFile = path.join('.claude-sessions/', `${sessionId}.json`);
+        const sessionData = JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
+        
+        console.log(chalk.blue.bold(`\n📊 Session: ${sessionData.id}\n`));
+        console.log(chalk.cyan(`Initial Task: ${sessionData.initialPrompt}`));
+        console.log(chalk.cyan(`Working Directory: ${sessionData.workDir}`));
+        console.log(chalk.cyan(`Started: ${new Date(sessionData.startTime).toLocaleString()}`));
+        console.log(chalk.cyan(`Status: ${sessionData.status || 'unknown'}`));
+        
+        if (sessionData.iterations) {
+          console.log(chalk.yellow.bold(`\n🔄 Iterations (${sessionData.iterations.length}):\n`));
+          
+          sessionData.iterations.forEach((iter: any, index: number) => {
+            console.log(chalk.blue.bold(`--- Iteration ${iter.iteration} ---`));
+            console.log(chalk.gray(`Prompt: ${iter.prompt}`));
+            console.log(chalk.gray(`Duration: ${iter.duration}s`));
+            console.log(chalk.gray(`Exit Code: ${iter.exitCode}`));
+            
+            if (iter.output.files && iter.output.files.length > 0) {
+              console.log(chalk.green(`Files Modified: ${iter.output.files.join(', ')}`));
+            }
+            if (iter.output.commands && iter.output.commands.length > 0) {
+              console.log(chalk.magenta(`Commands: ${iter.output.commands.join(', ')}`));
+            }
+            if (iter.output.tools && iter.output.tools.length > 0) {
+              console.log(chalk.blue(`Tools Used: ${iter.output.tools.join(', ')}`));
+            }
+            
+            console.log(chalk.white('Claude Response:'));
+            console.log(chalk.gray(iter.output.result || 'No response'));
+            console.log('');
+          });
+        }
+        
+      } catch (error) {
+        console.error(chalk.red(`Error reading session: ${error instanceof Error ? error.message : String(error)}`));
+      }
+    });
+
+  program
     .command('logs [repo]')
     .description('View logs for a repository')
     .option('-t, --tail', 'Tail the latest log file in real-time')

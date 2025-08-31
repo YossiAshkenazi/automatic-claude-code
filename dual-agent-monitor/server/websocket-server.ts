@@ -374,9 +374,9 @@ app.post('/api/sessions/:id/messages', async (req, res) => {
   }
 });
 
-// Standard port configuration
-const DEFAULT_PORT = 4002;
-const PORT = process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT;
+// Enhanced port configuration with proper environment variable handling
+const DEFAULT_PORT = 4005;
+const PORT = parseInt(process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT.toString(), 10);
 
 server.listen(PORT, () => {
   console.log(`WebSocket server running on ws://localhost:${PORT}`);

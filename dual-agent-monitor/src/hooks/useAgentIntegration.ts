@@ -68,7 +68,7 @@ export function useAgentIntegration() {
   const sessionStore = useSessionStore();
   
   // Connect to WebSocket server
-  const wsUrl = process.env.VITE_WS_URL || 'ws://localhost:4001';
+  const wsUrl = process.env.VITE_WS_URL || 'ws://localhost:4005';
   const {
     isConnected,
     sendMessage: wsSendMessage,

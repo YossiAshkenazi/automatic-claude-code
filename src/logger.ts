@@ -3,6 +3,9 @@ import * as path from 'path';
 import * as os from 'os';
 import chalk from 'chalk';
 import { EventEmitter } from 'events';
+import cliProgress from 'cli-progress';
+import boxen from 'boxen';
+import ora from 'ora';
 
 export enum LogLevel {
   DEBUG = 'DEBUG',
@@ -32,6 +35,10 @@ export class Logger extends EventEmitter {
   private writeStream: fs.WriteStream | null = null;
   private consoleEnabled: boolean = true;
   private fileEnabled: boolean = true;
+  private maxIterations: number = 10;
+  private progressBar: any | null = null;
+  private spinner: any = null;
+  private showJsonDetails: boolean = false;
 
   constructor(repoName?: string) {
     super();
@@ -84,6 +91,16 @@ export class Logger extends EventEmitter {
 
   public setIteration(iteration: number): void {
     this.iteration = iteration;
+    this.updateProgressBar();
+  }
+
+  public setMaxIterations(maxIterations: number): void {
+    this.maxIterations = maxIterations;
+    this.initializeProgressBar();
+  }
+
+  public setShowJsonDetails(show: boolean): void {
+    this.showJsonDetails = show;
   }
 
   private formatLogEntry(entry: LogEntry): string {
@@ -108,14 +125,94 @@ export class Logger extends EventEmitter {
     this.writeStream.write(formatted + '\n');
   }
 
+  private initializeProgressBar(): void {
+    if (this.progressBar) {
+      this.progressBar.stop();
+    }
+
+    this.progressBar = new cliProgress.SingleBar({
+      format: chalk.cyan('Progress') + ' |' + chalk.cyan('{bar}') + '| {percentage}% | Iteration {value}/{total}',
+      barCompleteChar: '█',
+      barIncompleteChar: '░',
+      hideCursor: true
+    }, cliProgress.Presets.shades_classic);
+
+    this.progressBar.start(this.maxIterations, 0);
+  }
+
+  private updateProgressBar(): void {
+    if (this.progressBar) {
+      this.progressBar.update(this.iteration);
+    }
+  }
+
+  public startSpinner(text?: string): void {
+    if (this.spinner) {
+      this.spinner.stop();
+    }
+    this.spinner = ora(text || 'Processing...').start();
+  }
+
+  public updateSpinner(text: string): void {
+    if (this.spinner) {
+      this.spinner.text = text;
+    }
+  }
+
+  public stopSpinner(success: boolean = true): void {
+    if (this.spinner) {
+      if (success) {
+        this.spinner.succeed();
+      } else {
+        this.spinner.fail();
+      }
+      this.spinner = null;
+    }
+  }
+
+  private displayIterationSeparator(iteration?: number): void {
+    if (iteration !== undefined) {
+      const separator = '═'.repeat(60);
+      const title = ` ITERATION ${iteration} `;
+      const padding = Math.max(0, Math.floor((separator.length - title.length) / 2));
+      const centeredTitle = '═'.repeat(padding) + chalk.bold.yellow(title) + '═'.repeat(separator.length - padding - title.length);
+      console.log(chalk.yellow(centeredTitle));
+    }
+  }
+
+  private formatJsonDetails(details: any): string {
+    if (!details) return '';
+
+    const jsonStr = typeof details === 'string' ? details : JSON.stringify(details, null, 2);
+    
+    if (!this.showJsonDetails) {
+      // Show collapsed version
+      const lines = jsonStr.split('\n');
+      if (lines.length > 3) {
+        return chalk.dim(`    [JSON Details - ${lines.length} lines] (use --show-json to expand)`);
+      }
+    }
+
+    // Show expanded version with syntax highlighting
+    return jsonStr.split('\n')
+      .map(line => chalk.dim(`    ${line}`))
+      .join('\n');
+  }
+
   private logToConsole(entry: LogEntry): void {
     if (!this.consoleEnabled) return;
     
+    // Show iteration separator when iteration changes
+    if (entry.iteration !== undefined && entry.iteration !== this.iteration - 1) {
+      this.displayIterationSeparator(entry.iteration);
+    }
+
     const timestamp = new Date().toTimeString().split(' ')[0];
     const iteration = entry.iteration !== undefined ? chalk.cyan(`[${entry.iteration}]`) : '';
     
     let prefix = '';
     let color = chalk.white;
+    let bgBox = false;
     
     switch (entry.level) {
       case LogLevel.DEBUG:
@@ -133,21 +230,41 @@ export class Logger extends EventEmitter {
       case LogLevel.SUCCESS:
         prefix = chalk.green('✅ SUCCESS');
         color = chalk.green;
+        bgBox = true;
         break;
       case LogLevel.WARNING:
         prefix = chalk.yellow('⚠️  WARNING');
         color = chalk.yellow;
+        bgBox = true;
         break;
       case LogLevel.ERROR:
         prefix = chalk.red('❌ ERROR');
         color = chalk.red;
+        bgBox = true;
         break;
     }
+
+    const logMessage = `${chalk.gray(timestamp)} ${prefix} ${iteration} ${color(entry.message)}`;
     
-    console.log(`${chalk.gray(timestamp)} ${prefix} ${iteration} ${color(entry.message)}`);
+    if (bgBox && (entry.level === LogLevel.SUCCESS || entry.level === LogLevel.ERROR || entry.level === LogLevel.WARNING)) {
+      const borderColor = entry.level === LogLevel.SUCCESS ? 'green' : 
+                          entry.level === LogLevel.ERROR ? 'red' : 'yellow';
+      
+      console.log(boxen(color(entry.message), {
+        padding: 0,
+        margin: { top: 0, bottom: 0, left: 2, right: 0 },
+        borderStyle: 'round',
+        borderColor: borderColor as any
+      }));
+    } else {
+      console.log(logMessage);
+    }
     
     if (entry.details) {
-      console.log(chalk.gray(JSON.stringify(entry.details, null, 2)));
+      const formattedDetails = this.formatJsonDetails(entry.details);
+      if (formattedDetails) {
+        console.log(formattedDetails);
+      }
     }
   }
 
@@ -210,6 +327,15 @@ export class Logger extends EventEmitter {
   }
 
   public close(): void {
+    // Clean up progress bar
+    if (this.progressBar) {
+      this.progressBar.stop();
+      this.progressBar = null;
+    }
+
+    // Clean up spinner
+    this.stopSpinner();
+
     if (this.writeStream) {
       this.writeToFile({
         timestamp: new Date(),

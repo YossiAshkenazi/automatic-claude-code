@@ -1,7 +1,7 @@
 import { DualAgentSession, AgentMessage } from '../types';
 
 // Connect directly to observability server for cross-project event streaming
-const API_BASE = 'http://localhost:4000';
+const API_BASE = 'http://localhost:8080/api';
 
 interface ApiError {
   message: string;

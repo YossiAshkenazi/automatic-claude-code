@@ -1,0 +1,27 @@
+{
+  "ports": {
+    "websocket_server": 4001,
+    "ui_dev": 6011,
+    "ui_prod": 6012,
+    "api": 4001,
+    "description": "Standard port configuration for dual-agent monitor"
+  },
+  "environment": {
+    "development": {
+      "websocket": "ws://localhost:4001",
+      "api": "http://localhost:4001/api",
+      "ui": "http://localhost:6011"
+    },
+    "production": {
+      "websocket": "ws://localhost:4001",
+      "api": "http://localhost:4001/api",
+      "ui": "http://localhost:6012"
+    }
+  },
+  "notes": {
+    "port_4001": "WebSocket server and REST API - tested and working",
+    "port_6011": "Vite dev server for UI - commonly used by Vite",
+    "port_6012": "Production UI server when needed",
+    "conflicts": "Avoid ports 4000 (other apps), 8080 (Docker), 3000 (React default)"
+  }
+}

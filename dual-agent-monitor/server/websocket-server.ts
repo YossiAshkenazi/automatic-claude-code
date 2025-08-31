@@ -265,8 +265,9 @@ app.get('/api/sessions/:id/export', (req, res) => {
   }
 });
 
-// Start server
-const PORT = process.env.PORT || 4001;
+// Standard port configuration
+const DEFAULT_PORT = 4001;
+const PORT = process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT;
 server.listen(PORT, () => {
   console.log(`WebSocket server running on ws://localhost:${PORT}`);
   console.log(`REST API available at http://localhost:${PORT}/api`);

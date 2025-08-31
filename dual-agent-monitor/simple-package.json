@@ -1,0 +1,15 @@
+{
+  "name": "dual-agent-monitor-simple",
+  "version": "1.0.0",
+  "description": "Simple dual-agent monitoring server",
+  "main": "simple-server.js",
+  "scripts": {
+    "start": "node simple-server.js",
+    "dev": "node simple-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "cors": "^2.8.5"
+  }
+}

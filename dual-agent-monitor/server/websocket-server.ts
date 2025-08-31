@@ -6,7 +6,7 @@ import { AgentIntegrationService, AgentMessage, SessionData } from '../src/servi
 
 const app = express();
 app.use(cors({
-  origin: ['http://localhost:6011', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4001'],
+  origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4001'],
   credentials: true
 }));
 app.use(express.json());

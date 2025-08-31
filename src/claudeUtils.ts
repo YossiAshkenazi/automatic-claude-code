@@ -54,7 +54,7 @@ export class ClaudeUtils {
               { path: path.join(process.env.HOME || '', '.npm-global', 'bin', 'claude-code'), name: 'claude-code' }
             ];
             
-            for (const { path: claudePath, name } of possiblePaths) {
+            for (const { path: claudePath } of possiblePaths) {
               if (fs.existsSync(claudePath)) {
                 return { command: claudePath, baseArgs: ['--dangerously-skip-permissions'] };
               }

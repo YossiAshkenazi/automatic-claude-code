@@ -276,7 +276,7 @@ export class AgentOrchestrator {
   private async attemptErrorRecovery(
     recoveryAction: string,
     agentId: string,
-    options: DualAgentOptions
+    _options: DualAgentOptions
   ): Promise<boolean> {
     this.logger.info(`Attempting error recovery for agent ${agentId}`, { recoveryAction });
     
@@ -766,7 +766,7 @@ export class AgentOrchestrator {
       });
       
       // If any task appears more than half the threshold, it's likely a loop
-      for (const [task, count] of counts.entries()) {
+      for (const [, count] of counts.entries()) {
         if (count >= Math.ceil(threshold / 2)) {
           return true;
         }

@@ -11,6 +11,13 @@ interface SessionFilters {
   searchTerm?: string;
 }
 
+interface PaginationParams {
+  page?: number;
+  limit?: number;
+  sortBy?: 'startTime' | 'lastActivity' | 'messageCount';
+  sortOrder?: 'asc' | 'desc';
+}
+
 interface SessionStore {
   // State
   sessions: DualAgentSession[];
@@ -43,20 +50,26 @@ interface SessionStore {
   handleWebSocketMessage: (message: WebSocketMessage) => void;
   setConnectionStatus: (connected: boolean) => void;
   
-  // API actions
-  loadSessions: () => Promise<void>;
+  // Enhanced API actions
+  loadSessions: (params?: {
+    includeMessages?: boolean;
+    filters?: SessionFilters;
+    pagination?: PaginationParams;
+  }) => Promise<{ sessions: DualAgentSession[]; total: number; hasMore: boolean }>;
   createSession: (task: string) => Promise<void>;
   updateSessionStatus: (sessionId: string, status: DualAgentSession['status']) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
-  exportSession: (sessionId: string, format: 'json' | 'csv') => Promise<void>;
+  exportSession: (sessionId: string, format?: 'json' | 'csv' | 'html') => Promise<void>;
   
   // Filter and search
   setFilters: (filters: Partial<SessionFilters>) => void;
   setSorting: (sortBy: 'startTime' | 'lastActivity' | 'messageCount', order: 'asc' | 'desc') => void;
   getFilteredSessions: () => DualAgentSession[];
   
-  // Utilities
+  // Enhanced utilities
   clearError: () => void;
+  refreshSession: (sessionId: string) => Promise<DualAgentSession>;
+  syncWithDatabase: () => Promise<void>;
   reset: () => void;
 }
 
@@ -226,11 +239,24 @@ export const useSessionStore = create<SessionStore>()(
         }
       },
 
-      // API actions
-      loadSessions: async () => {
+      // Enhanced API actions with persistence support
+      loadSessions: async (params?: {
+        includeMessages?: boolean;
+        filters?: SessionFilters;
+        pagination?: PaginationParams;
+      }) => {
         set({ isLoadingSessions: true, error: null });
         try {
-          const sessions = await apiClient.getSessions();
+          const requestParams = {
+            page: params?.pagination?.page || 1,
+            limit: params?.pagination?.limit || 50,
+            sortBy: params?.pagination?.sortBy || 'lastActivity',
+            sortOrder: params?.pagination?.sortOrder || 'desc',
+            filters: params?.filters
+          };
+          
+          const result = await apiClient.getSessions(requestParams);
+          const sessions = result.sessions;
           set({ 
             sessions, 
             isLoadingSessions: false,
@@ -239,17 +265,26 @@ export const useSessionStore = create<SessionStore>()(
           
           // Auto-select most recent active session if none selected
           const currentState = get();
-          if (!currentState.selectedSession) {
+          if (!currentState.selectedSession && sessions.length > 0) {
             const activeSession = sessions.find(s => s.status === 'running' || s.status === 'paused');
-            const recentSession = sessions.sort((a, b) => 
-              new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-            )[0];
+            const recentSession = sessions[0]; // Already sorted by lastActivity desc
             
             const sessionToSelect = activeSession || recentSession;
             if (sessionToSelect) {
-              get().setSelectedSession(sessionToSelect.id);
+              // Load full session data with messages if needed
+              try {
+                const fullSession = await apiClient.getSession(sessionToSelect.id, true);
+                get().updateSession(sessionToSelect.id, fullSession);
+                get().setSelectedSession(sessionToSelect.id);
+              } catch (loadError) {
+                console.warn('Failed to load full session data:', loadError);
+                get().setSelectedSession(sessionToSelect.id);
+              }
             }
           }
+          
+          toast.success(`Loaded ${sessions.length} sessions from database`);
+          return { sessions, total: result.total, hasMore: result.hasMore };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to load sessions';
           set({ 
@@ -257,7 +292,10 @@ export const useSessionStore = create<SessionStore>()(
             isLoadingSessions: false,
             sessions: get().sessions || [] // Keep existing sessions on error
           });
-          toast.error('Failed to load sessions', { description: errorMessage });
+          toast.error('Database connection failed', { 
+            description: `${errorMessage}. Using cached sessions.`
+          });
+          throw error;
         }
       },
 
@@ -419,8 +457,74 @@ export const useSessionStore = create<SessionStore>()(
         return filtered;
       },
 
-      // Utilities
+      // Enhanced utilities for persistence
       clearError: () => set({ error: null, connectionError: null }),
+      
+      // Refresh single session from database
+      refreshSession: async (sessionId: string) => {
+        try {
+          const session = await apiClient.getSession(sessionId, true);
+          get().updateSession(sessionId, session);
+          
+          const currentState = get();
+          if (currentState.selectedSession?.id === sessionId) {
+            set({ selectedSession: session });
+          }
+          
+          return session;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : `Failed to refresh session ${sessionId}`;
+          set({ error: errorMessage });
+          throw error;
+        }
+      },
+      
+      // Sync with database periodically
+      syncWithDatabase: async () => {
+        const currentState = get();
+        if (currentState.isLoadingSessions) return; // Avoid concurrent requests
+        
+        try {
+          // Get recent updates only
+          const result = await apiClient.getSessions({
+            page: 1,
+            limit: 10,
+            sortBy: 'lastActivity',
+            sortOrder: 'desc'
+          });
+          
+          const recentSessions = result.sessions;
+          const currentSessions = currentState.sessions || [];
+          
+          // Update only sessions that have newer data
+          const updates: DualAgentSession[] = [];
+          
+          recentSessions.forEach(recentSession => {
+            const existingSession = currentSessions.find(s => s.id === recentSession.id);
+            const recentActivity = new Date(recentSession.lastActivity || recentSession.startTime);
+            const existingActivity = existingSession 
+              ? new Date(existingSession.lastActivity || existingSession.startTime)
+              : new Date(0);
+            
+            if (!existingSession || recentActivity > existingActivity) {
+              updates.push(recentSession);
+            }
+          });
+          
+          // Apply updates
+          if (updates.length > 0) {
+            updates.forEach(session => {
+              get().updateSession(session.id, session);
+            });
+            
+            console.log(`Synchronized ${updates.length} sessions from database`);
+          }
+          
+        } catch (error) {
+          console.warn('Database sync failed:', error);
+          // Don't throw error for background sync
+        }
+      },
       
       reset: () =>
         set({

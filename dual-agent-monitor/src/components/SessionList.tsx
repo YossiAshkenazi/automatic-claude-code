@@ -1,15 +1,42 @@
-import React from 'react';
-import { Clock, MessageSquare, DollarSign, CheckCircle, XCircle, Pause, Play } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, MessageSquare, DollarSign, CheckCircle, XCircle, Pause, Play, Download, AlertCircle, Database } from 'lucide-react';
 import { DualAgentSession } from '../types';
 import { formatRelativeTime, formatCost, getStatusBadgeColor, truncateText } from '../utils/formatters';
+import { apiClient } from '../utils/api';
 
 interface SessionListProps {
   sessions: DualAgentSession[];
   selectedSessionId?: string;
   onSelectSession: (sessionId: string) => void;
+  onExportSession?: (sessionId: string) => void;
+  showPersistenceStatus?: boolean;
 }
 
-export function SessionList({ sessions, selectedSessionId, onSelectSession }: SessionListProps) {
+export function SessionList({ 
+  sessions, 
+  selectedSessionId, 
+  onSelectSession, 
+  onExportSession,
+  showPersistenceStatus = true 
+}: SessionListProps) {
+  const [exportingSession, setExportingSession] = useState<string | null>(null);
+  const handleExport = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation(); // Prevent session selection
+    setExportingSession(sessionId);
+    
+    try {
+      if (onExportSession) {
+        onExportSession(sessionId);
+      } else {
+        await apiClient.exportSession(sessionId, { format: 'json', includeMetadata: true });
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+    } finally {
+      setExportingSession(null);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'running':
@@ -17,12 +44,25 @@ export function SessionList({ sessions, selectedSessionId, onSelectSession }: Se
       case 'completed':
         return <CheckCircle size={16} className="text-green-600" />;
       case 'failed':
+      case 'error':
         return <XCircle size={16} className="text-red-600" />;
       case 'paused':
         return <Pause size={16} className="text-yellow-600" />;
       default:
         return <Clock size={16} className="text-gray-600" />;
     }
+  };
+
+  const getPersistenceIcon = (session: DualAgentSession) => {
+    const hasMessages = session.messages && session.messages.length > 0;
+    const hasEndTime = session.endTime;
+    const isPersisted = hasMessages || hasEndTime;
+    
+    return isPersisted ? (
+      <Database size={12} className="text-blue-600" title="Session persisted to database" />
+    ) : (
+      <AlertCircle size={12} className="text-gray-400" title="Session not yet persisted" />
+    );
   };
 
   if (sessions.length === 0) {
@@ -79,14 +119,37 @@ export function SessionList({ sessions, selectedSessionId, onSelectSession }: Se
                 <Clock size={12} />
                 {session.summary?.totalDuration 
                   ? `${session.summary.totalDuration}s`
-                  : 'Ongoing'
+                  : session.endTime 
+                    ? `${Math.round((new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 1000)}s`
+                    : 'Ongoing'
                 }
               </div>
+              
+              {showPersistenceStatus && (
+                <div className="flex items-center gap-1" title="Database persistence status">
+                  {getPersistenceIcon(session)}
+                </div>
+              )}
             </div>
 
-            <span className="text-xs font-mono text-gray-400">
-              {session.id.split('-')[1]}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => handleExport(e, session.id)}
+                disabled={exportingSession === session.id}
+                className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+                title="Export session"
+              >
+                {exportingSession === session.id ? (
+                  <div className="animate-spin w-3 h-3 border border-gray-400 border-t-transparent rounded-full" />
+                ) : (
+                  <Download size={12} />
+                )}
+              </button>
+              
+              <span className="text-xs font-mono text-gray-400">
+                {session.id.split('-')[1]}
+              </span>
+            </div>
           </div>
 
           {/* Agent activity indicators */}
@@ -105,24 +168,41 @@ export function SessionList({ sessions, selectedSessionId, onSelectSession }: Se
             </div>
           </div>
 
-          {/* Tools and files summary */}
-          {session.summary && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {session.summary.toolsUsed.slice(0, 3).map((tool) => (
-                <span
-                  key={tool}
-                  className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded"
-                >
-                  {tool}
-                </span>
-              ))}
-              {session.summary.toolsUsed.length > 3 && (
-                <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                  +{session.summary.toolsUsed.length - 3} more
-                </span>
-              )}
-            </div>
-          )}
+          {/* Enhanced session metadata */}
+          <div className="mt-2 space-y-1">
+            {/* Working directory */}
+            {session.workDir && (
+              <div className="text-xs text-gray-500 truncate">
+                📁 {session.workDir}
+              </div>
+            )}
+            
+            {/* Tools and files summary */}
+            {session.summary && (
+              <div className="flex flex-wrap gap-1">
+                {session.summary.toolsUsed.slice(0, 3).map((tool) => (
+                  <span
+                    key={tool}
+                    className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded"
+                  >
+                    {tool}
+                  </span>
+                ))}
+                {session.summary.toolsUsed.length > 3 && (
+                  <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                    +{session.summary.toolsUsed.length - 3} more
+                  </span>
+                )}
+              </div>
+            )}
+            
+            {/* Last activity timestamp */}
+            {session.lastActivity && (
+              <div className="text-xs text-gray-400">
+                Last activity: {formatRelativeTime(new Date(session.lastActivity))}
+              </div>
+            )}
+          </div>
         </div>
       ))}
     </div>

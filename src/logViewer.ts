@@ -2,12 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import chalk from 'chalk';
-import blessed from 'blessed';
-import contrib from 'blessed-contrib';
 import Table from 'cli-table3';
 import { highlight } from 'cli-highlight';
 import boxen from 'boxen';
-import cliProgress from 'cli-progress';
 
 export interface ParsedLogEntry {
   timestamp: Date;

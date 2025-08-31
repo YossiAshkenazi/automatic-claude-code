@@ -8,3 +8,4 @@ build/
 .claude-sessions/
 output/
 package-lock.json
+pnpm-lock.yaml

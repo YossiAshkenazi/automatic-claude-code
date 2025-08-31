@@ -347,7 +347,6 @@ export class Logger extends EventEmitter {
     
     // Also display in console with special formatting
     if (this.consoleEnabled) {
-      const timestamp = new Date().toTimeString().split(' ')[0];
       console.log(chalk.cyan('📝 Claude:'), chalk.white(message));
       if (details && this.showJsonDetails) {
         console.log(chalk.gray(JSON.stringify(details, null, 2)));

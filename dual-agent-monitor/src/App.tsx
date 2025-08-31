@@ -59,11 +59,17 @@ function App() {
   const loadSessions = async () => {
     try {
       setLoading(true);
-      const sessionsData = await apiClient.getSessions();
-      setSessions(sessionsData);
+      // Use enhanced pagination with sorting by lastActivity
+      const result = await apiClient.getSessions({
+        page: 1,
+        limit: 50,
+        sortBy: 'lastActivity',
+        sortOrder: 'desc'
+      });
+      setSessions(result.sessions);
       
       // Auto-select the most recent active session
-      const activeSession = sessionsData.find(s => s.status === 'running' || s.status === 'paused');
+      const activeSession = result.sessions.find(s => s.status === 'running' || s.status === 'paused');
       if (activeSession && !selectedSession) {
         setSelectedSession(activeSession);
       }
@@ -157,9 +163,17 @@ function App() {
   const handleStatusChange = async (sessionId: string, status: DualAgentSession['status']) => {
     try {
       await apiClient.updateSessionStatus(sessionId, status);
-      // The WebSocket will handle the update
+      // Immediately update local state for better UX
+      setSessions(prev => prev.map(session => 
+        session.id === sessionId ? { ...session, status } : session
+      ));
+      
+      if (selectedSession?.id === sessionId) {
+        setSelectedSession(prev => prev ? { ...prev, status } : null);
+      }
     } catch (err) {
       console.error('Error updating session status:', err);
+      setError(`Failed to update session status: ${err}`);
     }
   };
 
@@ -167,13 +181,44 @@ function App() {
     const task = prompt('Enter initial task description:');
     if (!task) return;
     
+    const workDir = prompt('Working directory (optional):', process.cwd?.() || '') || undefined;
+    
     try {
-      const newSession = await apiClient.createSession(task);
+      const newSession = await apiClient.createSession(task, workDir);
       setSessions(prev => [newSession, ...prev]);
       setSelectedSession(newSession);
       setViewMode('dual-pane');
     } catch (err) {
       console.error('Error creating session:', err);
+      setError(`Failed to create session: ${err}`);
+    }
+  };
+
+  const handleExportSession = async (sessionId: string) => {
+    try {
+      await apiClient.exportSession(sessionId, { format: 'json', includeMetadata: true });
+    } catch (err) {
+      console.error('Error exporting session:', err);
+      setError(`Failed to export session: ${err}`);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await apiClient.deleteSession(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      
+      if (selectedSession?.id === sessionId) {
+        setSelectedSession(null);
+        setViewMode('sessions');
+      }
+    } catch (err) {
+      console.error('Error deleting session:', err);
+      setError(`Failed to delete session: ${err}`);
     }
   };
 
@@ -292,6 +337,8 @@ function App() {
               sessions={sessions}
               selectedSessionId={selectedSession?.id}
               onSelectSession={handleSessionSelect}
+              onExportSession={handleExportSession}
+              showPersistenceStatus={true}
             />
           </div>
         ) : selectedSession ? (
@@ -303,6 +350,8 @@ function App() {
                   <SessionControls 
                     session={selectedSession}
                     onStatusChange={handleStatusChange}
+                    onExport={() => handleExportSession(selectedSession.id)}
+                    onDelete={() => handleDeleteSession(selectedSession.id)}
                   />
                   
                   <div className="flex h-[calc(100vh-200px)]">
@@ -333,6 +382,8 @@ function App() {
                 <SessionControls 
                   session={selectedSession}
                   onStatusChange={handleStatusChange}
+                  onExport={() => handleExportSession(selectedSession.id)}
+                  onDelete={() => handleDeleteSession(selectedSession.id)}
                 />
                 <Timeline session={selectedSession} />
               </div>
@@ -343,6 +394,8 @@ function App() {
                 <SessionControls 
                   session={selectedSession}
                   onStatusChange={handleStatusChange}
+                  onExport={() => handleExportSession(selectedSession.id)}
+                  onDelete={() => handleDeleteSession(selectedSession.id)}
                 />
                 <PerformanceMetrics session={selectedSession} />
               </div>

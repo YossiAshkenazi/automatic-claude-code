@@ -1,8 +1,8 @@
 import blessed from 'blessed';
 import contrib from 'blessed-contrib';
+import * as path from 'path';
+import * as os from 'os';
 import { LogViewer, SessionSummary, ParsedLogEntry } from './logViewer';
-import chalk from 'chalk';
-import * as fs from 'fs';
 
 export interface TUIState {
   selectedSession: number;
@@ -309,7 +309,7 @@ export class TUIBrowser {
   }
 
   private updateSessionList(): void {
-    const items = this.state.filteredSessions.map((session, index) => {
+    const items = this.state.filteredSessions.map((session, _index) => {
       const duration = Math.round(session.duration / 1000);
       const durationStr = duration > 3600 ? `${Math.floor(duration/3600)}h ${Math.floor((duration%3600)/60)}m` :
                          duration > 60 ? `${Math.floor(duration/60)}m ${duration%60}s` :
@@ -354,7 +354,7 @@ export class TUIBrowser {
     
     try {
       this.state.currentSessionLogs = logViewer.parseLogFile(
-        require('path').join(require('os').homedir(), '.automatic-claude-code', 'logs', logViewer['repoName'], logFile)
+        path.join(os.homedir(), '.automatic-claude-code', 'logs', logViewer['repoName'], logFile)
       );
 
       // Group by iterations

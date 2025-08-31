@@ -75,7 +75,6 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "context7",
-    "github",
     "playwright",
     "memory",
     "archon"

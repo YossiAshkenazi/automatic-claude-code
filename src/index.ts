@@ -99,7 +99,7 @@ class AutomaticClaudeCode {
               { path: path.join(process.env.HOME || '', '.npm-global', 'bin', 'claude-code'), name: 'claude-code' }
             ];
             
-            for (const { path: claudePath, name } of possiblePaths) {
+            for (const { path: claudePath } of possiblePaths) {
               if (fs.existsSync(claudePath)) {
                 return { command: claudePath, baseArgs: ['--dangerously-skip-permissions'] };
               }
@@ -613,8 +613,6 @@ async function main() {
     .description('View detailed session data')
     .option('-l, --list', 'List all sessions')
     .action(async (sessionId, options) => {
-      const sessionManager = new SessionManager();
-      
       if (options.list) {
         const sessions = fs.readdirSync('.claude-sessions/').filter(f => f.endsWith('.json'));
         if (sessions.length === 0) {
@@ -656,7 +654,7 @@ async function main() {
         if (sessionData.iterations) {
           console.log(chalk.yellow.bold(`\n🔄 Iterations (${sessionData.iterations.length}):\n`));
           
-          sessionData.iterations.forEach((iter: any, index: number) => {
+          sessionData.iterations.forEach((iter: any, _index: number) => {
             console.log(chalk.blue.bold(`--- Iteration ${iter.iteration} ---`));
             console.log(chalk.gray(`Prompt: ${iter.prompt}`));
             console.log(chalk.gray(`Duration: ${iter.duration}s`));

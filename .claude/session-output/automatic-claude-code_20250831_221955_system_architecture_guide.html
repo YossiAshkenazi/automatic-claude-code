@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automatic Claude Code - System Architecture & Component Interaction Guide</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        
+        article {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 40px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            text-align: center;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 15px;
+        }
+        
+        h2 {
+            color: #2c3e50;
+            font-size: 1.8rem;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        h3 {
+            color: #34495e;
+            font-size: 1.4rem;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        
+        h4 {
+            color: #34495e;
+            font-size: 1.2rem;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        
+        .architecture-diagram {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+            position: relative;
+        }
+        
+        .component {
+            display: inline-block;
+            background: white;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            min-width: 180px;
+            vertical-align: top;
+        }
+        
+        .component.manager {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #5a67d8;
+        }
+        
+        .component.worker {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-color: #e53e3e;
+        }
+        
+        .component.monitoring {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border-color: #0ea5e9;
+        }
+        
+        .component.external {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: #1a202c;
+            border-color: #10b981;
+        }
+        
+        .component.database {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: #1a202c;
+            border-color: #f59e0b;
+        }
+        
+        .component h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .component p {
+            margin: 5px 0;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .flow-arrow {
+            display: inline-block;
+            font-size: 2rem;
+            color: #3498db;
+            margin: 0 15px;
+            vertical-align: middle;
+        }
+        
+        .flow-section {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .info-section {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .info-section h3 {
+            color: #2c5aa0;
+            margin-top: 0;
+        }
+        
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+        }
+        
+        .api-endpoint {
+            background: #f0f8ff;
+            border: 1px solid #4facfe;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .interaction-flow {
+            background: #fff5f5;
+            border: 1px solid #feb2b2;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .interaction-flow h4 {
+            color: #c53030;
+            margin-top: 0;
+        }
+        
+        .step {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+            position: relative;
+        }
+        
+        .step-number {
+            background: #3498db;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+            position: absolute;
+            left: -10px;
+            top: 15px;
+        }
+        
+        .step-content {
+            margin-left: 35px;
+        }
+        
+        .network-diagram {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+        }
+        
+        .port-info {
+            background: rgba(255,255,255,0.1);
+            border-radius: 6px;
+            padding: 10px;
+            margin: 10px;
+            display: inline-block;
+            min-width: 150px;
+        }
+        
+        .warning-section {
+            background: #fef5e7;
+            border-left: 4px solid #f6ad55;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .warning-section h3 {
+            color: #c05621;
+            margin-top: 0;
+        }
+        
+        .success-section {
+            background: #f0fff4;
+            border-left: 4px solid #68d391;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .success-section h3 {
+            color: #2f855a;
+            margin-top: 0;
+        }
+        
+        .data-flow {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            height: 4px;
+            margin: 20px 0;
+            border-radius: 2px;
+            position: relative;
+        }
+        
+        .data-flow::after {
+            content: '→';
+            position: absolute;
+            right: -20px;
+            top: -8px;
+            font-size: 1.5rem;
+            color: #3498db;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background: #f7fafc;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .highlight {
+            background: #fef5e7;
+            border: 1px solid #f6ad55;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            color: #718096;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <article>
+        <header>
+            <h1>🤖 Automatic Claude Code - System Architecture Guide</h1>
+            <p style="text-align: center; font-size: 1.2rem; color: #718096; margin-bottom: 30px;">
+                Complete visual guide to the dual-agent monitoring system
+            </p>
+        </header>
+
+        <main>
+            <h2>📊 System Overview</h2>
+            
+            <div class="info-section">
+                <h3>ℹ️ What is Automatic Claude Code?</h3>
+                <p>Automatic Claude Code is a TypeScript CLI application that runs Claude Code in an automated <strong>dual-agent loop</strong> for continuous AI-assisted development. It uses a Manager-Worker architecture where specialized Claude agents coordinate to solve complex development tasks.</p>
+            </div>
+
+            <div class="architecture-diagram">
+                <h3 style="margin-top: 0; color: #2c3e50;">High-Level Architecture</h3>
+                
+                <div class="component external">
+                    <h4>External Project</h4>
+                    <p>Orthodox Synagogue Platform</p>
+                    <p>Any TypeScript/Node.js project</p>
+                </div>
+                
+                <span class="flow-arrow">→</span>
+                
+                <div class="component manager">
+                    <h4>Manager Agent</h4>
+                    <p>Strategic Planning</p>
+                    <p>Task Decomposition</p>
+                    <p>Quality Gates</p>
+                </div>
+                
+                <span class="flow-arrow">↔</span>
+                
+                <div class="component worker">
+                    <h4>Worker Agent</h4>
+                    <p>Task Execution</p>
+                    <p>Code Implementation</p>
+                    <p>Tool Operations</p>
+                </div>
+                
+                <br><br>
+                
+                <span class="flow-arrow">↓</span>
+                
+                <div class="component monitoring">
+                    <h4>Monitoring System</h4>
+                    <p>Real-time Dashboard</p>
+                    <p>WebSocket Server</p>
+                    <p>Session Recording</p>
+                </div>
+                
+                <span class="flow-arrow">↔</span>
+                
+                <div class="component database">
+                    <h4>Database Layer</h4>
+                    <p>Session Storage</p>
+                    <p>Message History</p>
+                    <p>Analytics Data</p>
+                </div>
+            </div>
+
+            <h2>🏗️ Component Breakdown</h2>
+
+            <h3>1. Core Components</h3>
+
+            <div class="flow-section">
+                <h4>🎯 Manager Agent (Strategic Planning)</h4>
+                <ul>
+                    <li><strong>Model:</strong> Claude Opus (better reasoning)</li>
+                    <li><strong>Role:</strong> High-level task planning and oversight</li>
+                    <li><strong>Responsibilities:</strong>
+                        <ul>
+                            <li>Breaks down complex tasks into work items</li>
+                            <li>Monitors Worker progress</li>
+                            <li>Validates deliverables</li>
+                            <li>Handles error recovery</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="flow-section">
+                <h4>⚡ Worker Agent (Task Execution)</h4>
+                <ul>
+                    <li><strong>Model:</strong> Claude Sonnet (speed and efficiency)</li>
+                    <li><strong>Role:</strong> Focused execution of specific tasks</li>
+                    <li><strong>Responsibilities:</strong>
+                        <ul>
+                            <li>Executes concrete development tasks</li>
+                            <li>Implements features and fixes</li>
+                            <li>Reports progress to Manager</li>
+                            <li>Uses Claude Code tools (Read, Write, Edit, Bash, etc.)</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="flow-section">
+                <h4>🎛️ Agent Coordinator</h4>
+                <ul>
+                    <li><strong>File:</strong> <code>src/agents/agentCoordinator.ts</code></li>
+                    <li><strong>Purpose:</strong> Manages communication between Manager and Worker</li>
+                    <li><strong>Functions:</strong>
+                        <ul>
+                            <li>Orchestrates dual-agent workflow</li>
+                            <li>Handles handoffs between agents</li>
+                            <li>Emits coordination events</li>
+                            <li>Sends monitoring data</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <h3>2. Monitoring System Components</h3>
+
+            <div class="network-diagram">
+                <h3 style="margin-top: 0;">Monitoring Architecture</h3>
+                
+                <div class="port-info">
+                    <h4>WebSocket Server</h4>
+                    <p>Port: 4001</p>
+                    <p>Real-time communication</p>
+                </div>
+                
+                <div class="port-info">
+                    <h4>REST API</h4>
+                    <p>Port: 4001</p>
+                    <p>HTTP endpoints</p>
+                </div>
+                
+                <div class="port-info">
+                    <h4>Frontend UI</h4>
+                    <p>Port: 6011</p>
+                    <p>React dashboard</p>
+                </div>
+            </div>
+
+            <div class="flow-section">
+                <h4>🖥️ Monitoring Dashboard (Frontend)</h4>
+                <ul>
+                    <li><strong>Technology:</strong> React + Vite + TypeScript</li>
+                    <li><strong>Location:</strong> <code>dual-agent-monitor/src/</code></li>
+                    <li><strong>Features:</strong>
+                        <ul>
+                            <li>Real-time agent communication visualization</li>
+                            <li>Session management and replay</li>
+                            <li>Performance analytics</li>
+                            <li>Mobile-responsive design</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="flow-section">
+                <h4>🔧 Backend Server</h4>
+                <ul>
+                    <li><strong>Technology:</strong> Node.js + Express + WebSocket</li>
+                    <li><strong>Location:</strong> <code>dual-agent-monitor/server/websocket-server.ts</code></li>
+                    <li><strong>Features:</strong>
+                        <ul>
+                            <li>WebSocket connections for real-time data</li>
+                            <li>REST API endpoints</li>
+                            <li>Session and message storage</li>
+                            <li>Analytics processing</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <h2>🔄 Communication Flow</h2>
+
+            <h3>Data Flow Between Components</h3>
+
+            <div class="interaction-flow">
+                <h4>🎯 From External Project to Agents</h4>
+                
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <strong>User Command:</strong> User runs command from external project
+                        <div class="code-block">node "../automatic-claude-code/dist/index.js" run "create auth system" --dual-agent -i 5 -v</div>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <strong>Agent Initialization:</strong> System spawns Manager and Worker agents
+                        <ul>
+                            <li>Manager Agent: High-level planning (Opus model)</li>
+                            <li>Worker Agent: Task execution (Sonnet model)</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <strong>Coordination Events:</strong> Agent Coordinator emits events during workflow
+                        <ul>
+                            <li><code>AGENT_COORDINATION</code></li>
+                            <li><code>MANAGER_TASK_ASSIGNMENT</code></li>
+                            <li><code>WORKER_PROGRESS_UPDATE</code></li>
+                            <li><code>MANAGER_QUALITY_CHECK</code></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="interaction-flow">
+                <h4>📡 From Agents to Monitoring System</h4>
+                
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <strong>Event Emission:</strong> Agent Coordinator calls <code>emitCoordinationEvent()</code>
+                        <div class="code-block">this.emitCoordinationEvent('MANAGER_TASK_ASSIGNMENT', 'manager', {
+  workItems: analysisResult.workItems,
+  strategy: analysisResult.strategy
+});</div>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <strong>HTTP POST Request:</strong> Monitoring data sent to server
+                        <div class="api-endpoint">POST http://localhost:4001/api/monitoring</div>
+                        <div class="code-block">{
+  "agentType": "manager",
+  "messageType": "coordination_event",
+  "message": "MANAGER_TASK_ASSIGNMENT",
+  "metadata": { ... },
+  "sessionInfo": {
+    "task": "create auth system",
+    "workDir": "/path/to/project"
+  }
+}</div>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <strong>Database Storage:</strong> Server stores session and message data
+                        <ul>
+                            <li>Session creation/update in database</li>
+                            <li>Agent message storage</li>
+                            <li>Analytics metrics collection</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <strong>WebSocket Broadcast:</strong> Real-time data sent to connected clients
+                        <div class="code-block">broadcast({
+  type: 'agent_message',
+  data: agentMessage
+});</div>
+                    </div>
+                </div>
+            </div>
+
+            <h2>🌐 API Endpoints</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th>Method</th>
+                        <th>Purpose</th>
+                        <th>Data</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>/api/health</code></td>
+                        <td>GET</td>
+                        <td>Server health check</td>
+                        <td>System status, database health</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/sessions</code></td>
+                        <td>GET</td>
+                        <td>List all sessions</td>
+                        <td>Paginated session data with messages</td>
+                    </tr>
+                    <tr>
+                        <td><code>/api/monitoring</code></td>
+                        <td>POST</td>
+                        <td>Receive monitoring data</td>
+                        <td>Agent messages and coordination events</td>
+                    </tr>
+                    <tr>
+                        <td><code>ws://localhost:4001</code></td>
+                        <td>WebSocket</td>
+                        <td>Real-time communication</td>
+                        <td>Live agent messages, session updates</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>🚀 External Project Integration</h2>
+
+            <div class="success-section">
+                <h3>✅ How External Projects Connect</h3>
+                <p>Any project can use the automatic-claude-code system by running commands from their directory:</p>
+            </div>
+
+            <h3>Step-by-Step Integration Process</h3>
+
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <strong>Project Setup:</strong> Navigate to your project directory
+                    <div class="code-block">cd C:\Users\Dev\orthodox-synagogue-auction-platform</div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <strong>Run Command:</strong> Execute automatic-claude-code with relative path
+                    <div class="code-block">node "../automatic-claude-code/dist/index.js" run "your task here" --dual-agent -i 5 -v</div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <strong>Monitoring Starts:</strong> System automatically starts monitoring server if enabled
+                    <ul>
+                        <li>Checks if monitoring server is running on port 4001</li>
+                        <li>Starts server if not running</li>
+                        <li>Provides UI URL for real-time monitoring</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <strong>Agent Execution:</strong> Dual-agent system processes the task
+                    <ul>
+                        <li>Manager analyzes task and creates work plan</li>
+                        <li>Worker executes specific development tasks</li>
+                        <li>All coordination events are sent to monitoring system</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">5</div>
+                <div class="step-content">
+                    <strong>Real-time Monitoring:</strong> View progress in dashboard
+                    <div class="code-block">UI Dashboard: http://localhost:6011
+API Health: http://localhost:4001/api/health
+Session Data: http://localhost:4001/api/sessions</div>
+                </div>
+            </div>
+
+            <h3>Configuration Options</h3>
+
+            <div class="highlight">
+                <h4>📋 Available Command Options</h4>
+                <ul>
+                    <li><code>--dual-agent</code> - Enable dual-agent mode</li>
+                    <li><code>-i 5</code> - Maximum iterations</li>
+                    <li><code>-v</code> - Verbose output</li>
+                    <li><code>--manager-model opus</code> - Specify manager model</li>
+                    <li><code>--worker-model sonnet</code> - Specify worker model</li>
+                    <li><code>--no-monitoring</code> - Disable monitoring for this run</li>
+                </ul>
+            </div>
+
+            <h2>💾 Data Persistence</h2>
+
+            <div class="flow-section">
+                <h4>🗄️ Database Schema</h4>
+                <p>The system stores comprehensive data about each dual-agent session:</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Table</th>
+                            <th>Purpose</th>
+                            <th>Key Fields</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>sessions</code></td>
+                            <td>Dual-agent execution sessions</td>
+                            <td>id, startTime, status, initialTask, workDir</td>
+                        </tr>
+                        <tr>
+                            <td><code>messages</code></td>
+                            <td>Agent communication messages</td>
+                            <td>id, sessionId, agentType, messageType, content, timestamp</td>
+                        </tr>
+                        <tr>
+                            <td><code>analytics</code></td>
+                            <td>Performance metrics</td>
+                            <td>sessionId, responseTime, toolsUsed, successRate</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h2>🔧 Troubleshooting</h2>
+
+            <div class="warning-section">
+                <h3>⚠️ Common Issues</h3>
+                <ul>
+                    <li><strong>Port Conflicts:</strong> Ensure ports 4001 and 6011 are available</li>
+                    <li><strong>Missing Dependencies:</strong> Run <code>pnpm install</code> in both root and <code>dual-agent-monitor/</code></li>
+                    <li><strong>Database Connection:</strong> Check PostgreSQL setup or use in-memory fallback</li>
+                    <li><strong>Claude CLI:</strong> Ensure Claude Code CLI is installed and in PATH</li>
+                </ul>
+            </div>
+
+            <div class="info-section">
+                <h3>ℹ️ Monitoring Status Commands</h3>
+                <div class="code-block">node dist/index.js monitor                    # Show status
+node dist/index.js monitor --start             # Start monitoring server
+node dist/index.js monitor --config            # Show configuration
+node dist/index.js monitor --stop              # Stop monitoring server</div>
+            </div>
+
+            <h2>🎯 Key Benefits</h2>
+
+            <div class="success-section">
+                <h3>✅ Why Use This System?</h3>
+                <ul>
+                    <li><strong>Intelligent Task Decomposition:</strong> Manager breaks complex tasks into manageable pieces</li>
+                    <li><strong>Specialized Execution:</strong> Worker focuses on implementation details</li>
+                    <li><strong>Quality Assurance:</strong> Manager validates Worker outputs</li>
+                    <li><strong>Real-time Monitoring:</strong> See exactly what agents are doing</li>
+                    <li><strong>Session Replay:</strong> Review and analyze complete workflows</li>
+                    <li><strong>Performance Analytics:</strong> Track success rates and optimization opportunities</li>
+                    <li><strong>Cross-Project Usage:</strong> Works with any TypeScript/Node.js project</li>
+                </ul>
+            </div>
+
+        </main>
+
+        <footer>
+            <p>Generated: August 31, 2025 | Automatic Claude Code System Architecture Guide</p>
+            <p><strong>File:</strong> .claude/session-output/automatic-claude-code_20250831_221955_system_architecture_guide.html</p>
+        </footer>
+    </article>
+</body>
+</html>

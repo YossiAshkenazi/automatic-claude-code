@@ -15,7 +15,22 @@
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
     "prebuild": "pnpm run clean",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "docker:build": "docker build -t automatic-claude-code .",
+    "docker:build-dev": "docker build --target development -t automatic-claude-code:dev .",
+    "docker:run": "docker run -it --rm -v \"$(pwd):/workspace:ro\" -v \"$HOME/.claude:/home/nodejs/.claude:ro\" automatic-claude-code",
+    "docker:shell": "docker run -it --rm -v \"$(pwd):/workspace\" -v \"$HOME/.claude:/home/nodejs/.claude:ro\" --entrypoint /bin/sh automatic-claude-code",
+    "docker:dev": "docker-compose up --build",
+    "docker:dev-app": "docker-compose --profile app up --build",
+    "docker:dev-monitoring": "docker-compose --profile monitoring up --build",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d --build",
+    "docker:prod-full": "docker-compose -f docker-compose.prod.yml --profile nginx up -d --build",
+    "docker:stop": "docker-compose down",
+    "docker:stop-prod": "docker-compose -f docker-compose.prod.yml down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:logs-app": "docker-compose logs -f acc-app",
+    "docker:backup": "docker-compose -f docker-compose.prod.yml --profile backup up backup",
+    "docker:clean": "docker system prune -f && docker volume prune -f"
   },
   "keywords": [
     "claude",

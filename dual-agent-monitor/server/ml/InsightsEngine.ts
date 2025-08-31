@@ -50,7 +50,7 @@ export interface PerformanceClusters {
     avgScore: number;
     improvementAreas: string[];
   };
-  underperformers: {
+  underPerformers: {
     sessions: string[];
     characteristics: Record<string, any>;
     avgScore: number;
@@ -162,6 +162,30 @@ export class InsightsEngine {
     sessions: DualAgentSession[],
     metrics: PerformanceMetrics[]
   ): Promise<PerformanceClusters> {
+    // Handle empty sessions case
+    if (!sessions || sessions.length === 0) {
+      return {
+        highPerformers: {
+          sessions: [],
+          characteristics: {},
+          avgScore: 0,
+          improvementAreas: []
+        },
+        averagePerformers: {
+          sessions: [],
+          characteristics: {},
+          avgScore: 0,
+          improvementAreas: []
+        },
+        underPerformers: {
+          sessions: [],
+          characteristics: {},
+          avgScore: 0,
+          improvementAreas: []
+        }
+      };
+    }
+
     const cacheKey = this.generateCacheKey(sessions.map(s => s.id), 'clusters');
     
     if (this.clusterCache.has(cacheKey)) {
@@ -191,7 +215,7 @@ export class InsightsEngine {
         avgScore: clusters[1].avgScore,
         improvementAreas: this.identifyImprovementAreas(clusters[1])
       },
-      underperformers: {
+      underPerformers: {
         sessions: clusters[2].sessions,
         characteristics: clusters[2].centroid,
         avgScore: clusters[2].avgScore,
@@ -200,12 +224,12 @@ export class InsightsEngine {
     };
 
     // Sort by performance level
-    const sortedClusters = [result.highPerformers, result.averagePerformers, result.underperformers]
+    const sortedClusters = [result.highPerformers, result.averagePerformers, result.underPerformers]
       .sort((a, b) => b.avgScore - a.avgScore);
     
     result.highPerformers = sortedClusters[0];
     result.averagePerformers = sortedClusters[1];
-    result.underperformers = sortedClusters[2];
+    result.underPerformers = sortedClusters[2];
 
     this.clusterCache.set(cacheKey, result);
     return result;
@@ -302,26 +326,26 @@ export class InsightsEngine {
     }
 
     // Underperformer analysis
-    if (clusters.underperformers.sessions.length > 0) {
-      const severity = clusters.underperformers.sessions.length > clusters.highPerformers.sessions.length 
+    if (clusters.underPerformers.sessions.length > 0) {
+      const severity = clusters.underPerformers.sessions.length > clusters.highPerformers.sessions.length 
         ? 'high' : 'medium';
       
       insights.push({
         id: `cluster-low-${Date.now()}`,
         type: 'performance',
         title: 'Underperforming Sessions Detected',
-        description: `${clusters.underperformers.sessions.length} sessions showing poor performance (avg: ${clusters.underperformers.avgScore.toFixed(1)})`,
+        description: `${clusters.underPerformers.sessions.length} sessions showing poor performance (avg: ${clusters.underPerformers.avgScore.toFixed(1)})`,
         severity,
         confidence: 0.88,
         data: {
-          sessionCount: clusters.underperformers.sessions.length,
-          avgScore: clusters.underperformers.avgScore,
-          characteristics: clusters.underperformers.characteristics,
-          improvementAreas: clusters.underperformers.improvementAreas,
-          sessions: clusters.underperformers.sessions.slice(0, 5)
+          sessionCount: clusters.underPerformers.sessions.length,
+          avgScore: clusters.underPerformers.avgScore,
+          characteristics: clusters.underPerformers.characteristics,
+          improvementAreas: clusters.underPerformers.improvementAreas,
+          sessions: clusters.underPerformers.sessions.slice(0, 5)
         },
         suggestions: [
-          ...clusters.underperformers.improvementAreas.map(area => `Focus on improving ${area}`),
+          ...clusters.underPerformers.improvementAreas.map(area => `Focus on improving ${area}`),
           'Review underperforming session patterns for common issues',
           'Consider adjusting agent prompts or task breakdown strategies'
         ],
@@ -606,6 +630,15 @@ export class InsightsEngine {
     data: Array<{ sessionId: string; score: number; features: Record<string, number> }>, 
     k: number
   ): Array<{ sessions: string[]; centroid: Record<string, number>; avgScore: number }> {
+    // Handle empty data case
+    if (!data || data.length === 0) {
+      return Array.from({ length: k }, () => ({
+        sessions: [],
+        centroid: {},
+        avgScore: 0
+      }));
+    }
+
     // Simplified k-means implementation
     const featureKeys = Object.keys(data[0]?.features || {});
     

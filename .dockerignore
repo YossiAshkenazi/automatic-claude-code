@@ -1,0 +1,111 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+out/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Test files
+coverage/
+*.test.js
+*.spec.js
+
+# Documentation (keep essential docs)
+docs/
+*.md
+!README.md
+!CLAUDE.md
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Cache directories
+.cache/
+.parcel-cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# ESLint
+.eslintcache
+
+# Optional dependencies
+.pnp
+.pnp.js
+
+# Development files
+test-*
+*-test/
+examples/
+
+# Local configuration
+.automatic-claude-code/
+.claude/
+
+# Backup and data directories
+backups/
+data/
+
+# Dual agent monitor build files (handled by separate Dockerfile)
+dual-agent-monitor/node_modules/
+dual-agent-monitor/dist/
+dual-agent-monitor/.next/
+
+# Test directories
+tests/
+__tests__/
+*.test.*
+*.spec.*
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Docker files (except the ones we need)
+docker-compose.*.yml
+Dockerfile.*
+
+# Miscellaneous
+*.tgz
+*.tar.gz
+.npmrc

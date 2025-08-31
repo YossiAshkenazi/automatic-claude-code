@@ -1,0 +1,210 @@
+version: '3.8'
+
+services:
+  # Main Automatic Claude Code application
+  acc-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: automatic-claude-code-app
+    restart: unless-stopped
+    volumes:
+      # Production workspace mount (read-only)
+      - ./workspace:/workspace:ro
+      # Config directory (persistent)
+      - acc_config:/home/nodejs/.automatic-claude-code
+      # Claude config (read-only if available)
+      - ~/.claude:/home/nodejs/.claude:ro
+    environment:
+      - NODE_ENV=production
+      - ACC_WORKSPACE=/workspace
+      - DATABASE_URL=postgresql://acc_user:${POSTGRES_PASSWORD}@postgres:5432/dual_agent_monitor
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - acc-network
+    profiles:
+      - app
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: acc-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=dual_agent_monitor
+      - POSTGRES_USER=acc_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-acc_secure_password_123}
+      - POSTGRES_INITDB_ARGS=--auth-local=trust --auth-host=md5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./dual-agent-monitor/server/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./backups:/backups
+    ports:
+      - "5432:5432"
+    networks:
+      - acc-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acc_user -d dual_agent_monitor"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: acc-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - acc-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Monitoring backend
+  monitoring-backend:
+    build:
+      context: ./dual-agent-monitor
+      dockerfile: Dockerfile
+      target: production
+    container_name: acc-monitoring-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://acc_user:${POSTGRES_PASSWORD:-acc_secure_password_123}@postgres:5432/dual_agent_monitor
+      - REDIS_URL=redis://redis:6379
+      - PORT=4001
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-your_webhook_secret_here}
+    ports:
+      - "4001:4001"
+    networks:
+      - acc-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Monitoring frontend with nginx
+  monitoring-frontend:
+    build:
+      context: ./dual-agent-monitor
+      dockerfile: Dockerfile
+      target: production
+    container_name: acc-monitoring-frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://localhost:4001
+      - VITE_WS_URL=ws://localhost:4001
+    ports:
+      - "6007:80"
+    networks:
+      - acc-network
+    depends_on:
+      monitoring-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Nginx reverse proxy (optional, for advanced routing)
+  nginx:
+    image: nginx:alpine
+    container_name: acc-nginx
+    restart: unless-stopped
+    volumes:
+      - ./dual-agent-monitor/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/ssl/certs:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - acc-network
+    depends_on:
+      - monitoring-backend
+      - monitoring-frontend
+    profiles:
+      - nginx
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Database backup service
+  backup:
+    image: postgres:15-alpine
+    container_name: acc-backup
+    restart: "no"
+    environment:
+      - PGUSER=acc_user
+      - PGPASSWORD=${POSTGRES_PASSWORD:-acc_secure_password_123}
+      - PGDATABASE=dual_agent_monitor
+      - PGHOST=postgres
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    networks:
+      - acc-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: /backup.sh
+    profiles:
+      - backup
+
+networks:
+  acc-network:
+    driver: bridge
+    name: automatic-claude-code-network
+
+volumes:
+  postgres_data:
+    name: acc_postgres_data
+  redis_data:
+    name: acc_redis_data
+  acc_config:
+    name: acc_config

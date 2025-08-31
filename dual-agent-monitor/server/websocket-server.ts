@@ -32,7 +32,7 @@ const clients = new Set<WebSocket>();
 
 // Initialize services
 analyticsService.initialize().catch(console.error);
-mlService.initialize().catch(console.error);
+// mlService.initialize().catch(console.error); // Temporarily disabled until ML issues are resolved
 
 // Subscribe to real-time analytics updates
 analyticsService.subscribeToRealTime((metrics) => {
@@ -43,13 +43,13 @@ analyticsService.subscribeToRealTime((metrics) => {
 });
 
 // Subscribe to ML service updates
-mlService.subscribe((update) => {
-  broadcast({
-    type: `ml:${update.event}`,
-    data: update.data,
-    timestamp: update.timestamp
-  });
-});
+// mlService.subscribe((update) => {
+//   broadcast({
+//     type: `ml:${update.event}`,
+//     data: update.data,
+//     timestamp: update.timestamp
+//   });
+// }); // Temporarily disabled
 
 // In-memory storage for active sessions (will be replaced by database later)
 let currentSession: DualAgentSession | null = null;
@@ -318,6 +318,46 @@ wss.on('connection', (ws) => {
           }
           break;
 
+        case 'send_message':
+          // Handle messages from automatic-claude-code dual-agent system
+          try {
+            // Create or update current session if needed
+            if (!currentSession && data.sessionInfo) {
+              const sessionId = await dbService.createSession({
+                startTime: new Date(),
+                status: 'running',
+                initialTask: data.sessionInfo.task || 'Dual-agent task',
+                workDir: data.sessionInfo.workDir || process.cwd()
+              });
+              currentSession = await dbService.getSession(sessionId);
+            }
+
+            if (currentSession && data.message && data.agent) {
+              const agentMessage: AgentMessage = {
+                id: uuidv4(),
+                sessionId: currentSession.id,
+                agentType: data.agent === 'manager' ? 'manager' : 'worker',
+                messageType: data.messageType || 'prompt',
+                content: data.message,
+                timestamp: new Date(),
+                metadata: data.metadata
+              };
+              
+              await dbService.addMessage(agentMessage);
+              
+              // Collect analytics metrics
+              await analyticsService.collectMetricsFromMessage(agentMessage, currentSession);
+              
+              broadcast({
+                type: 'agent:message',
+                data: agentMessage
+              });
+            }
+          } catch (error) {
+            console.error('Error handling send_message:', error);
+          }
+          break;
+
         default:
           console.warn('Unknown message type:', data.type);
       }
@@ -382,6 +422,55 @@ app.get('/api/health', (req, res) => {
       clients: clients.size
     }
   });
+});
+
+// Monitoring data endpoint for automatic-claude-code integration
+app.post('/api/monitoring', async (req, res) => {
+  try {
+    const data = req.body;
+    
+    // Handle dual-agent monitoring data
+    if (data.agentType && data.message) {
+      // Create or update current session if needed
+      if (!currentSession && data.sessionInfo) {
+        const sessionId = await dbService.createSession({
+          startTime: new Date(),
+          status: 'running',
+          initialTask: data.sessionInfo.task || 'Dual-agent task',
+          workDir: data.sessionInfo.workDir || process.cwd()
+        });
+        currentSession = await dbService.getSession(sessionId);
+      }
+
+      if (currentSession) {
+        const agentMessage: AgentMessage = {
+          id: uuidv4(),
+          sessionId: currentSession.id,
+          agentType: data.agentType,
+          messageType: data.messageType || 'prompt',
+          content: data.message,
+          timestamp: new Date(),
+          metadata: data.metadata
+        };
+        
+        await dbService.addMessage(agentMessage);
+        
+        // Collect analytics metrics
+        await analyticsService.collectMetricsFromMessage(agentMessage, currentSession);
+        
+        // Broadcast to connected clients
+        broadcast({
+          type: 'agent_message',
+          data: agentMessage
+        });
+      }
+    }
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Error processing monitoring data:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.get('/api/sessions', async (req, res) => {
@@ -1528,7 +1617,7 @@ setInterval(async () => {
 process.on('SIGINT', async () => {
   console.log('Shutting down WebSocket server...');
   await analyticsService.shutdown();
-  await mlService.shutdown();
+  // await mlService.shutdown();
   await replayManager.cleanup();
   dbService.close();
   process.exit(0);
@@ -1537,7 +1626,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('Shutting down WebSocket server...');
   await analyticsService.shutdown();
-  await mlService.shutdown();
+  // await mlService.shutdown();
   await replayManager.cleanup();
   dbService.close();
   process.exit(0);

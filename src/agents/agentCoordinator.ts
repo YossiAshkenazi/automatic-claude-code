@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { Logger } from '../logger';
 import { SessionManager } from '../sessionManager';
+import { monitoringManager } from '../monitoringManager';
 import { OutputParser, ParsedOutput } from '../outputParser';
 import {
   AgentRole,
@@ -1372,6 +1373,27 @@ QUALITY REQUIREMENTS:
     };
 
     this.emit('coordination_event', event);
+
+    // Send to monitoring server
+    monitoringManager.sendMonitoringData({
+      agentType: agentRole || 'manager',
+      messageType: 'coordination_event',
+      message: type,
+      metadata: {
+        eventType: type,
+        eventData: data,
+        timestamp: event.timestamp,
+        workflowPhase: this.executionContext.workflowState.phase,
+        overallProgress: this.executionContext.workflowState.overallProgress
+      },
+      sessionInfo: {
+        task: this.executionContext.userRequest,
+        workDir: process.cwd()
+      }
+    }).catch(error => {
+      // Don't let monitoring errors break execution
+      this.logger.debug('Failed to send monitoring data', { error });
+    });
   }
 
   /**

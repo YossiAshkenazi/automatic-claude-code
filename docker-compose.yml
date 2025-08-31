@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  # Main Automatic Claude Code application
+  acc-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: automatic-claude-code-app
+    volumes:
+      # Mount the workspace directory for development
+      - .:/workspace:ro
+      # Mount Claude config if it exists
+      - ~/.claude:/home/nodejs/.claude:ro
+      # Mount config directory
+      - ~/.automatic-claude-code:/home/nodejs/.automatic-claude-code
+    environment:
+      - NODE_ENV=development
+      - ACC_WORKSPACE=/workspace
+    networks:
+      - acc-network
+    stdin_open: true
+    tty: true
+    profiles:
+      - app
+
+  # PostgreSQL database for monitoring
+  postgres:
+    image: postgres:15-alpine
+    container_name: acc-postgres
+    environment:
+      - POSTGRES_DB=dual_agent_monitor
+      - POSTGRES_USER=acc_user
+      - POSTGRES_PASSWORD=acc_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./dual-agent-monitor/server/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - acc-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acc_user -d dual_agent_monitor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - monitoring
+
+  # Redis for caching and session storage
+  redis:
+    image: redis:7-alpine
+    container_name: acc-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - acc-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - monitoring
+
+  # Monitoring dashboard backend
+  monitoring-backend:
+    build:
+      context: ./dual-agent-monitor
+      dockerfile: Dockerfile
+      target: development
+    container_name: acc-monitoring-backend
+    volumes:
+      - ./dual-agent-monitor:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://acc_user:acc_password@postgres:5432/dual_agent_monitor
+      - REDIS_URL=redis://redis:6379
+      - PORT=4001
+    ports:
+      - "4001:4001"
+    networks:
+      - acc-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - monitoring
+
+  # Monitoring dashboard frontend
+  monitoring-frontend:
+    build:
+      context: ./dual-agent-monitor
+      dockerfile: Dockerfile
+      target: development
+    container_name: acc-monitoring-frontend
+    volumes:
+      - ./dual-agent-monitor:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:4001
+      - VITE_WS_URL=ws://localhost:4001
+    ports:
+      - "6007:6007"
+    networks:
+      - acc-network
+    depends_on:
+      - monitoring-backend
+    command: pnpm run dev --host
+    profiles:
+      - monitoring
+
+networks:
+  acc-network:
+    driver: bridge
+    name: automatic-claude-code-network
+
+volumes:
+  postgres_data:
+    name: acc_postgres_data
+  redis_data:
+    name: acc_redis_data

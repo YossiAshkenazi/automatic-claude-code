@@ -208,8 +208,8 @@ class AutomaticClaudeCode {
         reject(err);
       });
 
-      // Add timeout to prevent hanging (default 10 minutes, configurable)
-      const timeoutMs = options.timeout || 600000; // Default 10 minutes
+      // Add timeout to prevent hanging (default 30 minutes, configurable)
+      const timeoutMs = options.timeout || 1800000; // Default 30 minutes
       const timeoutMinutes = Math.round(timeoutMs / 60000);
       const timeout = setTimeout(() => {
         this.logger.error(`Claude process timed out after ${timeoutMinutes} minutes`);
@@ -470,7 +470,7 @@ async function main() {
     .option('-t, --tools <tools>', 'Comma-separated list of allowed tools')
     .option('-c, --continue-on-error', 'Continue loop even if errors occur')
     .option('-v, --verbose', 'Show detailed output')
-    .option('--timeout <minutes>', 'Timeout for each Claude execution in minutes (default: 10)', '10')
+    .option('--timeout <minutes>', 'Timeout for each Claude execution in minutes (default: 30)', '30')
     .action(async (prompt, options) => {
       const app = new AutomaticClaudeCode();
       

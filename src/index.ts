@@ -44,10 +44,22 @@ class AutomaticClaudeCode {
   }
 
   private getClaudeCommand(): { command: string; baseArgs: string[] } {
-    // For WSL/Linux compatibility, prefer npx approach first
+    // For WSL/Linux compatibility, try multiple approaches
     if (process.platform === 'linux' || process.env.WSL_DISTRO_NAME) {
+      this.logger.info('Linux/WSL detected, trying multiple approaches...');
+      
+      // First try to find full path to npx
       try {
-        this.logger.info('Linux/WSL detected, using npx approach...');
+        const npxPath = execSync('which npx', { encoding: 'utf-8' }).trim();
+        this.logger.info(`Found npx at: ${npxPath}`);
+        execSync(`${npxPath} @anthropic-ai/claude-code --version`, { stdio: 'ignore', timeout: 15000 });
+        return { command: npxPath, baseArgs: ['@anthropic-ai/claude-code', '--dangerously-skip-permissions'] };
+      } catch (error) {
+        this.logger.error(`Direct npx path failed: ${error}`);
+      }
+      
+      // Fallback to regular npx
+      try {
         execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 15000 });
         return { command: 'npx', baseArgs: ['@anthropic-ai/claude-code', '--dangerously-skip-permissions'] };
       } catch (error) {
@@ -130,10 +142,14 @@ class AutomaticClaudeCode {
       const allArgs = [...baseArgs, ...args];
       this.logger.debug(`Using Claude command: ${command} ${allArgs.join(' ')}`);
       
+      // Use shell mode for npx commands to ensure proper PATH resolution
+      const useShell = command === 'npx' || command.includes('npx');
+      
       const claudeProcess = spawn(command, allArgs, {
-        shell: false, // Don't use shell for better compatibility
-        env: { ...process.env },
+        shell: useShell,
+        env: { ...process.env, PATH: process.env.PATH },
         cwd: options.workDir || process.cwd(),
+        stdio: ['pipe', 'pipe', 'pipe'] // Explicit stdio for better error handling
       });
 
       let output = '';

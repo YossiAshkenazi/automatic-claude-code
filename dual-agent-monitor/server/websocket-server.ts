@@ -22,12 +22,8 @@ wss.on('connection', (ws) => {
   console.log('New WebSocket client connected');
   clients.add(ws);
 
-  // Send initial connection success message
-  ws.send(JSON.stringify({
-    type: 'connection',
-    status: 'connected',
-    timestamp: new Date().toISOString()
-  }));
+  // Connection established - no initial message needed
+  // The WebSocket client will detect connection via the open event
 
   // Send current session data if available
   const currentSession = agentService.getCurrentSession();

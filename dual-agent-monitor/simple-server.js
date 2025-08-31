@@ -13,9 +13,9 @@ const wss = new WebSocket.Server({ server });
 app.use(cors());
 app.use(express.json());
 
-// Serve enterprise demo as default
+// Serve standalone UI as default
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'enterprise-demo.html'));
+  res.sendFile(path.join(__dirname, 'standalone-ui.html'));
 });
 
 // Static files (after specific routes)

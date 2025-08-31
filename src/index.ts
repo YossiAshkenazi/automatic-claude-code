@@ -141,6 +141,8 @@ class AutomaticClaudeCode {
       const { command, baseArgs } = this.getClaudeCommand();
       const allArgs = [...baseArgs, ...args];
       this.logger.debug(`Using Claude command: ${command} ${allArgs.join(' ')}`);
+      this.logger.debug(`Working directory option: ${options.workDir}`);
+      this.logger.debug(`Full args: ${JSON.stringify(args)}`);
       
       // Use shell mode for npx commands to ensure proper PATH resolution
       const useShell = command === 'npx' || command.includes('npx');

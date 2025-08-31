@@ -119,7 +119,8 @@ class AutomaticClaudeCode {
     
     // Always add working directory (use current directory if not specified)
     const workingDir = options.workDir || process.cwd();
-    args.push('--add-dir', workingDir);
+    // Temporarily remove --add-dir to test if it's causing the hang
+    // args.push('--add-dir', workingDir);
     
     if (options.allowedTools) {
       args.push('--allowedTools', options.allowedTools);

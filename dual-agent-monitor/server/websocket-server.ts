@@ -299,26 +299,6 @@ wss.on('connection', (ws) => {
           }
           break;
 
-        case 'analytics:subscribe':
-          try {
-            const { sessionIds, includeRealTime } = data;
-            const dashboardData = await analyticsService.getDashboardData({
-              sessionIds,
-              includeRealTime: includeRealTime || false
-            });
-            
-            ws.send(JSON.stringify({
-              type: 'analytics:dashboard',
-              data: dashboardData
-            }));
-          } catch (error) {
-            console.error('Error getting analytics data:', error);
-            ws.send(JSON.stringify({
-              type: 'error',
-              message: 'Failed to get analytics data'
-            }));
-          }
-          break;
 
         case 'analytics:compare':
           try {

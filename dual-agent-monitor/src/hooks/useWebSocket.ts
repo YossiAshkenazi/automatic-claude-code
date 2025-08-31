@@ -31,6 +31,21 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
   const reconnectAttempts = useRef(0);
   const shouldReconnect = useRef(true);
   const pingIntervalRef = useRef<NodeJS.Timeout>();
+  const isConnecting = useRef(false);
+  const isMounted = useRef(false);
+  
+  // Store callbacks in refs to avoid recreating connect function
+  const onOpenRef = useRef(onOpen);
+  const onCloseRef = useRef(onClose);
+  const onErrorRef = useRef(onError);
+  const onMessageRef = useRef(onMessage);
+  
+  useEffect(() => {
+    onOpenRef.current = onOpen;
+    onCloseRef.current = onClose;
+    onErrorRef.current = onError;
+    onMessageRef.current = onMessage;
+  }, [onOpen, onClose, onError, onMessage]);
 
   const startPing = useCallback(() => {
     if (pingIntervalRef.current) {
@@ -53,14 +68,18 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
 
   const connect = useCallback(() => {
     // Don't attempt to connect if we shouldn't reconnect or if already connecting
-    if (!shouldReconnect.current || connectionStatus === 'Connecting') {
+    if (!shouldReconnect.current || isConnecting.current || !isMounted.current) {
       return;
     }
 
+    // Prevent concurrent connection attempts
+    isConnecting.current = true;
+
     try {
       // Close existing connection if any
-      if (ws.current) {
+      if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
         ws.current.close();
+        ws.current = null;
       }
 
       setConnectionStatus('Connecting');
@@ -69,11 +88,12 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
 
       ws.current.onopen = () => {
         console.log('WebSocket connected');
+        isConnecting.current = false;
         setConnectionStatus('Open');
         reconnectAttempts.current = 0;
         setLastError(null);
         startPing();
-        onOpen?.();
+        onOpenRef.current?.();
         
         if (reconnectAttempts.current > 0) {
           toast.success('Connection restored');
@@ -84,7 +104,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
         try {
           const data = event.data;
           setLastMessage(data);
-          onMessage?.(data);
+          onMessageRef.current?.(data);
           
           // Handle pong responses
           const parsed = JSON.parse(data);
@@ -95,18 +115,19 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
         } catch (error) {
           console.warn('Failed to parse WebSocket message:', error);
           setLastMessage(event.data);
-          onMessage?.(event.data);
+          onMessageRef.current?.(event.data);
         }
       };
 
       ws.current.onclose = (event) => {
         console.log('WebSocket disconnected:', event.code, event.reason);
+        isConnecting.current = false;
         setConnectionStatus('Closed');
         stopPing();
-        onClose?.();
+        onCloseRef.current?.();
         
         // Attempt to reconnect if we should and haven't exceeded max attempts
-        if (shouldReconnect.current && reconnectAttempts.current < maxReconnectAttempts) {
+        if (shouldReconnect.current && reconnectAttempts.current < maxReconnectAttempts && isMounted.current) {
           const delay = Math.min(reconnectInterval * Math.pow(2, reconnectAttempts.current), 30000);
           reconnectAttempts.current++;
           
@@ -129,11 +150,12 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
 
       ws.current.onerror = (error) => {
         console.error('WebSocket error:', error);
+        isConnecting.current = false;
         const errorMsg = 'WebSocket connection error';
         setLastError(errorMsg);
         setConnectionStatus('Error');
         stopPing();
-        onError?.(error);
+        onErrorRef.current?.(error);
         
         if (reconnectAttempts.current === 0) {
           toast.error('Failed to connect to server');
@@ -141,15 +163,17 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
       };
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error);
+      isConnecting.current = false;
       const errorMsg = error instanceof Error ? error.message : 'Connection failed';
       setLastError(errorMsg);
       setConnectionStatus('Error');
       toast.error(errorMsg);
     }
-  }, [url, connectionStatus, maxReconnectAttempts, reconnectInterval, onOpen, onClose, onError, onMessage, startPing, stopPing]);
+  }, [url, maxReconnectAttempts, reconnectInterval, startPing, stopPing]);
 
   const disconnect = useCallback(() => {
     shouldReconnect.current = false;
+    isConnecting.current = false;
     
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -168,15 +192,27 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
     shouldReconnect.current = true;
     reconnectAttempts.current = 0;
     setLastError(null);
+    isConnecting.current = false;
     connect();
   }, [connect]);
 
   useEffect(() => {
+    isMounted.current = true;
     shouldReconnect.current = true;
-    connect();
+    
+    // Delay initial connection to avoid rapid reconnects during component mount
+    const connectTimeout = setTimeout(() => {
+      if (isMounted.current) {
+        connect();
+      }
+    }, 100);
 
     return () => {
+      isMounted.current = false;
       shouldReconnect.current = false;
+      isConnecting.current = false;
+      
+      clearTimeout(connectTimeout);
       
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -208,13 +244,13 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
   }, []);
 
   const isConnected = connectionStatus === 'Open';
-  const isConnecting = connectionStatus === 'Connecting';
+  const isConnectingStatus = connectionStatus === 'Connecting';
   const hasError = connectionStatus === 'Error';
   const canReconnect = hasError || connectionStatus === 'Closed';
 
   return { 
     isConnected,
-    isConnecting,
+    isConnecting: isConnectingStatus,
     hasError,
     canReconnect,
     connectionStatus, 

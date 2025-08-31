@@ -47,7 +47,7 @@ class ApiClient {
       }
 
       return response.json();
-    } catch (error) {
+    } catch (error: any) {
       clearTimeout(timeoutId);
       
       if (error.name === 'AbortError') {

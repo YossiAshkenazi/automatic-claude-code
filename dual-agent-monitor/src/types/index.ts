@@ -2,7 +2,7 @@ export interface AgentMessage {
   id: string;
   sessionId: string;
   agentType: 'manager' | 'worker';
-  messageType: 'prompt' | 'response' | 'tool_call' | 'error' | 'system';
+  messageType: 'prompt' | 'response' | 'tool_call' | 'tool_use' | 'tool_result' | 'error' | 'system';
   content: string;
   timestamp: Date;
   metadata?: {
@@ -19,7 +19,8 @@ export interface DualAgentSession {
   id: string;
   startTime: Date;
   endTime?: Date;
-  status: 'running' | 'completed' | 'failed' | 'paused';
+  lastActivity?: string;
+  status: 'running' | 'completed' | 'failed' | 'paused' | 'error';
   initialTask: string;
   workDir: string;
   messages: AgentMessage[];
@@ -39,7 +40,7 @@ export interface SessionSummary {
 }
 
 export interface WebSocketMessage {
-  type: 'new_message' | 'session_update' | 'system_event' | 'performance_update' | 'session_list';
+  type: 'new_message' | 'session_update' | 'system_event' | 'performance_update' | 'session_list' | 'session_created' | 'session_deleted' | 'error' | 'send_message';
   data: any;
 }
 

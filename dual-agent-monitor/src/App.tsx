@@ -30,7 +30,12 @@ function App() {
   useEffect(() => {
     if (!lastMessage) return;
 
-    handleWebSocketMessage(lastMessage);
+    try {
+      const message = JSON.parse(lastMessage) as WebSocketMessage;
+      handleWebSocketMessage(message);
+    } catch (error) {
+      console.error('Failed to parse WebSocket message:', error);
+    }
   }, [lastMessage]);
 
   const loadSessions = async () => {

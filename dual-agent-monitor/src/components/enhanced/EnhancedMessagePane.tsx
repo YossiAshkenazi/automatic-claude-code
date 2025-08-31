@@ -24,6 +24,7 @@ import { Input } from '../ui/Input';
 import { Badge } from '../ui/Badge';
 import { Card, CardContent } from '../ui/Card';
 import { useTheme } from '../ui/ThemeProvider';
+import { EmptyState } from '../ui/EmptyState';
 import { AgentMessage, DualAgentSession } from '../../types';
 import { cn, formatRelativeTime, copyToClipboard, getAgentColor } from '../../lib/utils';
 import { toast } from 'sonner';

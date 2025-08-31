@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ArrowRight, MessageCircle, Tool, AlertCircle, Settings } from 'lucide-react';
+import { ArrowRight, MessageCircle, Wrench, AlertCircle, Settings } from 'lucide-react';
 import { DualAgentSession, AgentMessage } from '../types';
 import { formatTimestamp, getAgentColor } from '../utils/formatters';
 

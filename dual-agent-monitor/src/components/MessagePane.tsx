@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Copy, Clock, Tool, FileText, Terminal } from 'lucide-react';
+import { Copy, Clock, Wrench, FileText, Terminal } from 'lucide-react';
 import { MessagePaneProps } from '../types';
 import { formatTimestamp, getAgentColor, getAgentBgColor, truncateText } from '../utils/formatters';
 

@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  dual-agent-monitor:
+    build: .
+    ports:
+      - "6002:6002"  # Frontend (via reverse proxy)
+      - "6003:6003"  # Backend API and WebSocket
+    volumes:
+      - ./.dual-agent-sessions:/app/.dual-agent-sessions
+      - ../logs:/app/logs  # Mount logs from parent directory if available
+    environment:
+      - NODE_ENV=production
+      - PORT=6003
+    restart: unless-stopped
+    
+  # Nginx reverse proxy to serve frontend on port 6002
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "6002:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dist/client:/usr/share/nginx/html:ro
+    depends_on:
+      - dual-agent-monitor
+    restart: unless-stopped

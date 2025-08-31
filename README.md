@@ -33,7 +33,9 @@ pnpm link --global
 acc examples
 ```
 
-### Method 2: Local Usage
+**⚠️ If you get permission errors in WSL, use Method 2 instead.**
+
+### Method 2: Local Usage with Alias (WSL/Linux Recommended)
 ```bash
 # Clone and build (same as above)
 git clone https://github.com/YossiAshkenazi/automatic-claude-code.git
@@ -41,11 +43,23 @@ cd automatic-claude-code
 pnpm install
 pnpm run build
 
-# Use with node command
-node dist/index.js run "your task" -i 3 -v
+# Create an alias for easy access (replace path with your actual path)
+echo 'alias acc="node /mnt/c/Users/Dev/automatic-claude-code/dist/index.js"' >> ~/.bashrc
+source ~/.bashrc
+
+# Now you can use 'acc' from anywhere!
+acc examples
 ```
 
-### Method 3: NPM Install (Future)
+### Method 3: Direct Node Usage
+```bash
+# After cloning and building, use with full node command
+node dist/index.js run "your task" -i 3 -v
+node dist/index.js examples
+node dist/index.js session --list
+```
+
+### Method 4: NPM Install (Future)
 ```bash
 # When published to NPM (not yet available)
 npm install -g automatic-claude-code

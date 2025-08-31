@@ -1,0 +1,9 @@
+#!/bin/bash
+# Automatic Claude Code launcher script
+# This script runs the automatic-claude-code tool from anywhere
+
+# Get the directory where this script is located
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Run the tool with all passed arguments
+node "$DIR/dist/index.js" "$@"

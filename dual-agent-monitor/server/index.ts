@@ -321,7 +321,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-const PORT = process.env.PORT || 6003;
+const PORT = process.env.PORT || 4002;
 
 server.listen(PORT, () => {
   console.log(`Dual-agent monitor server running on port ${PORT}`);

@@ -1,6 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Notification Hook for Agents Observability
 # Reads JSON from stdin and sends to observability server
+# Requires: Bash 3.0+, curl for HTTP requests
 
 # Read JSON input from stdin
 input=$(cat)
@@ -32,7 +33,21 @@ else
 fi
 
 # Create timestamp
-timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Create timestamp with better Linux distribution compatibility
+if command -v date >/dev/null 2>&1; then
+    # Try GNU date with nanoseconds first (Linux)
+    if timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null); then
+        : # Success, timestamp is set
+    elif timestamp=$(date -u -d "now" +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null); then
+        : # Alternative GNU date format
+    else
+        # Fallback for systems without nanosecond support (BusyBox, etc.)
+        timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
+    fi
+else
+    # Ultimate fallback if date command unavailable
+    timestamp=$(printf "%s" "$(date)")
+fi
 
 # Check if this is an "agent needs input" notification
 is_agent_needs_input="false"
@@ -50,12 +65,19 @@ escaped_message=$(echo "$message" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g; s/\
 escaped_cwd=$(echo "$cwd" | sed 's/\\/\\\\/g; s/"/\\"/g')
 escaped_transcript_path=$(echo "$transcript_path" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
+# Capture raw notification data and environment variables
+raw_notification_data=$(echo "$input" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g; s/\r/\\r/g; s/\t/\\t/g')
+claude_args="${CLAUDE_ARGS:-}"
+claude_flags="${CLAUDE_FLAGS:-}"
+
 # Create JSON payload
 payload=$(cat <<EOF
 {
     "source_app": "$project_name",
     "session_id": "$session_id",
     "hook_event_type": "Notification",
+    "notify": $is_agent_needs_input,
+    "announce": $is_agent_needs_input,
     "payload": {
         "message": "$escaped_message",
         "timestamp": "$timestamp",
@@ -63,7 +85,11 @@ payload=$(cat <<EOF
         "transcript_path": "$escaped_transcript_path",
         "notification_type": "$notification_type",
         "notification_level": "$notification_level",
-        "is_agent_needs_input": $is_agent_needs_input
+        "is_agent_needs_input": $is_agent_needs_input,
+        "needs_permission": $is_agent_needs_input,
+        "raw_notification_data": "$raw_notification_data",
+        "claude_args": "$claude_args",
+        "claude_flags": "$claude_flags"
     }
 }
 EOF
@@ -78,7 +104,13 @@ EOF
     
     # Wait for background process with timeout
     sleep 2
-    jobs -p | xargs -r kill 2>/dev/null
+    # Portable job cleanup - check if jobs exist before killing
+    local job_pids
+    job_pids=$(jobs -p 2>/dev/null || true)
+    if [ -n "$job_pids" ]; then
+        # Use portable xargs without -r flag (not available on all systems)
+        echo "$job_pids" | xargs kill 2>/dev/null || true
+    fi
 ) 2>/dev/null &
 
 exit 0

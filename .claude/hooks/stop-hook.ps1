@@ -21,10 +21,11 @@ try {
     # Try to extract the last assistant message from the transcript
     $assistantMessage = $null
     
-    if ($data.transcript_path -and (Test-Path $data.transcript_path)) {
+    # Use LiteralPath to handle special characters in file paths (e.g., Hebrew usernames)
+    if ($data.transcript_path -and (Test-Path -LiteralPath $data.transcript_path -ErrorAction SilentlyContinue)) {
         try {
             # Read the last few lines of the transcript (JSONL format) with UTF-8 encoding
-            $lines = Get-Content $data.transcript_path -Tail 50 -Encoding UTF8
+            $lines = Get-Content -LiteralPath $data.transcript_path -Tail 50 -Encoding UTF8
             
             # Look for the most recent assistant message (reverse order)
             for ($i = $lines.Count - 1; $i -ge 0; $i--) {

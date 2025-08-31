@@ -1,5 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Post-Tool-Use Hook for Agents Observability
+# Requires: Bash 3.0+ for regex support, curl for HTTP requests
 
 SERVER_URL="http://localhost:4000"
 
@@ -10,11 +11,20 @@ get_project_name() {
     origin_url=$(git config --get remote.origin.url 2>/dev/null)
     if [[ -n "$origin_url" ]]; then
         # Extract repo name from URL (handle both HTTPS and SSH formats)
-        if [[ "$origin_url" =~ ([^/]+)\.git$ ]]; then
-            echo "${BASH_REMATCH[1]}"
+        # Use parameter expansion for better portability
+        local repo_name
+        if [[ "$origin_url" =~ \.git$ ]]; then
+            # Remove .git suffix
+            repo_name="${origin_url%.git}"
+            # Extract last component after /
+            repo_name="${repo_name##*/}"
+            echo "$repo_name"
             return
-        elif [[ "$origin_url" =~ /([^/]+)/?$ ]]; then
-            echo "${BASH_REMATCH[1]}"
+        elif [[ "$origin_url" =~ /[^/]+/?$ ]]; then
+            # Extract last component, remove trailing slash
+            repo_name="${origin_url%/}"
+            repo_name="${repo_name##*/}"
+            echo "$repo_name"
             return
         fi
     fi
@@ -99,7 +109,21 @@ fi
 
 project_name=$(get_project_name)
 git_branch=$(get_git_branch)
-timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Create timestamp with better Linux distribution compatibility
+if command -v date >/dev/null 2>&1; then
+    # Try GNU date with nanoseconds first (Linux)
+    if timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null); then
+        : # Success, timestamp is set
+    elif timestamp=$(date -u -d "now" +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null); then
+        : # Alternative GNU date format
+    else
+        # Fallback for systems without nanosecond support (BusyBox, etc.)
+        timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
+    fi
+else
+    # Ultimate fallback if date command unavailable
+    timestamp=$(printf "%s" "$(date)")
+fi
 user="${USER:-unknown}"
 hostname="${HOSTNAME:-$(hostname 2>/dev/null || echo unknown)}"
 

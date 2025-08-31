@@ -1,6 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Stop Hook for Agents Observability
 # Reads JSON from stdin and sends to observability server
+# Requires: Bash 3.0+, curl for HTTP requests, jq recommended
 
 # Read JSON input from stdin
 input=$(cat)
@@ -32,7 +33,21 @@ else
 fi
 
 # Create timestamp
-timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Create timestamp with better Linux distribution compatibility
+if command -v date >/dev/null 2>&1; then
+    # Try GNU date with nanoseconds first (Linux)
+    if timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null); then
+        : # Success, timestamp is set
+    elif timestamp=$(date -u -d "now" +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null); then
+        : # Alternative GNU date format
+    else
+        # Fallback for systems without nanosecond support (BusyBox, etc.)
+        timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
+    fi
+else
+    # Ultimate fallback if date command unavailable
+    timestamp=$(printf "%s" "$(date)")
+fi
 
 # Try to extract the last assistant message from the transcript
 assistant_message=""
@@ -42,8 +57,15 @@ if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
         # Use jq to parse JSONL format
         assistant_message=$(tail -50 "$transcript_path" | tac | while IFS= read -r line; do
             if [ -n "$line" ]; then
+                # Try array format first
                 msg=$(echo "$line" | jq -r 'select(.message.role == "assistant") | .message.content[]? | select(.type == "text") | .text' 2>/dev/null)
                 if [ -n "$msg" ]; then
+                    echo "$msg"
+                    break
+                fi
+                # Try string format as fallback
+                msg=$(echo "$line" | jq -r 'select(.message.role == "assistant") | .message.content // empty' 2>/dev/null)
+                if [ -n "$msg" ] && [ "$msg" != "null" ]; then
                     echo "$msg"
                     break
                 fi
@@ -83,7 +105,13 @@ EOF
     
     # Wait for background process with timeout
     sleep 2
-    jobs -p | xargs -r kill 2>/dev/null
+    # Portable job cleanup - check if jobs exist before killing
+    local job_pids
+    job_pids=$(jobs -p 2>/dev/null || true)
+    if [ -n "$job_pids" ]; then
+        # Use portable xargs without -r flag (not available on all systems)
+        echo "$job_pids" | xargs kill 2>/dev/null || true
+    fi
 ) 2>/dev/null &
 
 # If we found an assistant message, also send it as assistant-message event
@@ -112,7 +140,13 @@ EOF
         
         # Wait for background process with timeout
         sleep 2
-        jobs -p | xargs -r kill 2>/dev/null
+        # Portable job cleanup - check if jobs exist before killing
+    local job_pids
+    job_pids=$(jobs -p 2>/dev/null || true)
+    if [ -n "$job_pids" ]; then
+        # Use portable xargs without -r flag (not available on all systems)
+        echo "$job_pids" | xargs kill 2>/dev/null || true
+    fi
     ) 2>/dev/null &
 fi
 

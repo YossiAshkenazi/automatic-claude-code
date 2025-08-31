@@ -10,7 +10,7 @@
  */
 
 const path = require('path');
-const UniversalHookWrapper = require(path.join(__dirname, '..', '..', 'utils', 'universal-hook-wrapper.js'));
+const UniversalHookWrapper = require(path.join(__dirname, '..', 'utils', 'universal-hook-wrapper.js'));
 
 async function main() {
   // Get command line arguments (excluding node and script path)
@@ -19,7 +19,7 @@ async function main() {
   // Create wrapper instance
   const wrapper = new UniversalHookWrapper({
     debug: process.env.DEBUG === 'true',
-    hookDir: path.join(__dirname, '..', '..', 'universal-hooks')
+    hookDir: path.join(__dirname)
   });
 
   try {

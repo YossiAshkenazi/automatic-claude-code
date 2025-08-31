@@ -34,6 +34,9 @@ try {
         source_app = $projectName
         session_id = $data.session_id
         hook_event_type = "Notification"
+        # Add TTS trigger flags that server checks for (line 517 in index.ts)
+        notify = $isAgentNeedsInput
+        announce = $isAgentNeedsInput
         payload = @{
             message = $data.message
             timestamp = (Get-Date -Format "yyyy-MM-dd'T'HH:mm:ss.fff'Z'")
@@ -42,6 +45,7 @@ try {
             notification_type = $notificationType
             notification_level = $notificationLevel
             is_agent_needs_input = $isAgentNeedsInput
+            needs_permission = $isAgentNeedsInput
             # Capture all available data for analysis
             raw_notification_data = $data
             # Check for YOLO mode indicators

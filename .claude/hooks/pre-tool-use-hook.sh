@@ -1,7 +1,59 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Pre-Tool-Use Hook for Agents Observability
+# Requires: Bash 3.0+ for regex support, curl for HTTP requests
 
 SERVER_URL="http://localhost:4000"
+
+# Detect Linux distribution for compatibility adjustments
+detect_linux_distro() {
+    local distro="unknown"
+    
+    # Check /etc/os-release (systemd standard)
+    if [ -f /etc/os-release ]; then
+        # shellcheck source=/dev/null
+        . /etc/os-release
+        distro="${ID:-unknown}"
+    elif [ -f /etc/lsb-release ]; then
+        # Ubuntu/Debian LSB info
+        # shellcheck source=/dev/null
+        . /etc/lsb-release
+        distro="${DISTRIB_ID:-unknown}"
+    elif [ -f /etc/debian_version ]; then
+        distro="debian"
+    elif [ -f /etc/redhat-release ]; then
+        if grep -qi "centos" /etc/redhat-release; then
+            distro="centos"
+        elif grep -qi "rhel\|red hat" /etc/redhat-release; then
+            distro="rhel"
+        else
+            distro="redhat"
+        fi
+    elif [ -f /etc/alpine-release ]; then
+        distro="alpine"
+    elif [ -f /etc/arch-release ]; then
+        distro="arch"
+    elif command -v lsb_release >/dev/null 2>&1; then
+        distro=$(lsb_release -si 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    fi
+    
+    echo "$distro"
+}
+
+# Check if running in a container environment
+detect_container_env() {
+    # Check for common container indicators
+    if [ -f /.dockerenv ]; then
+        echo "docker"
+    elif [ -n "${container:-}" ]; then
+        echo "$container"
+    elif grep -qa "container=lxc" /proc/1/environ 2>/dev/null; then
+        echo "lxc"
+    elif [ -f /run/systemd/container ]; then
+        cat /run/systemd/container
+    else
+        echo "none"
+    fi
+}
 
 # Auto-detect project name and branch
 get_project_name() {
@@ -10,11 +62,20 @@ get_project_name() {
     origin_url=$(git config --get remote.origin.url 2>/dev/null)
     if [[ -n "$origin_url" ]]; then
         # Extract repo name from URL (handle both HTTPS and SSH formats)
-        if [[ "$origin_url" =~ ([^/]+)\.git$ ]]; then
-            echo "${BASH_REMATCH[1]}"
+        # Use parameter expansion for better portability
+        local repo_name
+        if [[ "$origin_url" =~ \.git$ ]]; then
+            # Remove .git suffix
+            repo_name="${origin_url%.git}"
+            # Extract last component after /
+            repo_name="${repo_name##*/}"
+            echo "$repo_name"
             return
-        elif [[ "$origin_url" =~ /([^/]+)/?$ ]]; then
-            echo "${BASH_REMATCH[1]}"
+        elif [[ "$origin_url" =~ /[^/]+/?$ ]]; then
+            # Extract last component, remove trailing slash
+            repo_name="${origin_url%/}"
+            repo_name="${repo_name##*/}"
+            echo "$repo_name"
             return
         fi
     fi
@@ -37,26 +98,33 @@ test_dangerous_operation() {
             # Extract command from tool input JSON
             local command=$(echo "$tool_input" | jq -r '.command // ""' 2>/dev/null)
             
-            # Check for dangerous patterns
-            if [[ "$command" =~ rm[[:space:]]+-rf[[:space:]]+/ ]]; then
-                echo '{"isDangerous": true, "reason": "Recursive deletion of root directory detected"}'
-                return
-            elif [[ "$command" =~ \>[[:space:]]*/dev/sd[a-z] ]]; then
-                echo '{"isDangerous": true, "reason": "Direct disk write operation detected"}'
-                return
-            elif [[ "$command" =~ dd[[:space:]].*of=/dev/ ]]; then
-                echo '{"isDangerous": true, "reason": "Direct disk device operation detected"}'
-                return
-            fi
+            # Check for dangerous patterns using POSIX-compliant methods
+            case "$command" in
+                *"rm "*"-rf"*"/"*)
+                    echo '{"isDangerous": true, "reason": "Recursive deletion of root directory detected"}'
+                    return
+                    ;;
+                *">"*"/dev/sd"*)
+                    echo '{"isDangerous": true, "reason": "Direct disk write operation detected"}'
+                    return
+                    ;;
+                *"dd "*"of=/dev/"*)
+                    echo '{"isDangerous": true, "reason": "Direct disk device operation detected"}'
+                    return
+                    ;;
+            esac
             ;;
         "Write")
             # Extract file path from tool input JSON
             local file_path=$(echo "$tool_input" | jq -r '.file_path // ""' 2>/dev/null)
             
-            if [[ "$file_path" =~ \.(exe|bat|cmd|ps1)$ ]]; then
-                echo '{"isDangerous": true, "reason": "Writing executable file detected"}'
-                return
-            fi
+            # Check for executable file extensions
+            case "$file_path" in
+                *.exe|*.bat|*.cmd|*.ps1|*.sh|*.py|*.pl|*.rb)
+                    echo '{"isDangerous": true, "reason": "Writing executable file detected"}'
+                    return
+                    ;;
+            esac
             ;;
     esac
     
@@ -85,52 +153,55 @@ fi
 
 project_name=$(get_project_name)
 git_branch=$(get_git_branch)
-timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Create timestamp with Linux distribution compatibility
+create_timestamp() {
+    local distro
+    distro=$(detect_linux_distro)
+    
+    case "$distro" in
+        "alpine"|"busybox")
+            # BusyBox date doesn't support nanoseconds or -d flag
+            date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ"
+            ;;
+        "centos"|"rhel"|"fedora")
+            # GNU date with RHEL-specific fallbacks
+            date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || \
+            date -u --date="now" +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || \
+            date -u +"%Y-%m-%dT%H:%M:%SZ"
+            ;;
+        *)
+            # Ubuntu, Debian, and other GNU date systems
+            if command -v date >/dev/null 2>&1; then
+                # Try GNU date with nanoseconds first
+                if date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null; then
+                    : # Success
+                elif date -u -d "now" +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null; then
+                    : # Alternative GNU date format
+                else
+                    # Fallback without nanoseconds
+                    date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ"
+                fi
+            else
+                # Ultimate fallback
+                printf "%s" "$(date)"
+            fi
+            ;;
+    esac
+}
+
+timestamp=$(create_timestamp)
 user="${USER:-unknown}"
 hostname="${HOSTNAME:-$(hostname 2>/dev/null || echo unknown)}"
 
-# Check if this tool requires permission (not in allow list)
+# IMPORTANT: As of v3.1.0, we don't try to predict permissions
+# We can't reliably predict which tools will ask for permission
+# This was causing false positives and TTS spam
+# Instead, we let the server/client filter based on actual behavior
+# All permission detection now happens via notification-hook
 needs_permission="false"
 permission_message=""
-
-# Try to read settings.local.json for permission checking
-settings_file="$(dirname "$(dirname "$0")")/settings.local.json"
-if [[ -f "$settings_file" ]] && command -v jq >/dev/null 2>&1; then
-    allow_list=$(jq -r '.permissions.allow[]' "$settings_file" 2>/dev/null)
-    tool_found="false"
-    
-    while IFS= read -r pattern; do
-        if [[ "$tool_name" == "Bash" ]] && [[ -n "$tool_input" ]]; then
-            # For Bash commands, check against patterns like "Bash(docker ps:*)"
-            if [[ "$pattern" =~ ^Bash\((.+)\)$ ]]; then
-                cmd_pattern="${BASH_REMATCH[1]%:*}"
-                command=$(echo "$tool_input" | jq -r '.command // ""' 2>/dev/null)
-                if [[ "$command" == "$cmd_pattern"* ]]; then
-                    tool_found="true"
-                    break
-                fi
-            fi
-        elif [[ "$pattern" == *"__"*"__"* ]]; then
-            # MCP tools like mcp__playwright__browser_navigate
-            if [[ "$pattern" == "$tool_name" ]]; then
-                tool_found="true"
-                break
-            fi
-        elif [[ "$pattern" =~ ^([^(]+)(\(.+\))?$ ]]; then
-            # Simple tools like Write, Edit, or tools with parameters
-            tool_base="${BASH_REMATCH[1]}"
-            if [[ "$tool_base" == "$tool_name" ]]; then
-                tool_found="true"
-                break
-            fi
-        fi
-    done <<< "$allow_list"
-    
-    if [[ "$tool_found" == "false" ]]; then
-        needs_permission="true"
-        permission_message="Claude needs your permission to use $tool_name"
-    fi
-fi
+permission_request="false"
+is_agent_needs_input="false"
 
 # Perform validation
 validation=$(test_dangerous_operation "$tool_name" "$tool_input")
@@ -148,8 +219,8 @@ event_payload=$(cat <<EOF
         "validation_result": $validation,
         "needs_permission": $needs_permission,
         "permission_message": "$permission_message",
-        "permission_request": $needs_permission,
-        "is_agent_needs_input": $needs_permission,
+        "permission_request": $permission_request,
+        "is_agent_needs_input": $is_agent_needs_input,
         "git_branch": "$git_branch",
         "timestamp": "$timestamp",
         "user": "$user",

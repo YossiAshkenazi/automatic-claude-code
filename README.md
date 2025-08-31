@@ -20,20 +20,20 @@ A WSL terminal application that runs Claude Code in an automated loop for contin
 git clone https://github.com/YossiAshkenazi/automatic-claude-code.git
 cd automatic-claude-code
 
-# Install dependencies
+# For WSL/Linux users (due to permission issues):
+sudo su  # Switch to root if needed
+npm install --force --no-bin-links
+npm run build
+pnpm link --global
+
+# For other systems:
 pnpm install
-
-# Build the project
 pnpm run build
-
-# Link globally for easy access
 pnpm link --global
 
 # Now you can use 'acc' from anywhere
 acc examples
 ```
-
-**⚠️ If you get permission errors in WSL, use Method 2 instead.**
 
 ### Method 2: Local Usage with Alias (WSL/Linux Recommended)
 ```bash

@@ -6,6 +6,7 @@ import { InMemoryDatabaseService } from './database/InMemoryDatabaseService';
 import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from './types';
 import { AnalyticsService } from './analytics/AnalyticsService';
 import { SessionReplayManager } from './replay/SessionReplayManager';
+import { MLService } from './ml/MLService';
 import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
@@ -22,16 +23,31 @@ const wss = new WebSocketServer({ server });
 const dbService = new InMemoryDatabaseService();
 const analyticsService = new AnalyticsService(dbService);
 const replayManager = new SessionReplayManager(dbService);
+const mlService = new MLService(dbService, {
+  enableRealTimeAnalysis: true,
+  insightGenerationInterval: 5 * 60 * 1000, // 5 minutes
+  anomalyDetectionSensitivity: 'medium'
+});
 const clients = new Set<WebSocket>();
 
-// Initialize analytics service
+// Initialize services
 analyticsService.initialize().catch(console.error);
+mlService.initialize().catch(console.error);
 
 // Subscribe to real-time analytics updates
 analyticsService.subscribeToRealTime((metrics) => {
   broadcast({
     type: 'analytics:realtime',
     data: metrics
+  });
+});
+
+// Subscribe to ML service updates
+mlService.subscribe((update) => {
+  broadcast({
+    type: `ml:${update.event}`,
+    data: update.data,
+    timestamp: update.timestamp
   });
 });
 
@@ -798,6 +814,226 @@ app.post('/api/analytics/metrics', async (req, res) => {
   }
 });
 
+// ML Service API Endpoints
+
+// ML Insights
+app.get('/api/ml/insights', async (req, res) => {
+  try {
+    const { type, severity, minConfidence } = req.query;
+    
+    const filters: any = {};
+    if (type) filters.type = type as string;
+    if (severity) filters.severity = severity as string;
+    if (minConfidence) filters.minConfidence = parseFloat(minConfidence as string);
+    
+    const insights = mlService.getInsights(filters);
+    const patterns = await mlService.insightsEngine.analyzeCollaborationPatterns(
+      await dbService.getAllSessions(),
+      []
+    );
+    const clusters = await mlService.insightsEngine.performanceClusterAnalysis(
+      await dbService.getAllSessions(),
+      []
+    );
+    
+    res.json({
+      insights,
+      patterns,
+      clusters
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ML Recommendations
+app.get('/api/ml/recommendations', async (req, res) => {
+  try {
+    const { category, priority, minImpact } = req.query;
+    
+    const filters: any = {};
+    if (category) filters.category = category as string;
+    if (priority) filters.priority = priority as string;
+    if (minImpact) filters.minImpact = parseFloat(minImpact as string);
+    
+    const recommendations = mlService.getRecommendations(filters);
+    
+    res.json({ recommendations });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Optimization Strategies
+app.get('/api/ml/strategies', async (req, res) => {
+  try {
+    const strategies = mlService.getOptimizationStrategies();
+    res.json({ strategies });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Resource Optimization
+app.get('/api/ml/resource-optimization', async (req, res) => {
+  try {
+    const resourceOptimization = mlService.getResourceOptimization();
+    res.json({ resourceOptimization });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Predictive Analytics
+app.get('/api/ml/forecast', async (req, res) => {
+  try {
+    const { days } = req.query;
+    const forecastDays = days ? parseInt(days as string) : 30;
+    
+    const forecast = await mlService.getResourceForecast(forecastDays);
+    res.json({ forecast });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/ml/trends', async (req, res) => {
+  try {
+    const trends = mlService.getTrends();
+    res.json({ trends });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/ml/predict-session', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId is required' });
+    }
+    
+    const session = await dbService.getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    const analysis = await mlService.analyzeSession(session, false);
+    res.json(analysis);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Anomaly Detection
+app.get('/api/ml/anomalies', async (req, res) => {
+  try {
+    const { type, severity, sessionId, since, limit } = req.query;
+    
+    const filters: any = {};
+    if (type) filters.type = type as string;
+    if (severity) filters.severity = severity as string;
+    if (sessionId) filters.sessionId = sessionId as string;
+    if (since) filters.since = new Date(since as string);
+    
+    const anomalies = mlService.getAnomalies(filters);
+    const limitedAnomalies = limit ? 
+      anomalies.slice(0, parseInt(limit as string)) : 
+      anomalies;
+    
+    res.json({ anomalies: limitedAnomalies });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/ml/anomaly-patterns', async (req, res) => {
+  try {
+    const patterns = mlService.getAnomalyPatterns();
+    res.json({ patterns });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/ml/anomaly-insights', async (req, res) => {
+  try {
+    const insights = mlService.getAnomalyInsights();
+    res.json({ insights });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Prediction Models
+app.get('/api/ml/models', async (req, res) => {
+  try {
+    const models = mlService.getPredictionModels();
+    res.json({ models });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/ml/models/retrain', async (req, res) => {
+  try {
+    await mlService.retrainModels();
+    res.json({ success: true, message: 'Models retrained successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ML Service Management
+app.get('/api/ml/status', async (req, res) => {
+  try {
+    const status = mlService.getStatus();
+    res.json(status);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/ml/analyze', async (req, res) => {
+  try {
+    await mlService.performFullAnalysis();
+    res.json({ 
+      success: true, 
+      message: 'Full ML analysis completed',
+      timestamp: new Date()
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/ml/config', async (req, res) => {
+  try {
+    const config = req.body;
+    mlService.updateConfig(config);
+    res.json({ 
+      success: true, 
+      message: 'ML service configuration updated',
+      config: mlService.getStatus()
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/ml/cache', async (req, res) => {
+  try {
+    mlService.clearCache();
+    res.json({ 
+      success: true, 
+      message: 'ML cache cleared' 
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Session Replay API Endpoints
 app.post('/api/replay/sessions/:id/prepare', async (req, res) => {
   try {
@@ -1269,6 +1505,7 @@ setInterval(async () => {
 process.on('SIGINT', async () => {
   console.log('Shutting down WebSocket server...');
   await analyticsService.shutdown();
+  await mlService.shutdown();
   await replayManager.cleanup();
   dbService.close();
   process.exit(0);
@@ -1277,6 +1514,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('Shutting down WebSocket server...');
   await analyticsService.shutdown();
+  await mlService.shutdown();
   await replayManager.cleanup();
   dbService.close();
   process.exit(0);

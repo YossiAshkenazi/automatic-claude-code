@@ -12,6 +12,8 @@ import { PromptBuilder } from './promptBuilder';
 import { Logger } from './logger';
 import { LogViewer } from './logViewer';
 import { launchTUI } from './tuiBrowser';
+import { AgentOrchestrator } from './agentOrchestrator';
+import { ClaudeUtils } from './claudeUtils';
 import Table from 'cli-table3';
 
 interface LoopOptions {
@@ -48,6 +50,10 @@ class AutomaticClaudeCode {
   }
 
   private getClaudeCommand(): { command: string; baseArgs: string[] } {
+    return ClaudeUtils.getClaudeCommand();
+  }
+  
+  private getClaudeCommandOld(): { command: string; baseArgs: string[] } {
     // For WSL/Linux compatibility, try multiple approaches
     if (process.platform === 'linux' || process.env.WSL_DISTRO_NAME) {
       // First try to find full path to npx
@@ -491,6 +497,45 @@ async function main() {
     });
 
   program
+    .command('dual <prompt>')
+    .description('Start a dual-agent Claude Code session with Manager and Worker agents')
+    .option('-i, --iterations <number>', 'Maximum number of iterations', '10')
+    .option('--manager <model>', 'Manager agent model (sonnet or opus)', 'opus')
+    .option('--worker <model>', 'Worker agent model (sonnet or opus)', 'sonnet')
+    .option('-d, --dir <path>', 'Working directory for the project')
+    .option('-t, --tools <tools>', 'Comma-separated list of allowed tools')
+    .option('-c, --continue-on-error', 'Continue even if errors occur')
+    .option('-v, --verbose', 'Show detailed output')
+    .option('--timeout <minutes>', 'Timeout for each agent execution in minutes (default: 30)', '30')
+    .option('--loop-threshold <number>', 'Number of iterations before loop detection triggers (default: 3)', '3')
+    .option('--max-retries <number>', 'Maximum retries per agent before escalation (default: 3)', '3')
+    .option('--escalation-threshold <number>', 'Max failures before human intervention (default: 5)', '5')
+    .option('--fallback-single', 'Fall back to single-agent mode if dual-agent fails')
+    .action(async (prompt, options) => {
+      const orchestrator = new AgentOrchestrator();
+      
+      try {
+        await orchestrator.startDualAgentSession(prompt, {
+          maxIterations: parseInt(options.iterations),
+          managerModel: options.manager,
+          workerModel: options.worker,
+          workDir: options.dir,
+          allowedTools: options.tools,
+          continueOnError: options.continueOnError,
+          verbose: options.verbose,
+          timeout: parseInt(options.timeout) * 60000, // Convert minutes to milliseconds
+          loopDetectionThreshold: parseInt(options.loopThreshold),
+          maxRetries: parseInt(options.maxRetries),
+          escalationThreshold: parseInt(options.escalationThreshold),
+          fallbackToSingleAgent: options.fallbackSingle
+        });
+      } catch (error) {
+        console.error(chalk.red('Fatal error in dual-agent mode:'), error);
+        process.exit(1);
+      }
+    });
+
+  program
     .command('history')
     .description('Show session history')
     .action(async () => {
@@ -525,6 +570,13 @@ async function main() {
       console.log(chalk.cyan('  acc run "implement dependency injection pattern" -i 4'));
       console.log(chalk.cyan('  acc run "add database connection pooling and optimization" -i 3'));
       
+      console.log(chalk.yellow.bold('\n🤖 Dual-Agent Mode:'));
+      console.log(chalk.cyan('  acc dual "design and implement a REST API for user management" -i 8'));
+      console.log(chalk.cyan('  acc dual "refactor legacy code to modern TypeScript patterns" -i 6 --verbose'));
+      console.log(chalk.cyan('  acc dual "create a comprehensive test suite with 90% coverage" -i 5'));
+      console.log(chalk.cyan('  acc dual "implement OAuth2 authentication with refresh tokens" -i 7 --manager opus --worker sonnet'));
+      console.log(chalk.cyan('  acc dual "optimize database queries and add caching layer" -i 4 --continue-on-error'));
+      
       console.log(chalk.yellow.bold('\n📊 Enhanced Log Viewing:'));
       console.log(chalk.cyan('  acc logs                    Show session summary'));
       console.log(chalk.cyan('  acc logs --work            View Claude work output only'));
@@ -541,6 +593,9 @@ async function main() {
       console.log(chalk.gray('  -v, --verbose           Show detailed output'));
       console.log(chalk.gray('  -c, --continue-on-error Continue even if errors occur'));
       console.log(chalk.gray('  -d, --dir <path>        Specify working directory'));
+      console.log(chalk.gray('  --manager <model>       Manager agent model (dual mode)'));
+      console.log(chalk.gray('  --worker <model>        Worker agent model (dual mode)'));
+      console.log(chalk.gray('  --loop-threshold <num>  Loop detection threshold (dual mode)'));
       
       console.log(chalk.yellow.bold('\n📋 Tips for Better Results:'));
       console.log(chalk.green('  • Be specific about what you want to achieve'));
@@ -549,6 +604,8 @@ async function main() {
       console.log(chalk.green('  • Use --verbose to see detailed progress'));
       console.log(chalk.green('  • Use "acc logs --ui" for interactive log browsing'));
       console.log(chalk.green('  • Export sessions to HTML for sharing and analysis'));
+      console.log(chalk.green('  • Use dual-agent mode for complex tasks requiring planning'));
+      console.log(chalk.green('  • Manager agent (opus) handles planning, Worker (sonnet) implements'));
     });
 
   program

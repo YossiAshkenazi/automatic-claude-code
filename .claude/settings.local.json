@@ -38,21 +38,7 @@
       "Bash(powershell:*)",
       "WebFetch(domain:docs.anthropic.com)",
       "WebFetch(domain:github.com)",
-      "Bash(Get-ChildItem \".claude\\hooks\"\" -Name \"*.ps1\",\"*.sh \")",
       "Bash(pwsh:*)",
-      "Bash($env:CLAUDE_SESSION_ID=\"test-session-001\")",
-      "Bash($env:CLAUDE_PROJECT_PATH=\"C:\\Users\\Dev\\agents-observability\")",
-      "Bash(bun install:*)",
-      "Bash(bash:*)",
-      "Bash($env:CLAUDE_MESSAGE=\"Test notification message\")",
-      "Bash($env:CLAUDE_NOTIFICATION_TYPE=\"warning\")",
-      "Bash(CLAUDE_MESSAGE=\"Test notification bash\" CLAUDE_NOTIFICATION_TYPE=\"info\" CLAUDE_NOTIFICATION_LEVEL=\"normal\" bash notification-hook.sh)",
-      "Bash(CLAUDE_MESSAGE=\"Test pre-compact bash\" CLAUDE_CONTEXT_SIZE=\"75000\" CLAUDE_COMPACTION_REASON=\"memory_limit\" bash pre-compact-hook.sh)",
-      "Bash(CLAUDE_MESSAGE=\"Testing corrected notification hook\" CLAUDE_NOTIFICATION_TYPE=\"warning\" CLAUDE_NOTIFICATION_LEVEL=\"high\" bash notification-hook.sh)",
-      "mcp__playwright__browser_close",
-      "Bash(dir \"C:\\Users\\Dev\\agents-observability\\project-hooks\" /b)",
-      "Bash(CLAUDE_MESSAGE=\"Test notification message\" CLAUDE_NOTIFICATION_TYPE=\"warning\" CLAUDE_NOTIFICATION_LEVEL=\"high\" bash notification-hook.sh)",
-      "Bash(CLAUDE_CONTEXT_SIZE=\"80000\" CLAUDE_COMPACTION_REASON=\"context_limit\" bash pre-compact-hook.sh)",
       "Bash(awk:*)",
       "Bash(sed:*)",
       "mcp__github__get_file_contents",
@@ -98,6 +84,7 @@
     "context7",
     "github",
     "playwright",
-    "memory"
+    "memory",
+    "archon"
   ]
 }

@@ -1,64 +1,40 @@
 {
-    "mcpServers": {
-        "context7": {
-            "type": "stdio",
-            "description": "Context7 MCP pulls up-to-date, version-specific documentation and code examples straight from the source — and places them directly into your prompt.",
-            "command": "cmd",
-            "args": [
-                "/c",
-                "npx",
-                "-y",
-                "@upstash/context7-mcp"
-            ]
-        },
-        "github": {
-            "type": "stdio",
-            "description": "Direct GitHub API integration for repository management, issue tracking, pull requests, and collaborative development workflows.",
-            "command": "cmd",
-            "args": [
-                "/c",
-                "npx",
-                "-y",
-                "@modelcontextprotocol/server-github"
-            ],
-            "env": {
-                "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
-            }
-        },
-        "playwright": {
-            "type": "stdio",
-            "description": "Browser automation capabilities using Playwright for web interaction through structured accessibility snapshots.",
-            "command": "cmd",
-            "args": [
-                "/c",
-                "npx",
-                "-y",
-                "@playwright/mcp@latest",
-                "--isolated"
-            ]
-        },
-        "memory": {
-            "type": "stdio",
-            "description": "Persistent memory and context management for Claude Code sessions. Store and recall information across conversations and projects.",
-            "command": "cmd",
-            "args": [
-                "/c",
-                "npx",
-                "-y",
-                "@modelcontextprotocol/server-memory"
-            ]
-        },
-        "archon": {
-            "type": "stdio",
-            "description": "Archon MCP server for project management, task tracking, and knowledge base integration.",
-            "command": "cmd",
-            "args": [
-                "/c",
-                "npx",
-                "mcp-remote",
-                "http://localhost:8051/mcp",
-                "--allow-http"
-            ]
-        }
+  "mcpServers": {
+    "context7": {
+      "type": "stdio",
+      "description": "Context7 MCP pulls up-to-date, version-specific documentation and code examples straight from the source — and places them directly into your prompt.",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "npx -y @upstash/context7-mcp"
+      ]
+    },
+    "playwright": {
+      "type": "stdio",
+      "description": "A Model Context Protocol (MCP) server that provides browser automation capabilities using Playwright. This server enables LLMs to interact with web pages through structured accessibility snapshots, bypassing the need for screenshots or visually-tuned models. use --isolated to run in a separate environment",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "npx '@playwright/mcp@latest' --isolated"
+      ]
+    },
+    "memory": {
+      "type": "stdio",
+      "description": "Persistent memory and context management for Claude Code sessions. Store and recall information across conversations and projects.",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "npx -y @modelcontextprotocol/server-memory"
+      ]
+    },
+    "archon": {
+      "type": "stdio",
+      "description": "Archon MCP server for project management, task tracking, and knowledge base integration.",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "npx mcp-remote http://localhost:8051/mcp --allow-http"
+      ]
     }
+  }
 }

@@ -154,7 +154,7 @@ class AutomaticClaudeCode {
         shell: useShell,
         env: { ...process.env, PATH: process.env.PATH },
         cwd: workingDir,
-        stdio: ['pipe', 'pipe', 'pipe'] // Explicit stdio for better error handling
+        stdio: ['ignore', 'pipe', 'pipe'] // Ignore stdin to prevent hanging
       });
 
       let output = '';

@@ -160,6 +160,65 @@ wss.on('connection', (ws: WebSocket) => {
     data: sessionStore.getAllSessions(),
   }));
   
+  // Handle incoming messages from client
+  ws.on('message', async (data) => {
+    try {
+      const message = JSON.parse(data.toString());
+      
+      // Handle ping messages
+      if (message.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong' }));
+        return;
+      }
+      
+      // Handle send_message
+      if (message.type === 'send_message') {
+        const { sessionId, agentType, content, messageType } = message.data;
+        
+        // Add the message to the session
+        const newMessage = await sessionStore.addMessage(sessionId, {
+          agentType: agentType === 'both' ? 'manager' : agentType,
+          messageType: messageType || 'prompt',
+          content,
+          metadata: {},
+        });
+        
+        // Broadcast the new message to all clients
+        broadcast({
+          type: 'new_message',
+          data: newMessage,
+        });
+        
+        // If sending to both agents, create a duplicate for the worker
+        if (agentType === 'both') {
+          const workerMessage = await sessionStore.addMessage(sessionId, {
+            agentType: 'worker',
+            messageType: messageType || 'prompt',
+            content,
+            metadata: {},
+          });
+          
+          broadcast({
+            type: 'new_message',
+            data: workerMessage,
+          });
+        }
+        
+        console.log(`Message sent to ${agentType} in session ${sessionId}`);
+        return;
+      }
+      
+      // Handle other message types here
+      console.log('Received message:', message);
+    } catch (error) {
+      console.error('Failed to parse WebSocket message:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        data: { message: 'Failed to process message' }
+      }));
+    }
+  });
+  
   ws.on('close', () => {
     connectedClients.delete(ws);
     console.log('WebSocket connection closed');

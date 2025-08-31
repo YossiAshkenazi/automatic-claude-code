@@ -8,6 +8,7 @@ import { ResizablePanels, VerticalResizablePanels } from './components/layout/Re
 import { EnhancedSessionList } from './components/enhanced/EnhancedSessionList';
 import { EnhancedMessagePane } from './components/enhanced/EnhancedMessagePane';
 import { EnhancedPerformanceMetrics } from './components/enhanced/EnhancedPerformanceMetrics';
+import { MessageInput } from './components/MessageInput';
 import { useSessionStore } from './store/useSessionStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import { WebSocketMessage } from './types';
@@ -345,7 +346,7 @@ function EnterpriseAppInner() {
         }
         
         return (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col gap-4">
             <ResizablePanels
               leftPanel={
                 <EnhancedMessagePane
@@ -364,6 +365,24 @@ function EnterpriseAppInner() {
                 />
               }
               className="flex-1"
+            />
+            <MessageInput
+              sessionId={selectedSession.id}
+              onSendMessage={(content, agentType) => {
+                // Send message via WebSocket
+                sendMessage({
+                  type: 'send_message',
+                  data: {
+                    sessionId: selectedSession.id,
+                    agentType,
+                    content,
+                    messageType: 'prompt'
+                  }
+                });
+                toast.success(`Message sent to ${agentType === 'both' ? 'both agents' : `${agentType} agent`}`);
+              }}
+              disabled={!isConnected || selectedSession.status === 'completed'}
+              className="mx-4 mb-4"
             />
           </div>
         );

@@ -44,24 +44,45 @@ class AutomaticClaudeCode {
   }
 
   private getClaudeCommand(): string {
-    // Try to find claude in PATH first
+    // Try to actually run claude --version to verify it works
     try {
-      execSync('which claude', { stdio: 'ignore' });
+      execSync('claude --version', { stdio: 'ignore' });
       return 'claude --dangerously-skip-permissions';
     } catch {
-      // Fallback to npx if claude is not in PATH
+      // Try npx approach
       try {
-        execSync('which npx', { stdio: 'ignore' });
-        this.logger.info('Claude not found in PATH, using npx fallback');
+        this.logger.info('Claude not directly accessible, trying npx...');
+        execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 10000 });
         return 'npx @anthropic-ai/claude-code --dangerously-skip-permissions';
       } catch {
-        // Last resort - try direct npm global path
-        const npmPrefix = execSync('npm config get prefix', { encoding: 'utf-8' }).trim();
-        const claudePath = path.join(npmPrefix, 'bin', 'claude');
-        if (fs.existsSync(claudePath)) {
-          return `${claudePath} --dangerously-skip-permissions`;
+        // Try to find claude-code instead of claude
+        try {
+          execSync('claude-code --version', { stdio: 'ignore' });
+          this.logger.info('Using claude-code command');
+          return 'claude-code --dangerously-skip-permissions';
+        } catch {
+          // Last resort - try direct npm global path
+          try {
+            const npmPrefix = execSync('npm config get prefix', { encoding: 'utf-8' }).trim();
+            const possiblePaths = [
+              path.join(npmPrefix, 'bin', 'claude'),
+              path.join(npmPrefix, 'bin', 'claude-code'),
+              path.join(process.env.HOME || '', '.npm-global', 'bin', 'claude'),
+              path.join(process.env.HOME || '', '.npm-global', 'bin', 'claude-code')
+            ];
+            
+            for (const claudePath of possiblePaths) {
+              if (fs.existsSync(claudePath)) {
+                this.logger.info(`Found Claude at: ${claudePath}`);
+                return `"${claudePath}" --dangerously-skip-permissions`;
+              }
+            }
+          } catch {
+            // Ignore and fall through to error
+          }
+          
+          throw new Error('Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code');
         }
-        throw new Error('Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code');
       }
     }
   }

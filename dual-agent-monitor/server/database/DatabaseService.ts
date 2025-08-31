@@ -457,6 +457,336 @@ export class DatabaseService {
     });
   }
 
+  // Enhanced analytics queries
+  public async getMetricsInTimeRange(
+    timeRange: { start: Date; end: Date },
+    sessionIds?: string[]
+  ): Promise<PerformanceMetrics[]> {
+    let query = `
+      SELECT * FROM performance_metrics
+      WHERE timestamp BETWEEN ? AND ?
+    `;
+    const params: any[] = [timeRange.start.toISOString(), timeRange.end.toISOString()];
+
+    if (sessionIds && sessionIds.length > 0) {
+      query += ` AND session_id IN (${sessionIds.map(() => '?').join(',')})`;
+      params.push(...sessionIds);
+    }
+
+    query += ' ORDER BY timestamp ASC';
+
+    return new Promise((resolve, reject) => {
+      this.db.all(query, params, (err, rows: any[]) => {
+        if (err) {
+          reject(new Error(`Failed to get metrics in time range: ${err.message}`));
+          return;
+        }
+
+        const metrics = rows.map(row => ({
+          sessionId: row.session_id,
+          agentType: row.agent_type,
+          responseTime: row.response_time,
+          tokensUsed: row.tokens_used || undefined,
+          cost: row.cost || undefined,
+          errorRate: row.error_rate,
+          timestamp: new Date(row.timestamp)
+        }));
+
+        resolve(metrics);
+      });
+    });
+  }
+
+  public async getAggregatedMetrics(
+    timeWindow: 'hour' | 'day' | 'week',
+    sessionIds?: string[]
+  ): Promise<Array<{
+    timeWindow: string;
+    agentType: 'manager' | 'worker';
+    avgResponseTime: number;
+    totalTokens: number;
+    totalCost: number;
+    avgErrorRate: number;
+    messageCount: number;
+  }>> {
+    const timeFormat = timeWindow === 'hour' ? '%Y-%m-%d %H:00:00' : 
+                     timeWindow === 'day' ? '%Y-%m-%d' : 
+                     '%Y-%W'; // Week format
+
+    let query = `
+      SELECT 
+        strftime('${timeFormat}', timestamp) as time_window,
+        agent_type,
+        AVG(response_time) as avg_response_time,
+        SUM(COALESCE(tokens_used, 0)) as total_tokens,
+        SUM(COALESCE(cost, 0)) as total_cost,
+        AVG(error_rate) as avg_error_rate,
+        COUNT(*) as message_count
+      FROM performance_metrics
+    `;
+
+    const params: any[] = [];
+
+    if (sessionIds && sessionIds.length > 0) {
+      query += ` WHERE session_id IN (${sessionIds.map(() => '?').join(',')})`;
+      params.push(...sessionIds);
+    }
+
+    query += `
+      GROUP BY time_window, agent_type
+      ORDER BY time_window ASC, agent_type
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.all(query, params, (err, rows: any[]) => {
+        if (err) {
+          reject(new Error(`Failed to get aggregated metrics: ${err.message}`));
+          return;
+        }
+
+        const aggregated = rows.map(row => ({
+          timeWindow: row.time_window,
+          agentType: row.agent_type,
+          avgResponseTime: row.avg_response_time || 0,
+          totalTokens: row.total_tokens || 0,
+          totalCost: row.total_cost || 0,
+          avgErrorRate: row.avg_error_rate || 0,
+          messageCount: row.message_count || 0
+        }));
+
+        resolve(aggregated);
+      });
+    });
+  }
+
+  public async getTopPerformingSessions(limit: number = 10): Promise<Array<{
+    sessionId: string;
+    performanceScore: number;
+    avgResponseTime: number;
+    totalCost: number;
+    errorRate: number;
+    duration: number;
+  }>> {
+    const query = `
+      SELECT 
+        s.id as session_id,
+        s.start_time,
+        s.end_time,
+        AVG(pm.response_time) as avg_response_time,
+        SUM(COALESCE(pm.cost, 0)) as total_cost,
+        AVG(pm.error_rate) as error_rate,
+        COUNT(pm.id) as metric_count
+      FROM sessions s
+      LEFT JOIN performance_metrics pm ON s.id = pm.session_id
+      WHERE s.status = 'completed'
+      GROUP BY s.id
+      HAVING metric_count > 0
+      ORDER BY (1.0 - AVG(pm.error_rate)) * 50 + 
+               CASE 
+                 WHEN AVG(pm.response_time) > 0 
+                 THEN (100 - AVG(pm.response_time) / 1000) * 0.5 
+                 ELSE 50 
+               END DESC
+      LIMIT ?
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.all(query, [limit], (err, rows: any[]) => {
+        if (err) {
+          reject(new Error(`Failed to get top performing sessions: ${err.message}`));
+          return;
+        }
+
+        const sessions = rows.map(row => {
+          const errorRate = row.error_rate || 0;
+          const avgResponseTime = row.avg_response_time || 0;
+          const performanceScore = (1 - errorRate) * 50 + 
+            (avgResponseTime > 0 ? Math.max(0, 100 - avgResponseTime / 1000) * 0.5 : 50);
+          
+          const duration = row.end_time && row.start_time ?
+            new Date(row.end_time).getTime() - new Date(row.start_time).getTime() :
+            0;
+
+          return {
+            sessionId: row.session_id,
+            performanceScore: Math.round(performanceScore),
+            avgResponseTime: avgResponseTime,
+            totalCost: row.total_cost || 0,
+            errorRate: errorRate,
+            duration: duration
+          };
+        });
+
+        resolve(sessions);
+      });
+    });
+  }
+
+  public async getCostAnalytics(
+    timeRange?: { start: Date; end: Date },
+    sessionIds?: string[]
+  ): Promise<{
+    totalCost: number;
+    avgCostPerSession: number;
+    costByAgent: { manager: number; worker: number };
+    costTrend: Array<{ date: string; cost: number }>;
+  }> {
+    let whereClause = '';
+    const params: any[] = [];
+
+    if (timeRange) {
+      whereClause += 'WHERE pm.timestamp BETWEEN ? AND ?';
+      params.push(timeRange.start.toISOString(), timeRange.end.toISOString());
+    }
+
+    if (sessionIds && sessionIds.length > 0) {
+      if (whereClause) {
+        whereClause += ` AND pm.session_id IN (${sessionIds.map(() => '?').join(',')})`;
+      } else {
+        whereClause += `WHERE pm.session_id IN (${sessionIds.map(() => '?').join(',')})`;
+      }
+      params.push(...sessionIds);
+    }
+
+    const query = `
+      SELECT 
+        SUM(COALESCE(pm.cost, 0)) as total_cost,
+        AVG(COALESCE(pm.cost, 0)) as avg_cost_per_message,
+        COUNT(DISTINCT pm.session_id) as session_count,
+        pm.agent_type,
+        strftime('%Y-%m-%d', pm.timestamp) as date
+      FROM performance_metrics pm
+      ${whereClause}
+      GROUP BY pm.agent_type, date
+      ORDER BY date ASC
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.all(query, params, (err, rows: any[]) => {
+        if (err) {
+          reject(new Error(`Failed to get cost analytics: ${err.message}`));
+          return;
+        }
+
+        let totalCost = 0;
+        let sessionCount = 0;
+        const costByAgent = { manager: 0, worker: 0 };
+        const costTrendMap = new Map<string, number>();
+
+        rows.forEach(row => {
+          totalCost += row.total_cost || 0;
+          sessionCount = Math.max(sessionCount, row.session_count || 0);
+          
+          if (row.agent_type === 'manager') {
+            costByAgent.manager += row.total_cost || 0;
+          } else if (row.agent_type === 'worker') {
+            costByAgent.worker += row.total_cost || 0;
+          }
+
+          const date = row.date;
+          const existing = costTrendMap.get(date) || 0;
+          costTrendMap.set(date, existing + (row.total_cost || 0));
+        });
+
+        const costTrend = Array.from(costTrendMap.entries()).map(([date, cost]) => ({
+          date,
+          cost
+        }));
+
+        resolve({
+          totalCost,
+          avgCostPerSession: sessionCount > 0 ? totalCost / sessionCount : 0,
+          costByAgent,
+          costTrend
+        });
+      });
+    });
+  }
+
+  public async getErrorAnalytics(sessionIds?: string[]): Promise<{
+    totalErrors: number;
+    errorsByType: Array<{ type: string; count: number; percentage: number }>;
+    errorsByAgent: { manager: number; worker: number };
+    errorTrend: Array<{ date: string; errors: number }>;
+  }> {
+    let whereClause = '';
+    const params: any[] = [];
+
+    if (sessionIds && sessionIds.length > 0) {
+      whereClause = `WHERE m.session_id IN (${sessionIds.map(() => '?').join(',')})`;
+      params.push(...sessionIds);
+    }
+
+    const query = `
+      SELECT 
+        m.message_type,
+        m.agent_type,
+        strftime('%Y-%m-%d', m.timestamp) as date,
+        COUNT(*) as count
+      FROM messages m
+      ${whereClause}
+      GROUP BY m.message_type, m.agent_type, date
+      ORDER BY date ASC
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db.all(query, params, (err, rows: any[]) => {
+        if (err) {
+          reject(new Error(`Failed to get error analytics: ${err.message}`));
+          return;
+        }
+
+        let totalMessages = 0;
+        let totalErrors = 0;
+        const errorsByType = new Map<string, number>();
+        const errorsByAgent = { manager: 0, worker: 0 };
+        const errorTrendMap = new Map<string, number>();
+
+        rows.forEach(row => {
+          totalMessages += row.count;
+          
+          if (row.message_type === 'error') {
+            totalErrors += row.count;
+            
+            // Count by agent
+            if (row.agent_type === 'manager') {
+              errorsByAgent.manager += row.count;
+            } else if (row.agent_type === 'worker') {
+              errorsByAgent.worker += row.count;
+            }
+
+            // Count by date for trend
+            const date = row.date;
+            const existing = errorTrendMap.get(date) || 0;
+            errorTrendMap.set(date, existing + row.count);
+
+            // Count by type (simplified - would need more detailed error classification)
+            const existing_type = errorsByType.get(row.message_type) || 0;
+            errorsByType.set(row.message_type, existing_type + row.count);
+          }
+        });
+
+        const errorTrend = Array.from(errorTrendMap.entries()).map(([date, errors]) => ({
+          date,
+          errors
+        }));
+
+        const errorTypeArray = Array.from(errorsByType.entries()).map(([type, count]) => ({
+          type,
+          count,
+          percentage: totalErrors > 0 ? (count / totalErrors) * 100 : 0
+        }));
+
+        resolve({
+          totalErrors,
+          errorsByType: errorTypeArray,
+          errorsByAgent,
+          errorTrend
+        });
+      });
+    });
+  }
+
   // Session summary management
   private async updateSessionSummary(sessionId: string): Promise<void> {
     try {

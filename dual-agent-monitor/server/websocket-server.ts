@@ -41,6 +41,10 @@ wss.on('connection', (ws) => {
   console.log('New WebSocket client connected');
   clients.add(ws);
 
+  // Analytics subscription tracking for this connection
+  let analyticsInterval: NodeJS.Timeout | null = null;
+  let analyticsUnsubscribe: (() => void) | null = null;
+
   // Send current session data if available
   if (currentSession) {
     ws.send(JSON.stringify({
@@ -67,6 +71,105 @@ wss.on('connection', (ws) => {
       switch (data.type) {
         case 'ping':
           ws.send(JSON.stringify({ type: 'pong' }));
+          break;
+
+        case 'analytics:subscribe':
+          // Client wants to subscribe to specific analytics data
+          const { sessionIds, includeRealTime, refreshInterval } = data;
+          
+          // Clear existing subscription
+          if (analyticsInterval) {
+            clearInterval(analyticsInterval);
+          }
+          if (analyticsUnsubscribe) {
+            analyticsUnsubscribe();
+          }
+
+          // Subscribe to real-time metrics
+          analyticsUnsubscribe = analyticsService.subscribeToRealTime((metrics) => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'analytics:realtime',
+                data: metrics
+              }));
+            }
+          });
+          
+          // Set up periodic dashboard updates
+          analyticsInterval = setInterval(async () => {
+            if (ws.readyState === WebSocket.OPEN) {
+              try {
+                const dashboardData = await analyticsService.getDashboardData({
+                  sessionIds,
+                  includeRealTime: includeRealTime || false
+                });
+                
+                ws.send(JSON.stringify({
+                  type: 'analytics:dashboard',
+                  data: dashboardData
+                }));
+              } catch (error) {
+                console.error('Error sending analytics update:', error);
+              }
+            } else {
+              clearInterval(analyticsInterval!);
+            }
+          }, refreshInterval || 5000);
+
+          // Send initial data
+          try {
+            const initialData = await analyticsService.getDashboardData({
+              sessionIds,
+              includeRealTime: includeRealTime || false
+            });
+            
+            ws.send(JSON.stringify({
+              type: 'analytics:dashboard',
+              data: initialData
+            }));
+          } catch (error) {
+            console.error('Error sending initial analytics data:', error);
+          }
+          break;
+
+        case 'analytics:trends:subscribe':
+          // Subscribe to performance trends
+          const { sessionIds: trendSessionIds, timeRange, granularity } = data;
+          
+          if (trendSessionIds && timeRange) {
+            try {
+              const trends = await analyticsService.getPerformanceTrends(
+                trendSessionIds,
+                {
+                  start: new Date(timeRange.start),
+                  end: new Date(timeRange.end)
+                },
+                granularity || 'hour'
+              );
+              
+              ws.send(JSON.stringify({
+                type: 'analytics:trends',
+                data: trends
+              }));
+            } catch (error) {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Failed to get performance trends'
+              }));
+            }
+          }
+          break;
+
+        case 'analytics:unsubscribe':
+          // Clean up analytics subscriptions
+          if (analyticsInterval) {
+            clearInterval(analyticsInterval);
+            analyticsInterval = null;
+          }
+          if (analyticsUnsubscribe) {
+            analyticsUnsubscribe();
+            analyticsUnsubscribe = null;
+          }
           break;
 
         case 'agents:start':
@@ -232,11 +335,27 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     console.log('WebSocket client disconnected');
     clients.delete(ws);
+    
+    // Clean up analytics subscriptions
+    if (analyticsInterval) {
+      clearInterval(analyticsInterval);
+    }
+    if (analyticsUnsubscribe) {
+      analyticsUnsubscribe();
+    }
   });
 
   ws.on('error', (error) => {
     console.error('WebSocket error:', error);
     clients.delete(ws);
+    
+    // Clean up analytics subscriptions on error
+    if (analyticsInterval) {
+      clearInterval(analyticsInterval);
+    }
+    if (analyticsUnsubscribe) {
+      analyticsUnsubscribe();
+    }
   });
 });
 
@@ -566,6 +685,117 @@ app.post('/api/analytics/report', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Enhanced analytics endpoints
+app.get('/api/analytics/metrics/aggregated', async (req, res) => {
+  try {
+    const { timeWindow, sessionIds } = req.query;
+    
+    if (!timeWindow || !['hour', 'day', 'week'].includes(timeWindow as string)) {
+      return res.status(400).json({ error: 'timeWindow must be hour, day, or week' });
+    }
+
+    const ids = sessionIds ? (Array.isArray(sessionIds) ? sessionIds : [sessionIds]) : undefined;
+    const aggregated = await dbService.getAggregatedMetrics(
+      timeWindow as 'hour' | 'day' | 'week',
+      ids as string[]
+    );
+    
+    res.json(aggregated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/analytics/sessions/top', async (req, res) => {
+  try {
+    const { limit } = req.query;
+    const limitNum = limit ? parseInt(limit as string) : 10;
+    
+    const topSessions = await dbService.getTopPerformingSessions(limitNum);
+    res.json(topSessions);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/analytics/costs', async (req, res) => {
+  try {
+    const { timeRange, sessionIds } = req.query;
+    
+    let range: { start: Date; end: Date } | undefined;
+    if (timeRange) {
+      const parsed = JSON.parse(timeRange as string);
+      range = {
+        start: new Date(parsed.start),
+        end: new Date(parsed.end)
+      };
+    }
+
+    const ids = sessionIds ? (Array.isArray(sessionIds) ? sessionIds : [sessionIds]) : undefined;
+    const costAnalytics = await dbService.getCostAnalytics(range, ids as string[]);
+    
+    res.json(costAnalytics);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/analytics/errors', async (req, res) => {
+  try {
+    const { sessionIds } = req.query;
+    
+    const ids = sessionIds ? (Array.isArray(sessionIds) ? sessionIds : [sessionIds]) : undefined;
+    const errorAnalytics = await dbService.getErrorAnalytics(ids as string[]);
+    
+    res.json(errorAnalytics);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/analytics/metrics/timerange', async (req, res) => {
+  try {
+    const { timeRange, sessionIds } = req.query;
+    
+    if (!timeRange) {
+      return res.status(400).json({ error: 'timeRange parameter is required' });
+    }
+
+    const range = JSON.parse(timeRange as string);
+    const timeRangeObj = {
+      start: new Date(range.start),
+      end: new Date(range.end)
+    };
+
+    const ids = sessionIds ? (Array.isArray(sessionIds) ? sessionIds : [sessionIds]) : undefined;
+    const metrics = await dbService.getMetricsInTimeRange(timeRangeObj, ids as string[]);
+    
+    res.json(metrics);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/analytics/metrics', async (req, res) => {
+  try {
+    const metric = req.body;
+    
+    if (!metric.sessionId || !metric.agentType || typeof metric.responseTime !== 'number') {
+      return res.status(400).json({ error: 'sessionId, agentType, and responseTime are required' });
+    }
+
+    await dbService.addPerformanceMetric({
+      ...metric,
+      timestamp: new Date(metric.timestamp || Date.now())
+    });
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Enhanced port configuration with proper environment variable handling
 const DEFAULT_PORT = 4005;

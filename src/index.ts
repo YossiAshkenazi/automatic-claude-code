@@ -162,10 +162,20 @@ class AutomaticClaudeCode {
         const chunk = data.toString();
         output += chunk;
         
-        // Log real-time output
+        // Separate Claude's work output from system logs
         const lines = chunk.split('\n').filter((line: string) => line.trim());
         lines.forEach((line: string) => {
-          this.logger.progress(`Claude output: ${line.substring(0, 200)}`);
+          // Check if this is Claude's actual work or system message
+          if (this.isClaudeWork(line)) {
+            // Log to work file
+            this.logger.logClaudeWork(line);
+          } else if (this.isSystemMessage(line)) {
+            // Log to session file only
+            this.logger.debug(`System: ${line.substring(0, 200)}`);
+          } else if (line.trim()) {
+            // Default to work output for non-empty lines
+            this.logger.logClaudeWork(line);
+          }
         });
         
         if (options.verbose) {
@@ -219,7 +229,8 @@ class AutomaticClaudeCode {
     console.log(chalk.cyan(`Initial Task: ${initialPrompt}`));
     console.log(chalk.cyan(`Max Iterations: ${maxIterations}`));
     console.log(chalk.cyan(`Working Directory: ${options.workDir || process.cwd()}`));
-    console.log(chalk.cyan(`Log File: ${this.logger.getLogFilePath()}\n`));
+    console.log(chalk.cyan(`Session Log: ${this.logger.getLogFilePath()}`));
+    console.log(chalk.cyan(`Work Output: ${this.logger.getWorkLogFilePath()}\n`));
     
     this.logger.info('Starting Automatic Claude Code Loop', {
       initialPrompt,
@@ -380,6 +391,63 @@ class AutomaticClaudeCode {
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
+  // Helper method to identify Claude's actual work output
+  private isClaudeWork(line: string): boolean {
+    const workIndicators = [
+      'Creating',
+      'Writing',
+      'Reading',
+      'Editing',
+      'Updating',
+      'Installing',
+      'Building',
+      'Testing',
+      'Implementing',
+      'Adding',
+      'Removing',
+      'Fixing',
+      'I\'ll',
+      'I will',
+      'I\'m',
+      'Let me',
+      'Here\'s',
+      'This',
+      '```',  // Code blocks
+      'File created',
+      'File updated',
+      'Successfully'
+    ];
+    
+    return workIndicators.some(indicator => 
+      line.toLowerCase().includes(indicator.toLowerCase())
+    );
+  }
+
+  // Helper method to identify system/debug messages
+  private isSystemMessage(line: string): boolean {
+    const systemIndicators = [
+      '[DEBUG]',
+      '[INFO]',
+      '[PROGRESS]',
+      '[WARNING]',
+      '[ERROR]',
+      'Using Claude command',
+      'Working directory',
+      'Session ID:',
+      'Iteration',
+      'Exit Code:',
+      'npm WARN',
+      'npm notice',
+      'pnpm:',
+      'node_modules',
+      'package.json'
+    ];
+    
+    return systemIndicators.some(indicator => 
+      line.includes(indicator)
+    );
+  }
 }
 
 async function main() {
@@ -454,6 +522,7 @@ async function main() {
       
       console.log(chalk.yellow.bold('\n📊 Enhanced Log Viewing:'));
       console.log(chalk.cyan('  acc logs                    Show session summary'));
+      console.log(chalk.cyan('  acc logs --work            View Claude work output only'));
       console.log(chalk.cyan('  acc logs --ui              Launch interactive TUI browser'));
       console.log(chalk.cyan('  acc logs --web             Generate HTML report'));
       console.log(chalk.cyan('  acc logs --stats           Show detailed statistics'));
@@ -563,9 +632,27 @@ async function main() {
     .option('--search <term>', 'Search across logs')
     .option('--export <format>', 'Export in different formats (html, json)')
     .option('--session <sessionId>', 'View specific session details')
+    .option('--work', 'View Claude work output only (no system logs)')
     .action(async (repo, options) => {
       const repoName = repo || path.basename(process.cwd());
       const logViewer = new LogViewer(repoName);
+      
+      // View work output only
+      if (options.work) {
+        try {
+          if (options.session) {
+            // Extract timestamp from session ID if provided
+            const timestamp = options.session.replace('session-', '').replace('work-', '');
+            logViewer.displayWorkOutput(timestamp);
+          } else {
+            logViewer.displayWorkOutput();
+          }
+          return;
+        } catch (error) {
+          console.error(chalk.red('Error displaying work output:'), error);
+          return;
+        }
+      }
       
       // Interactive TUI viewer
       if (options.ui) {

@@ -29,10 +29,12 @@ interface LogEntry {
 export class Logger extends EventEmitter {
   private logDir: string;
   private currentLogFile: string | null = null;
+  private currentWorkLogFile: string | null = null;
   private repoName: string;
   private sessionId: string | null = null;
   private iteration: number = 0;
   private writeStream: fs.WriteStream | null = null;
+  private workWriteStream: fs.WriteStream | null = null;
   private consoleEnabled: boolean = true;
   private fileEnabled: boolean = true;
   private maxIterations: number = 10;
@@ -68,16 +70,27 @@ export class Logger extends EventEmitter {
 
   private initializeLogFile(): void {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    this.currentLogFile = path.join(this.logDir, `session-${timestamp}.log`);
     
-    // Create write stream for continuous logging
+    // System/session log file
+    this.currentLogFile = path.join(this.logDir, `session-${timestamp}.log`);
     this.writeStream = fs.createWriteStream(this.currentLogFile, { flags: 'a' });
     
-    // Write header
+    // Work output log file (Claude's actual work)
+    this.currentWorkLogFile = path.join(this.logDir, `work-${timestamp}.log`);
+    this.workWriteStream = fs.createWriteStream(this.currentWorkLogFile, { flags: 'a' });
+    
+    // Write headers to both files
     this.writeToFile({
       timestamp: new Date(),
       level: LogLevel.INFO,
-      message: `=== Logging session started for repo: ${this.repoName} ===`,
+      message: `=== Session started for repo: ${this.repoName} ===`,
+      repoName: this.repoName
+    });
+    
+    this.writeToWorkFile({
+      timestamp: new Date(),
+      level: LogLevel.INFO,
+      message: `=== Claude Work Output - ${this.repoName} ===`,
       repoName: this.repoName
     });
   }
@@ -123,6 +136,13 @@ export class Logger extends EventEmitter {
     
     const formatted = this.formatLogEntry(entry);
     this.writeStream.write(formatted + '\n');
+  }
+
+  private writeToWorkFile(entry: LogEntry): void {
+    if (!this.fileEnabled || !this.workWriteStream) return;
+    
+    const formatted = this.formatLogEntry(entry);
+    this.workWriteStream.write(formatted + '\n');
   }
 
   private initializeProgressBar(): void {
@@ -310,6 +330,48 @@ export class Logger extends EventEmitter {
     this.log(LogLevel.ERROR, message, details);
   }
 
+  // Special method for logging Claude's actual work output
+  public logClaudeWork(message: string, details?: Record<string, unknown> | string | number | boolean): void {
+    const entry: LogEntry = {
+      timestamp: new Date(),
+      level: LogLevel.INFO,
+      message,
+      details,
+      repoName: this.repoName,
+      sessionId: this.sessionId ?? undefined,
+      iteration: this.iteration
+    };
+    
+    // Write to work file only
+    this.writeToWorkFile(entry);
+    
+    // Also display in console with special formatting
+    if (this.consoleEnabled) {
+      const timestamp = new Date().toTimeString().split(' ')[0];
+      console.log(chalk.cyan('📝 Claude:'), chalk.white(message));
+      if (details && this.showJsonDetails) {
+        console.log(chalk.gray(JSON.stringify(details, null, 2)));
+      }
+    }
+    
+    // Emit event for real-time monitoring
+    this.emit('claude-work', entry);
+  }
+
+  // Method to log Claude's response/output separately
+  public logClaudeResponse(output: string): void {
+    // Split by lines and log each meaningful line
+    const lines = output.split('\n').filter(line => line.trim());
+    
+    lines.forEach(line => {
+      // Skip system messages and focus on actual work
+      if (!line.includes('DEBUG') && !line.includes('PROGRESS') && 
+          !line.includes('Using Claude command') && line.trim()) {
+        this.logClaudeWork(line);
+      }
+    });
+  }
+
   public setConsoleEnabled(enabled: boolean): void {
     this.consoleEnabled = enabled;
   }
@@ -320,6 +382,10 @@ export class Logger extends EventEmitter {
 
   public getLogFilePath(): string | null {
     return this.currentLogFile;
+  }
+
+  public getWorkLogFilePath(): string | null {
+    return this.currentWorkLogFile;
   }
 
   public getLogDirectory(): string {
@@ -336,16 +402,30 @@ export class Logger extends EventEmitter {
     // Clean up spinner
     this.stopSpinner();
 
+    // Close session log stream
     if (this.writeStream) {
       this.writeToFile({
         timestamp: new Date(),
         level: LogLevel.INFO,
-        message: '=== Logging session ended ===',
+        message: '=== Session ended ===',
         repoName: this.repoName
       });
       
       this.writeStream.end();
       this.writeStream = null;
+    }
+
+    // Close work log stream
+    if (this.workWriteStream) {
+      this.writeToWorkFile({
+        timestamp: new Date(),
+        level: LogLevel.INFO,
+        message: '=== Work output ended ===',
+        repoName: this.repoName
+      });
+      
+      this.workWriteStream.end();
+      this.workWriteStream = null;
     }
   }
 

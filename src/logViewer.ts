@@ -35,10 +35,16 @@ export interface SessionSummary {
 export class LogViewer {
   private logDir: string;
   private repoName: string;
+  private viewMode: 'session' | 'work' = 'session';
   
   constructor(repoName?: string) {
     this.repoName = repoName || path.basename(process.cwd());
     this.logDir = path.join(os.homedir(), '.automatic-claude-code', 'logs', this.repoName);
+  }
+
+  // Set view mode to show work logs or session logs
+  public setViewMode(mode: 'session' | 'work'): void {
+    this.viewMode = mode;
   }
 
   // Parse a single log file
@@ -132,8 +138,10 @@ export class LogViewer {
       return [];
     }
 
+    // Filter based on view mode
+    const prefix = this.viewMode === 'work' ? 'work-' : 'session-';
     const logFiles = fs.readdirSync(this.logDir)
-      .filter(file => file.endsWith('.log'))
+      .filter(file => file.startsWith(prefix) && file.endsWith('.log'))
       .sort()
       .reverse();
 
@@ -493,6 +501,60 @@ export class LogViewer {
     }
     
     return results;
+  }
+
+  // Get work logs for a specific session
+  public getWorkLogs(sessionTimestamp?: string): ParsedLogEntry[] {
+    if (!fs.existsSync(this.logDir)) {
+      return [];
+    }
+
+    let workLogFile: string;
+    
+    if (sessionTimestamp) {
+      // Get specific work log file
+      workLogFile = path.join(this.logDir, `work-${sessionTimestamp}.log`);
+    } else {
+      // Get latest work log file
+      const workLogs = fs.readdirSync(this.logDir)
+        .filter(file => file.startsWith('work-') && file.endsWith('.log'))
+        .sort()
+        .reverse();
+      
+      if (workLogs.length === 0) {
+        return [];
+      }
+      
+      workLogFile = path.join(this.logDir, workLogs[0]);
+    }
+
+    return this.parseLogFile(workLogFile);
+  }
+
+  // Display work output in a clean format
+  public displayWorkOutput(sessionTimestamp?: string): void {
+    const workLogs = this.getWorkLogs(sessionTimestamp);
+    
+    if (workLogs.length === 0) {
+      console.log(chalk.yellow('No work output found.'));
+      return;
+    }
+
+    console.log(boxen(
+      chalk.bold.blue('📝 Claude Work Output'), 
+      { padding: 1, borderColor: 'blue', borderStyle: 'round' }
+    ));
+
+    workLogs.forEach(entry => {
+      // Skip headers and system messages
+      if (entry.message.includes('===') || entry.level !== 'INFO') {
+        return;
+      }
+      
+      console.log(chalk.white(entry.message));
+    });
+
+    console.log();
   }
 
   // Statistics

@@ -1,0 +1,268 @@
+# Alertmanager configuration for Dual Agent Monitor
+
+global:
+  # Global SMTP configuration
+  smtp_smarthost: '${SMTP_HOST}:${SMTP_PORT}'
+  smtp_from: '${FROM_EMAIL}'
+  smtp_auth_username: '${SMTP_USER}'
+  smtp_auth_password: '${SMTP_PASS}'
+  smtp_require_tls: true
+
+# Email templates
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route configuration
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'default-receiver'
+  
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 5m
+
+    # Database alerts
+    - match:
+        service: database
+      receiver: 'database-team'
+      group_interval: 2m
+
+    # Security alerts
+    - match:
+        service: security
+      receiver: 'security-team'
+      group_wait: 10s
+
+    # System resource alerts
+    - match:
+        service: system
+      receiver: 'system-alerts'
+      group_interval: 10m
+
+    # Application-specific alerts
+    - match:
+        service: dual-agent-monitor
+      receiver: 'application-team'
+
+# Receivers configuration
+receivers:
+  - name: 'default-receiver'
+    email_configs:
+      - to: '${NOTIFICATION_EMAIL}'
+        subject: '[Dual Agent Monitor] {{ .GroupLabels.alertname }} Alert'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Labels: {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+          {{ end }}
+        html: |
+          <h2>Dual Agent Monitor Alert</h2>
+          {{ range .Alerts }}
+          <h3>{{ .Annotations.summary }}</h3>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Severity:</strong> {{ .Labels.severity }}</p>
+          <p><strong>Instance:</strong> {{ .Labels.instance }}</p>
+          <p><strong>Time:</strong> {{ .StartsAt.Format "2006-01-02 15:04:05" }}</p>
+          {{ end }}
+
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#alerts'
+        title: 'Dual Agent Monitor Alert'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Severity:* {{ .Labels.severity }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+        send_resolved: true
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: '${NOTIFICATION_EMAIL}'
+        subject: '[CRITICAL] Dual Agent Monitor Alert'
+        body: |
+          CRITICAL ALERT DETECTED!
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Instance: {{ .Labels.instance }}
+          Time: {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+          
+          Please investigate immediately!
+
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#critical-alerts'
+        title: '🚨 CRITICAL: Dual Agent Monitor Alert'
+        text: |
+          <!channel> CRITICAL ALERT!
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+        send_resolved: true
+        color: 'danger'
+
+    # PagerDuty integration for critical alerts
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_ROUTING_KEY}'
+        description: |
+          {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+        links:
+          - href: '${GRAFANA_URL}/dashboard/db/dual-agent-monitor'
+            text: 'Grafana Dashboard'
+
+  - name: 'database-team'
+    email_configs:
+      - to: 'dba@company.com'
+        subject: '[Database] Dual Agent Monitor Alert'
+        body: |
+          Database Alert Detected:
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Database: {{ .Labels.database }}
+          Instance: {{ .Labels.instance }}
+          {{ end }}
+
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#database-alerts'
+        title: '🗃️ Database Alert'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+
+  - name: 'security-team'
+    email_configs:
+      - to: 'security@company.com'
+        subject: '[SECURITY] Dual Agent Monitor Alert'
+        body: |
+          SECURITY ALERT DETECTED!
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Instance: {{ .Labels.instance }}
+          Time: {{ .StartsAt.Format "2006-01-02 15:04:05" }}
+          {{ end }}
+          
+          Please investigate immediately for potential security breach!
+
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#security-alerts'
+        title: '🔒 SECURITY ALERT'
+        text: |
+          <!channel> SECURITY ALERT!
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+        color: 'danger'
+
+  - name: 'system-alerts'
+    email_configs:
+      - to: '${NOTIFICATION_EMAIL}'
+        subject: '[System] Dual Agent Monitor Alert'
+        body: |
+          System Resource Alert:
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Instance: {{ .Labels.instance }}
+          Current Value: {{ .Annotations.value }}
+          {{ end }}
+
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#system-alerts'
+        title: '🖥️ System Alert'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+
+  - name: 'application-team'
+    email_configs:
+      - to: 'dev-team@company.com'
+        subject: '[Application] Dual Agent Monitor Alert'
+        body: |
+          Application Alert:
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Instance: {{ .Labels.instance }}
+          Service: {{ .Labels.service }}
+          {{ end }}
+
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#dev-alerts'
+        title: '⚙️ Application Alert'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Instance:* {{ .Labels.instance }}
+          {{ end }}
+        actions:
+          - type: button
+            text: 'View Dashboard'
+            url: '${GRAFANA_URL}/dashboard/db/dual-agent-monitor'
+          - type: button
+            text: 'View Logs'
+            url: '${KIBANA_URL}/app/kibana#/discover'
+
+# Inhibition rules - suppress alerts when certain conditions are met
+inhibit_rules:
+  # Suppress all alerts if the entire application is down
+  - source_match:
+      alertname: ApplicationDown
+    target_match:
+      service: dual-agent-monitor
+    equal: ['instance']
+
+  # Suppress individual service alerts if the whole system is down
+  - source_match:
+      severity: critical
+      service: system
+    target_match_re:
+      service: database|redis
+    equal: ['instance']
+
+  # Suppress memory alerts if there's a critical CPU alert
+  - source_match:
+      alertname: CriticalCPUUsage
+    target_match:
+      alertname: HighMemoryUsage
+    equal: ['instance']
+
+# Time-based silences for maintenance windows
+# Note: These would typically be managed via the Alertmanager UI or API

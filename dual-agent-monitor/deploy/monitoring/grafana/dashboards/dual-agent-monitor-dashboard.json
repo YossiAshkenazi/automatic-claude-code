@@ -1,0 +1,358 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Dual Agent Monitor - Production Dashboard",
+    "description": "Comprehensive monitoring dashboard for Dual Agent Monitor production environment",
+    "tags": ["dual-agent-monitor", "production", "monitoring"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Application Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"dual-agent-monitor\"}",
+            "refId": "A",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {"text": "DOWN", "color": "red"},
+                  "1": {"text": "UP", "color": "green"}
+                },
+                "type": "value"
+              }
+            ],
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"dual-agent-monitor\"}[5m])",
+            "refId": "A",
+            "legendFormat": "{{method}} {{status}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Requests/sec", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Error Rate",
+        "type": "singlestat",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"dual-agent-monitor\",status=~\"5..\"}[5m]) / rate(http_requests_total{job=\"dual-agent-monitor\"}[5m]) * 100",
+            "refId": "A"
+          }
+        ],
+        "format": "percent",
+        "thresholds": "5,10",
+        "colors": ["green", "yellow", "red"],
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Response Time (95th percentile)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"dual-agent-monitor\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"dual-agent-monitor\"}[5m]))",
+            "refId": "B",
+            "legendFormat": "50th percentile"
+          }
+        ],
+        "yAxes": [
+          {"label": "Seconds", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Agent Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(agent_tasks_completed_total[5m])",
+            "refId": "A",
+            "legendFormat": "Tasks Completed/sec"
+          },
+          {
+            "expr": "rate(agent_task_failures_total[5m])",
+            "refId": "B",
+            "legendFormat": "Task Failures/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "System Resources",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "refId": "A",
+            "legendFormat": "CPU Usage %"
+          },
+          {
+            "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+            "refId": "B",
+            "legendFormat": "Memory Usage %"
+          }
+        ],
+        "yAxes": [
+          {"label": "Percentage", "min": 0, "max": 100}
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Database Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"postgres\"}",
+            "refId": "A",
+            "legendFormat": "PostgreSQL"
+          },
+          {
+            "expr": "up{job=\"redis\"}",
+            "refId": "B",
+            "legendFormat": "Redis"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "options": {
+                  "0": {"text": "DOWN", "color": "red"},
+                  "1": {"text": "UP", "color": "green"}
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "Database Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_stat_database_numbackends",
+            "refId": "A",
+            "legendFormat": "Active Connections"
+          },
+          {
+            "expr": "pg_settings_max_connections",
+            "refId": "B",
+            "legendFormat": "Max Connections"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      },
+      {
+        "id": 9,
+        "title": "Redis Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "redis_memory_used_bytes",
+            "refId": "A",
+            "legendFormat": "Used Memory"
+          },
+          {
+            "expr": "redis_memory_max_bytes",
+            "refId": "B",
+            "legendFormat": "Max Memory"
+          }
+        ],
+        "yAxes": [
+          {"label": "Bytes", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32}
+      },
+      {
+        "id": 10,
+        "title": "Network Traffic",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(node_network_receive_bytes_total[5m])",
+            "refId": "A",
+            "legendFormat": "Receive {{device}}"
+          },
+          {
+            "expr": "rate(node_network_transmit_bytes_total[5m])",
+            "refId": "B",
+            "legendFormat": "Transmit {{device}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Bytes/sec", "min": 0}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32}
+      },
+      {
+        "id": 11,
+        "title": "Disk Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "100 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|fuse.lxcfs|squashfs\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|fuse.lxcfs|squashfs\"} * 100)",
+            "refId": "A",
+            "legendFormat": "{{mountpoint}}"
+          }
+        ],
+        "yAxes": [
+          {"label": "Percentage", "min": 0, "max": 100}
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 40}
+      },
+      {
+        "id": 12,
+        "title": "Top 10 Slowest Endpoints",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"dual-agent-monitor\"}[5m])))",
+            "refId": "A",
+            "format": "table"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "method": "Method",
+                "path": "Path",
+                "Value": "Response Time (95th %ile)"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 48}
+      },
+      {
+        "id": 13,
+        "title": "Alert Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "ALERTS{alertstate=\"firing\"}",
+            "refId": "A",
+            "legendFormat": "{{alertname}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "red", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 48}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "refresh": "5s",
+    "schemaVersion": 30,
+    "version": 1,
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "increase(deployment_timestamp[1m])",
+          "iconColor": "blue",
+          "tags": ["deployment"]
+        }
+      ]
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "query": "label_values(up{job=\"dual-agent-monitor\"}, instance)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        },
+        {
+          "name": "interval",
+          "type": "interval",
+          "query": "1m,5m,10m,30m,1h",
+          "refresh": 2,
+          "current": {
+            "selected": false,
+            "text": "5m",
+            "value": "5m"
+          }
+        }
+      ]
+    },
+    "links": [
+      {
+        "title": "Prometheus",
+        "url": "/prometheus",
+        "type": "link"
+      },
+      {
+        "title": "Application",
+        "url": "/",
+        "type": "link"
+      }
+    ]
+  },
+  "folderId": null,
+  "overwrite": true
+}

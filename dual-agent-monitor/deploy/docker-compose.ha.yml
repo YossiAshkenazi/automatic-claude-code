@@ -1,0 +1,414 @@
+# High Availability Docker Compose Configuration
+# Multi-node setup with load balancing and failover
+
+version: '3.8'
+
+services:
+  # Primary Application Instances
+  dual-agent-monitor-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-latest}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    image: dual-agent-monitor:${VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - DATABASE_URL=${DATABASE_URL_PRIMARY}
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - REDIS_URL=${REDIS_URL_PRIMARY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - INSTANCE_ID=primary-1
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      redis-primary:
+        condition: service_healthy
+    volumes:
+      - app_data_1:/app/data
+      - app_logs_1:/app/logs
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "node", "docker-healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  dual-agent-monitor-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-latest}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    image: dual-agent-monitor:${VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - DATABASE_URL=${DATABASE_URL_SECONDARY}
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - REDIS_URL=${REDIS_URL_SECONDARY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - INSTANCE_ID=secondary-1
+    depends_on:
+      postgres-secondary:
+        condition: service_healthy
+      redis-secondary:
+        condition: service_healthy
+    volumes:
+      - app_data_2:/app/data
+      - app_logs_2:/app/logs
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "node", "docker-healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Primary-Secondary Replication
+  postgres-primary:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-dual_agent_monitor}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_REPLICATION_USER=replicator
+      - POSTGRES_REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./deploy/ha/postgresql-primary.conf:/etc/postgresql/postgresql.conf:ro
+      - ./deploy/ha/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    networks:
+      - app-network
+    ports:
+      - "5432:5432"
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-secondary:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      - PGUSER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_MASTER_SERVICE=postgres-primary
+      - POSTGRES_REPLICATION_USER=replicator
+      - POSTGRES_REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD}
+    volumes:
+      - postgres_secondary_data:/var/lib/postgresql/data
+      - ./deploy/ha/postgresql-secondary.conf:/etc/postgresql/postgresql.conf:ro
+    networks:
+      - app-network
+    ports:
+      - "5433:5432"
+    depends_on:
+      - postgres-primary
+    command: |
+      bash -c "
+      if [ ! -f /var/lib/postgresql/data/recovery.conf ]; then
+        pg_basebackup -h postgres-primary -D /var/lib/postgresql/data -U replicator -v -P -W
+        echo 'standby_mode = on' >> /var/lib/postgresql/data/recovery.conf
+        echo 'primary_conninfo = ''host=postgres-primary port=5432 user=replicator''' >> /var/lib/postgresql/data/recovery.conf
+        echo 'restore_command = ''false''' >> /var/lib/postgresql/data/recovery.conf
+      fi
+      postgres -c config_file=/etc/postgresql/postgresql.conf
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Sentinel for HA
+  redis-primary:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_primary_data:/data
+      - ./deploy/ha/redis-primary.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - app-network
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis-secondary:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD} --replicaof redis-primary 6379
+    volumes:
+      - redis_secondary_data:/data
+      - ./deploy/ha/redis-secondary.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - app-network
+    depends_on:
+      - redis-primary
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Redis Sentinel instances
+  redis-sentinel-1:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    volumes:
+      - ./deploy/ha/sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - app-network
+    depends_on:
+      - redis-primary
+      - redis-secondary
+
+  redis-sentinel-2:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    volumes:
+      - ./deploy/ha/sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - app-network
+    depends_on:
+      - redis-primary
+      - redis-secondary
+
+  redis-sentinel-3:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-sentinel /usr/local/etc/redis/sentinel.conf
+    volumes:
+      - ./deploy/ha/sentinel.conf:/usr/local/etc/redis/sentinel.conf:ro
+    networks:
+      - app-network
+    depends_on:
+      - redis-primary
+      - redis-secondary
+
+  # HAProxy Load Balancer
+  haproxy:
+    image: haproxy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404"  # Stats page
+    volumes:
+      - ./deploy/ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ssl_certs:/etc/ssl/certs:ro
+    networks:
+      - app-network
+    depends_on:
+      - dual-agent-monitor-1
+      - dual-agent-monitor-2
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8404/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx for SSL termination and static content
+  nginx-ha:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./deploy/ha/nginx-ha.conf:/etc/nginx/nginx.conf:ro
+      - ssl_certs:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - app-network
+    depends_on:
+      - haproxy
+
+  # Monitoring Stack for HA
+  prometheus-ha:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./deploy/ha/prometheus-ha.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - app-network
+    ports:
+      - "9090:9090"
+
+  # Grafana with HA data source
+  grafana-ha:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=postgres-primary:5432
+      - GF_DATABASE_NAME=grafana
+      - GF_DATABASE_USER=grafana
+      - GF_DATABASE_PASSWORD=${GRAFANA_DB_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/ha/grafana-ha-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    networks:
+      - app-network
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus-ha
+      - postgres-primary
+
+  # Consul for Service Discovery (optional)
+  consul:
+    image: consul:latest
+    restart: unless-stopped
+    command: consul agent -server -bootstrap -ui -node=server-1 -bind=0.0.0.0 -client=0.0.0.0 -datacenter=dc1
+    volumes:
+      - consul_data:/consul/data
+    networks:
+      - app-network
+    ports:
+      - "8500:8500"
+      - "8600:8600/udp"
+
+  # Backup Service
+  backup-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    restart: unless-stopped
+    environment:
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+      - S3_BUCKET=${S3_BACKUP_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - backup_data:/backups
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - app-network
+    depends_on:
+      - postgres-primary
+      - postgres-secondary
+      - redis-primary
+      - redis-secondary
+
+  # Log Aggregation
+  fluentd-ha:
+    build:
+      context: ./deploy/ha
+      dockerfile: Dockerfile.fluentd
+    restart: unless-stopped
+    volumes:
+      - ./deploy/ha/fluent.conf:/fluentd/etc/fluent.conf:ro
+      - app_logs_1:/var/log/app1:ro
+      - app_logs_2:/var/log/app2:ro
+      - nginx_logs:/var/log/nginx:ro
+    networks:
+      - app-network
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+
+  # Elasticsearch for log storage
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - app-network
+    ports:
+      - "9200:9200"
+
+  # Kibana for log visualization
+  kibana:
+    image: kibana:8.11.0
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - app-network
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+
+volumes:
+  postgres_primary_data:
+    driver: local
+  postgres_secondary_data:
+    driver: local
+  redis_primary_data:
+    driver: local
+  redis_secondary_data:
+    driver: local
+  app_data_1:
+    driver: local
+  app_data_2:
+    driver: local
+  app_logs_1:
+    driver: local
+  app_logs_2:
+    driver: local
+  nginx_logs:
+    driver: local
+  ssl_certs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  consul_data:
+    driver: local
+  backup_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

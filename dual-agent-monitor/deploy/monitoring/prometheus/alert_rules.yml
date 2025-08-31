@@ -1,0 +1,329 @@
+# Prometheus Alert Rules for Dual Agent Monitor
+
+groups:
+  # Application Health Alerts
+  - name: dual_agent_monitor_health
+    rules:
+      - alert: ApplicationDown
+        expr: up{job="dual-agent-monitor"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: dual-agent-monitor
+        annotations:
+          summary: "Dual Agent Monitor application is down"
+          description: "The Dual Agent Monitor application has been down for more than 1 minute. Instance: {{ $labels.instance }}"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="dual-agent-monitor",status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: dual-agent-monitor
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes. Instance: {{ $labels.instance }}"
+
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="dual-agent-monitor"}[5m])) > 2
+        for: 10m
+        labels:
+          severity: warning
+          service: dual-agent-monitor
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s. Instance: {{ $labels.instance }}"
+
+      - alert: HealthCheckFailing
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: dual-agent-monitor
+        annotations:
+          summary: "Health check failing"
+          description: "Health check for {{ $labels.instance }} has been failing for more than 3 minutes"
+
+  # System Resource Alerts
+  - name: system_resources
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 15m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 15 minutes. Current usage: {{ $value | humanizePercentage }}. Instance: {{ $labels.instance }}"
+
+      - alert: CriticalCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 5m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Critical CPU usage detected"
+          description: "CPU usage is above 95%. Current usage: {{ $value | humanizePercentage }}. Instance: {{ $labels.instance }}"
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 80%. Current usage: {{ $value | humanizePercentage }}. Instance: {{ $labels.instance }}"
+
+      - alert: CriticalMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 95
+        for: 5m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Critical memory usage detected"
+          description: "Memory usage is above 95%. Current usage: {{ $value | humanizePercentage }}. Instance: {{ $labels.instance }}"
+
+      - alert: LowDiskSpace
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 20%. Current available: {{ $value | humanizePercentage }}. Instance: {{ $labels.instance }}, Mountpoint: {{ $labels.mountpoint }}"
+
+      - alert: CriticalDiskSpace
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} * 100 < 10
+        for: 1m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Critical disk space"
+          description: "Disk space is below 10%. Current available: {{ $value | humanizePercentage }}. Instance: {{ $labels.instance }}, Mountpoint: {{ $labels.mountpoint }}"
+
+  # Database Alerts
+  - name: database_alerts
+    rules:
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL database has been down for more than 1 minute. Instance: {{ $labels.instance }}"
+
+      - alert: DatabaseHighConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "High database connections"
+          description: "Database connection usage is above 80%. Current: {{ $value | humanizePercentage }}. Instance: {{ $labels.instance }}"
+
+      - alert: DatabaseReplicationLag
+        expr: pg_replication_lag > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Database replication lag"
+          description: "Replication lag is {{ $value }} seconds. Instance: {{ $labels.instance }}"
+
+      - alert: DatabaseSlowQueries
+        expr: rate(pg_stat_database_tup_returned[5m]) / rate(pg_stat_database_tup_fetched[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Database slow queries detected"
+          description: "Query efficiency is low. Instance: {{ $labels.instance }}"
+
+  # Redis Cache Alerts
+  - name: redis_alerts
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been down for more than 1 minute. Instance: {{ $labels.instance }}"
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is above 90%. Current: {{ $value | humanizePercentage }}. Instance: {{ $labels.instance }}"
+
+      - alert: RedisTooManyConnections
+        expr: redis_connected_clients > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Too many Redis connections"
+          description: "Redis has {{ $value }} connected clients. Instance: {{ $labels.instance }}"
+
+      - alert: RedisRejectedConnections
+        expr: increase(redis_rejected_connections_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis rejected connections"
+          description: "Redis has rejected {{ $value }} connections in the last 5 minutes. Instance: {{ $labels.instance }}"
+
+  # SSL Certificate Alerts
+  - name: ssl_alerts
+    rules:
+      - alert: SSLCertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+        for: 5m
+        labels:
+          severity: warning
+          service: ssl
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"
+
+      - alert: SSLCertificateExpired
+        expr: probe_ssl_earliest_cert_expiry - time() < 0
+        for: 1m
+        labels:
+          severity: critical
+          service: ssl
+        annotations:
+          summary: "SSL certificate expired"
+          description: "SSL certificate for {{ $labels.instance }} has expired {{ $value | humanizeDuration }} ago"
+
+  # Load Balancer and Network Alerts
+  - name: network_alerts
+    rules:
+      - alert: LoadBalancerDown
+        expr: up{job="nginx"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: loadbalancer
+        annotations:
+          summary: "Load balancer is down"
+          description: "Nginx load balancer has been down for more than 1 minute. Instance: {{ $labels.instance }}"
+
+      - alert: HighNetworkTraffic
+        expr: rate(node_network_receive_bytes_total[5m]) > 100000000  # 100MB/s
+        for: 10m
+        labels:
+          severity: warning
+          service: network
+        annotations:
+          summary: "High network traffic"
+          description: "High network traffic detected: {{ $value | humanizeBytes }}/s. Instance: {{ $labels.instance }}, Interface: {{ $labels.device }}"
+
+  # Container and Docker Alerts (if using Docker)
+  - name: container_alerts
+    rules:
+      - alert: ContainerKilled
+        expr: time() - container_last_seen > 60
+        for: 0m
+        labels:
+          severity: warning
+          service: docker
+        annotations:
+          summary: "Container killed"
+          description: "A container has disappeared. Instance: {{ $labels.instance }}, Container: {{ $labels.name }}"
+
+      - alert: ContainerHighCPUUsage
+        expr: (rate(container_cpu_usage_seconds_total[5m])) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: docker
+        annotations:
+          summary: "Container high CPU usage"
+          description: "Container CPU usage is above 80%. Current: {{ $value | humanizePercentage }}. Container: {{ $labels.name }}"
+
+      - alert: ContainerHighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: docker
+        annotations:
+          summary: "Container high memory usage"
+          description: "Container memory usage is above 80%. Current: {{ $value | humanizePercentage }}. Container: {{ $labels.name }}"
+
+  # Business Logic Alerts
+  - name: business_alerts
+    rules:
+      - alert: HighAgentFailureRate
+        expr: rate(agent_task_failures_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: dual-agent-monitor
+        annotations:
+          summary: "High agent failure rate"
+          description: "Agent failure rate is {{ $value | humanizePercentage }} over the last 10 minutes"
+
+      - alert: AgentCommunicationTimeout
+        expr: agent_communication_timeout_total > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: dual-agent-monitor
+        annotations:
+          summary: "Agent communication timeout"
+          description: "Agent communication timeouts detected: {{ $value }} instances"
+
+      - alert: SessionStoreDown
+        expr: session_store_connection_errors_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: dual-agent-monitor
+        annotations:
+          summary: "Session store connection errors"
+          description: "Session store connection errors: {{ $value }} instances"
+
+  # Security Alerts
+  - name: security_alerts
+    rules:
+      - alert: TooManyFailedLogins
+        expr: rate(auth_failed_login_attempts_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Too many failed login attempts"
+          description: "Failed login rate is {{ $value }} per second over the last 5 minutes"
+
+      - alert: SuspiciousActivity
+        expr: rate(http_requests_total{status="403"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "High rate of 403 responses: {{ $value }} per second"

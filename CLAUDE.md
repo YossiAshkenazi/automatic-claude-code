@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Automatic Claude Code is a TypeScript CLI application that runs Claude Code in an automated dual-agent loop for continuous AI-assisted development. The system uses a Manager-Worker architecture where a Manager Agent coordinates tasks and a Worker Agent executes them, enabling more sophisticated problem-solving through specialized roles and collaborative workflows.
 
+**Key Features:**
+- **Dual-Agent Architecture**: Manager-Worker coordination for complex task execution
+- **Real-time Monitoring**: Web-based dashboard with live agent communication tracking
+- **Production-Ready Deployment**: Docker, Kubernetes, and cloud infrastructure support
+- **Machine Learning Insights**: Anomaly detection, predictive analytics, and optimization recommendations
+- **External Integrations**: Webhook system supporting Slack, Discord, and email notifications
+- **Mobile-Responsive Interface**: Progressive Web App with offline capabilities
+- **Comprehensive Testing**: Automated CI/CD pipelines with unit, integration, and E2E tests
+
 ## Essential Commands
 
 ```bash
@@ -60,19 +69,45 @@ The system employs a **Manager-Worker** architecture with two specialized Claude
 ### Core Module Structure
 ```
 src/
-├── index.ts           # Main CLI entry point and orchestration
-├── config.ts          # Configuration management
-├── agents/            # Dual-agent system (NEW)
-│   ├── agentCoordinator.ts   # Manages agent communication and workflows
-│   ├── managerAgent.ts       # Strategic planning and oversight
-│   ├── workerAgent.ts        # Task execution and implementation
-│   └── agentTypes.ts         # Type definitions for agent communication
-├── sessionManager.ts  # Session persistence with dual-agent support
-├── outputParser.ts    # Parse outputs from both agents
-├── promptBuilder.ts   # Generate contextual prompts (agent-aware)
-├── logger.ts          # Structured logging with agent tracking
-├── logViewer.ts      # Terminal UI with agent-specific views
-└── tuiBrowser.ts     # Enhanced browser with agent insights
+├── index.ts                    # Main CLI entry point and orchestration
+├── config.ts                   # Configuration management
+├── agents/                     # Dual-agent system
+│   ├── agentCoordinator.ts     # Manages agent communication and workflows
+│   ├── managerAgent.ts         # Strategic planning and oversight
+│   ├── workerAgent.ts          # Task execution and implementation
+│   └── agentTypes.ts           # Type definitions for agent communication
+├── sessionManager.ts           # Session persistence with dual-agent support
+├── outputParser.ts             # Parse outputs from both agents
+├── promptBuilder.ts            # Generate contextual prompts (agent-aware)
+├── logger.ts                   # Structured logging with agent tracking
+├── logViewer.ts               # Terminal UI with agent-specific views
+├── tuiBrowser.ts              # Enhanced browser with agent insights
+└── monitoringManager.ts       # Integration with monitoring dashboard
+
+dual-agent-monitor/             # Real-time monitoring dashboard
+├── src/                        # React-based frontend application
+│   ├── components/             # UI components for agent visualization
+│   │   ├── visualization/      # Agent communication diagrams
+│   │   ├── mobile/            # Mobile-responsive components
+│   │   ├── webhooks/          # Webhook configuration UI
+│   │   ├── ml/               # ML insights dashboard
+│   │   └── auth/             # Authentication components
+│   ├── hooks/                 # React hooks for agent data
+│   ├── store/                 # State management (Zustand)
+│   └── utils/                 # Utility functions
+├── server/                    # Backend API and WebSocket server
+│   ├── websocket-server.ts    # Real-time agent communication
+│   ├── database/              # PostgreSQL integration
+│   ├── auth/                  # Authentication & authorization
+│   ├── webhooks/              # External integration system
+│   ├── ml/                    # Machine learning insights engine
+│   ├── analytics/             # Performance analytics
+│   └── replay/                # Session replay functionality
+└── deploy/                    # Production deployment configs
+    ├── docker-compose.ha.yml  # High-availability setup
+    ├── kubernetes/            # K8s manifests
+    ├── terraform/             # Infrastructure as Code
+    └── monitoring/            # Prometheus, Grafana configs
 ```
 
 ### Dual-Agent Workflow
@@ -129,14 +164,36 @@ Both agents spawn Claude Code processes with specialized configurations:
 - `--output-format json` - Structured output
 - `--permission-mode acceptEdits` - Auto-accept edits
 
-### Output Analysis (Dual-Agent)
+### Output Analysis & Monitoring (Enhanced)
 
-The outputParser now handles:
+The system now provides comprehensive monitoring and analysis:
+
+#### Real-time Agent Monitoring
 - **Agent Identification**: Tracks which agent generated each output
 - **Inter-Agent Messages**: Parses communication between Manager and Worker
 - **Task State Tracking**: Monitors progress on assigned work items
 - **Quality Gate Results**: Captures Manager's validation decisions
 - **Coordination Metrics**: Measures collaboration effectiveness
+
+#### Machine Learning Insights
+- **Anomaly Detection**: Identifies unusual patterns in agent behavior
+- **Predictive Analytics**: Forecasts task completion times and success rates
+- **Optimization Recommendations**: AI-driven suggestions for workflow improvements
+- **Performance Analytics**: Comprehensive metrics on agent effectiveness
+
+#### Monitoring Dashboard Features
+- **Live Agent Communication**: Real-time visualization of Manager-Worker handoffs
+- **Session Replay**: Review and analyze complete agent interaction sessions
+- **Performance Metrics**: Charts showing response times, success rates, error patterns
+- **Mobile-Responsive UI**: Progressive Web App with offline capabilities
+- **Multi-Project Support**: Monitor agent activities across different codebases
+
+#### External Integrations
+- **Webhook System**: Real-time notifications to external services
+- **Slack Integration**: Agent status updates and alerts in Slack channels
+- **Discord Integration**: Bot notifications for development teams
+- **Email Alerts**: Critical event notifications via email
+- **Custom Webhooks**: Configurable endpoints for third-party integrations
 
 ## Key Implementation Details
 
@@ -165,6 +222,44 @@ Enhanced configuration at `~/.automatic-claude-code/config.json`:
     "qualityGateThreshold": 0.8,
     "maxConcurrentTasks": 2,
     "enableCrossValidation": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "dashboardPort": 6007,
+    "apiPort": 4001,
+    "autoStart": true,
+    "persistSessions": true,
+    "enableWebhooks": true,
+    "mlInsights": true,
+    "anomalyDetection": true
+  },
+  "database": {
+    "type": "postgresql",
+    "host": "localhost",
+    "port": 5432,
+    "database": "dual_agent_monitor",
+    "ssl": false,
+    "maxConnections": 20,
+    "connectionTimeout": 30000
+  },
+  "webhooks": {
+    "slack": {
+      "enabled": false,
+      "webhookUrl": "",
+      "channel": "#dev-notifications"
+    },
+    "discord": {
+      "enabled": false,
+      "webhookUrl": "",
+      "username": "Dual Agent Monitor"
+    },
+    "email": {
+      "enabled": false,
+      "smtpHost": "",
+      "smtpPort": 587,
+      "smtpUser": "",
+      "recipients": []
+    }
   },
   "maxIterations": 10,
   "continueOnError": false,
@@ -218,6 +313,41 @@ The project is configured to work with multiple MCP servers:
 - **context7**: Knowledge base integration
 - **memory**: Persistent memory storage
 
+## Production Deployment
+
+### Quick Production Setup
+The system includes comprehensive deployment infrastructure:
+
+```bash
+# 1. High-Availability Docker Compose
+cd dual-agent-monitor/deploy
+cp .env.production .env
+docker-compose -f docker-compose.ha.yml up -d
+
+# 2. Kubernetes Deployment
+kubectl apply -f dual-agent-monitor/deploy/kubernetes/
+
+# 3. Terraform (AWS/Azure/GCP)
+cd dual-agent-monitor/deploy/terraform
+terraform init && terraform apply
+```
+
+### Deployment Options
+- **Single Server**: Docker Compose with PostgreSQL, Redis, nginx
+- **High Availability**: Load balancer, multiple app instances, database clustering
+- **Kubernetes**: Full container orchestration with auto-scaling
+- **Cloud Infrastructure**: Terraform modules for AWS, Azure, GCP
+- **Monitoring Stack**: Prometheus, Grafana, Alertmanager integration
+
+### Production Features
+- **SSL/TLS**: Automatic certificate management with Let's Encrypt
+- **Database**: PostgreSQL with backup automation and connection pooling
+- **Caching**: Redis for session storage and real-time data
+- **Load Balancing**: HAProxy with health checks and failover
+- **Monitoring**: Comprehensive metrics, logging, and alerting
+- **Security**: Firewall rules, security headers, authentication
+- **Scaling**: Auto-scaling based on CPU, memory, and request metrics
+
 ## Testing & Development Workflow
 
 ### Local Development
@@ -225,15 +355,30 @@ The project is configured to work with multiple MCP servers:
 # 1. Install dependencies
 pnpm install
 
-# 2. Run in development mode (uses tsx for hot reload)
+# 2. Start monitoring dashboard (in separate terminal)
+cd dual-agent-monitor && pnpm run dev
+
+# 3. Run in development mode (uses tsx for hot reload)
 pnpm run dev
 
-# 3. Test a simple task
+# 4. Test a simple task
 pnpm run dev run "create a hello world function" -i 2 -v
 
-# 4. Build and test production
+# 5. Build and test production
 pnpm run build
 node dist/index.js run "task" -i 3
+```
+
+### Monitoring Dashboard Development
+```bash
+# Frontend development server (React + Vite)
+cd dual-agent-monitor
+pnpm install
+pnpm run dev  # Runs on http://localhost:6007
+
+# Backend WebSocket server (in separate terminal)
+cd dual-agent-monitor/server
+pnpm run dev  # Runs on http://localhost:4001
 ```
 
 ### Testing Checklist
@@ -245,22 +390,69 @@ node dist/index.js run "task" -i 3
 4. **Output Parsing**: Check both JSON and text fallback modes
 5. **Hook Execution**: Monitor `.claude/hooks/` script triggers
 
-#### Dual-Agent Mode (NEW)
+#### Dual-Agent Mode (Enhanced)
 1. **Agent Coordination**: `acc run "implement user auth system" --dual-agent -i 5 -v`
 2. **Manager Planning**: Verify Manager creates proper task breakdown
 3. **Worker Execution**: Confirm Worker executes assigned tasks correctly
 4. **Quality Gates**: Test Manager's validation of Worker outputs
 5. **Error Recovery**: Test how agents handle and recover from failures
-6. **Inter-Agent Communication**: Monitor agent message exchange
+6. **Inter-Agent Communication**: Monitor agent message exchange via dashboard
 7. **Performance Comparison**: Compare dual vs single agent effectiveness
 8. **Complex Workflows**: Test multi-step architecture changes
 9. **Concurrent Task Handling**: Verify parallel work item execution
 10. **Cross-Validation**: Test Manager reviewing Worker's solutions
+11. **Monitoring Integration**: Verify dashboard displays agent activities correctly
+12. **Webhook Notifications**: Test Slack/Discord/email integrations
+13. **ML Insights**: Validate anomaly detection and predictive analytics
+14. **Session Persistence**: Confirm PostgreSQL storage and replay functionality
+15. **Mobile Interface**: Test responsive design and PWA features
+
+#### Automated Testing Infrastructure
+The system includes comprehensive test suites:
+- **Unit Tests**: Component-level testing with Jest/Vitest
+- **Integration Tests**: API and database integration testing
+- **E2E Tests**: Full workflow testing with Playwright
+- **Performance Tests**: Load testing and performance benchmarking
+- **CI/CD Pipeline**: Automated testing on GitHub Actions
+- **Security Testing**: Dependency scanning and vulnerability assessment
+
+## Recent Updates (Updated: 2024-08-31)
+
+### Major Features Added
+- **Production Deployment Infrastructure**: Complete Docker, Kubernetes, and Terraform configurations
+- **Machine Learning Insights Engine**: Anomaly detection, predictive analytics, optimization recommendations
+- **External Integrations**: Comprehensive webhook system with Slack, Discord, and email support
+- **Mobile-Responsive Dashboard**: Progressive Web App with offline capabilities
+- **Database Integration**: PostgreSQL support with schema management and data persistence
+- **Authentication & Authorization**: User management system with role-based permissions
+- **Session Replay**: Record and replay complete agent interaction sessions
+- **Automated Testing**: CI/CD pipelines with unit, integration, and E2E tests
+
+### Architecture Enhancements
+- **Monitoring Backend**: Express + WebSocket server for real-time agent communication
+- **React Frontend**: Modern UI with Zustand state management and responsive design
+- **Analytics Service**: Performance metrics collection and analysis
+- **Security Layer**: SSL/TLS, firewall rules, and security headers
+- **Scaling Infrastructure**: Auto-scaling, load balancing, and high availability setup
+
+### Developer Experience Improvements
+- **Live Agent Visualization**: Real-time Manager-Worker communication diagrams
+- **Performance Analytics**: Detailed metrics on agent effectiveness and coordination
+- **Multi-Project Support**: Monitor agent activities across different codebases
+- **Quick Setup Guide**: Simplified deployment with QUICK-SETUP.md
+- **Comprehensive Documentation**: Production deployment guide (DEPLOYMENT.md)
+
+### Breaking Changes
+- **Port Configuration**: Monitoring UI now runs on port 6007, API on port 4001
+- **Configuration Schema**: Extended config.json with monitoring, database, and webhook settings
+- **Database Requirement**: PostgreSQL now required for session persistence (optional fallback to in-memory)
 
 ## Important Notes
 
-- **Package Manager**: Project uses both pnpm (primary) and npm (fallback for WSL issues)
-- **WSL Compatibility**: Special handling with `--no-bin-links` flag for permission issues
-- **Session Storage**: All sessions saved to `.claude-sessions/` for audit trail
+- **Package Manager**: Project uses pnpm (primary) with npm fallback for WSL compatibility
+- **Monitoring Ports**: UI Dashboard (6007), API Server (4001), WebSocket (4001)
+- **Database Setup**: PostgreSQL recommended for production, in-memory fallback for development
+- **Session Storage**: All sessions persisted to database with replay capabilities
 - **Process Spawning**: Uses shell execution for cross-platform compatibility
 - **Claude CLI Required**: Must have Claude Code CLI installed and in PATH
+- **Webhook Configuration**: External integrations configurable via config.json or dashboard UI

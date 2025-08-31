@@ -1,0 +1,302 @@
+name: Security Scan
+
+on:
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # Dependency vulnerability scanning
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: |
+        cd dual-agent-monitor
+        npm ci
+
+    - name: Run npm audit
+      run: |
+        cd dual-agent-monitor
+        npm audit --audit-level=moderate --production
+
+    - name: Run Snyk security scan
+      uses: snyk/actions/node@master
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: |
+          --file=dual-agent-monitor/package.json
+          --severity-threshold=medium
+          --fail-on=upgradable
+
+    - name: Upload Snyk results to GitHub Code Scanning
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: snyk.sarif
+
+    - name: Generate dependency report
+      run: |
+        cd dual-agent-monitor
+        npm list --all --json > dependency-report.json
+
+    - name: Upload dependency report
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-report
+        path: dual-agent-monitor/dependency-report.json
+        retention-days: 30
+
+  # Code security analysis
+  codeql:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - language: javascript
+          build-mode: none
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+      with:
+        category: "/language:${{matrix.language}}"
+
+  # SAST (Static Application Security Testing)
+  sast-scan:
+    name: Static Security Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Semgrep
+      uses: returntocorp/semgrep-action@v1
+      with:
+        publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
+        publishDeployment: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    - name: ESLint security scan
+      run: |
+        cd dual-agent-monitor
+        npm install eslint-plugin-security --save-dev
+        npx eslint . --ext .js,.ts,.tsx --format @microsoft/eslint-formatter-sarif --output-file eslint-security-results.sarif
+
+    - name: Upload ESLint security results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: dual-agent-monitor/eslint-security-results.sarif
+
+  # Docker security scanning
+  docker-security:
+    name: Docker Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build Docker image
+      run: |
+        cd dual-agent-monitor
+        docker build -t dual-agent-monitor:security-scan .
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'dual-agent-monitor:security-scan'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Docker Bench Security
+      run: |
+        git clone https://github.com/docker/docker-bench-security.git
+        cd docker-bench-security
+        sudo sh docker-bench-security.sh -c container_runtime
+
+  # Secrets scanning
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: TruffleHog OSS
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified
+
+    - name: GitLeaks
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # Infrastructure security
+  infrastructure-scan:
+    name: Infrastructure Security
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Checkov on Docker files
+      uses: bridgecrewio/checkov-action@master
+      with:
+        directory: dual-agent-monitor/
+        framework: dockerfile
+        output_format: sarif
+        output_file_path: checkov-results.sarif
+
+    - name: Upload Checkov scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: checkov-results.sarif
+
+  # Security compliance check
+  compliance-check:
+    name: Security Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check security headers in HTML
+      run: |
+        cd dual-agent-monitor
+        # Check for security-relevant configurations
+        if grep -r "X-Frame-Options\|Content-Security-Policy\|X-XSS-Protection" .; then
+          echo "✅ Security headers found"
+        else
+          echo "⚠️ Consider adding security headers"
+        fi
+
+    - name: Check for secure cookie settings
+      run: |
+        cd dual-agent-monitor
+        if grep -r "secure.*cookie\|httpOnly" . --include="*.ts" --include="*.js"; then
+          echo "✅ Secure cookie configurations found"
+        else
+          echo "⚠️ Review cookie security settings"
+        fi
+
+    - name: OWASP dependency check
+      run: |
+        cd dual-agent-monitor
+        # Download and run OWASP dependency check
+        wget -O dependency-check.zip https://github.com/jeremylong/DependencyCheck/releases/download/v8.4.2/dependency-check-8.4.2-release.zip
+        unzip dependency-check.zip
+        ./dependency-check/bin/dependency-check.sh --project "Dual-Agent Monitor" --scan . --format XML --format HTML --failOnCVSS 7
+
+    - name: Upload OWASP results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: owasp-dependency-check
+        path: |
+          dual-agent-monitor/dependency-check-report.html
+          dual-agent-monitor/dependency-check-report.xml
+        retention-days: 30
+
+  # Generate security report
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, codeql, sast-scan, docker-security, secrets-scan]
+    if: always()
+
+    steps:
+    - name: Generate security summary
+      run: |
+        echo "# Security Scan Summary" > security-summary.md
+        echo "" >> security-summary.md
+        echo "## Scan Results" >> security-summary.md
+        echo "- Dependency Scan: ${{ needs.dependency-scan.result }}" >> security-summary.md
+        echo "- CodeQL Analysis: ${{ needs.codeql.result }}" >> security-summary.md
+        echo "- SAST Scan: ${{ needs.sast-scan.result }}" >> security-summary.md
+        echo "- Docker Security: ${{ needs.docker-security.result }}" >> security-summary.md
+        echo "- Secrets Scan: ${{ needs.secrets-scan.result }}" >> security-summary.md
+        echo "" >> security-summary.md
+        echo "Generated on: $(date -u)" >> security-summary.md
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-report
+        path: security-summary.md
+        retention-days: 90
+
+    - name: Comment PR with security results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync('security-summary.md', 'utf8');
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });

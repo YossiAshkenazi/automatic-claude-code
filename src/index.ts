@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -43,6 +43,29 @@ class AutomaticClaudeCode {
     this.logger = new Logger();
   }
 
+  private getClaudeCommand(): string {
+    // Try to find claude in PATH first
+    try {
+      execSync('which claude', { stdio: 'ignore' });
+      return 'claude --dangerously-skip-permissions';
+    } catch {
+      // Fallback to npx if claude is not in PATH
+      try {
+        execSync('which npx', { stdio: 'ignore' });
+        this.logger.info('Claude not found in PATH, using npx fallback');
+        return 'npx @anthropic-ai/claude-code --dangerously-skip-permissions';
+      } catch {
+        // Last resort - try direct npm global path
+        const npmPrefix = execSync('npm config get prefix', { encoding: 'utf-8' }).trim();
+        const claudePath = path.join(npmPrefix, 'bin', 'claude');
+        if (fs.existsSync(claudePath)) {
+          return `${claudePath} --dangerously-skip-permissions`;
+        }
+        throw new Error('Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code');
+      }
+    }
+  }
+
   async runClaudeCode(prompt: string, options: LoopOptions): Promise<{ output: string; exitCode: number }> {
     const args = ['-p', prompt];
     
@@ -71,7 +94,10 @@ class AutomaticClaudeCode {
     }
 
     return new Promise((resolve, reject) => {
-      const claudeProcess = spawn('claude --dangerously-skip-permissions', args, {
+      const claudeCommand = this.getClaudeCommand();
+      this.logger.debug(`Using Claude command: ${claudeCommand}`);
+      
+      const claudeProcess = spawn(claudeCommand, args, {
         shell: true,
         env: { ...process.env },
         cwd: options.workDir || process.cwd(),

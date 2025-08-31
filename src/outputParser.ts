@@ -6,6 +6,12 @@ export interface ParsedOutput {
   tools?: string[];
   files?: string[];
   commands?: string[];
+  // Dual-agent handoff detection fields
+  needsHandoff?: boolean;
+  handoffReason?: string;
+  taskBreakdown?: string[];
+  readyForWorker?: boolean;
+  managerAnalysisComplete?: boolean;
 }
 
 interface ToolCall {
@@ -176,5 +182,168 @@ export class OutputParser {
     }
     
     return successes;
+  }
+
+  /**
+   * Analyze agent output to detect handoff conditions
+   */
+  analyzeAgentOutput(output: ParsedOutput, agentRole: 'manager' | 'worker'): {
+    needsHandoff: boolean;
+    handoffReason?: string;
+    readyForExecution?: boolean;
+    taskBreakdown?: string[];
+    analysisComplete?: boolean;
+  } {
+    const result = output.result || '';
+    
+    if (agentRole === 'manager') {
+      return this.analyzeManagerOutput(result, output);
+    } else {
+      return this.analyzeWorkerOutput(result, output);
+    }
+  }
+
+  /**
+   * Analyze Manager agent output for delegation triggers
+   */
+  private analyzeManagerOutput(result: string, output: ParsedOutput): {
+    needsHandoff: boolean;
+    handoffReason?: string;
+    readyForExecution?: boolean;
+    taskBreakdown?: string[];
+    analysisComplete?: boolean;
+  } {
+    const needsHandoff = this.detectManagerHandoffTriggers(result);
+    const taskBreakdown = this.extractTaskBreakdown(result);
+    const analysisComplete = this.isAnalysisComplete(result);
+    
+    if (needsHandoff && taskBreakdown.length > 0) {
+      return {
+        needsHandoff: true,
+        handoffReason: 'task_analysis_complete',
+        readyForExecution: true,
+        taskBreakdown,
+        analysisComplete: true
+      };
+    }
+
+    if (analysisComplete && !needsHandoff) {
+      // Manager finished analysis but didn't explicitly hand off
+      return {
+        needsHandoff: true,
+        handoffReason: 'analysis_complete_implicit',
+        readyForExecution: true,
+        taskBreakdown: taskBreakdown.length > 0 ? taskBreakdown : ['Implement user request'],
+        analysisComplete: true
+      };
+    }
+
+    return {
+      needsHandoff: false,
+      analysisComplete
+    };
+  }
+
+  /**
+   * Analyze Worker agent output for completion or escalation
+   */
+  private analyzeWorkerOutput(result: string, output: ParsedOutput): {
+    needsHandoff: boolean;
+    handoffReason?: string;
+    readyForExecution?: boolean;
+  } {
+    const hasErrors = this.extractErrors(output).length > 0;
+    const hasSuccesses = this.extractSuccesses(output).length > 0;
+    const isComplete = this.isTaskComplete(result);
+    
+    if (hasErrors && !hasSuccesses) {
+      return {
+        needsHandoff: true,
+        handoffReason: 'worker_needs_help'
+      };
+    }
+
+    if (isComplete) {
+      return {
+        needsHandoff: true,
+        handoffReason: 'task_completed'
+      };
+    }
+
+    return { needsHandoff: false };
+  }
+
+  /**
+   * Detect Manager handoff trigger patterns
+   */
+  private detectManagerHandoffTriggers(result: string): boolean {
+    const handoffPatterns = [
+      /(?:work items?|tasks?).*(?:created|identified|defined)/i,
+      /(?:analysis|breakdown).*(?:complete|finished|done)/i,
+      /(?:ready|time).*(?:implement|execute|work)/i,
+      /(?:worker|implementation).*(?:should|needs to|can)/i,
+      /(?:next step|proceed).*(?:implement|code|build)/i,
+      /implementation.*(?:plan|strategy).*(?:ready|complete)/i,
+      /work item.*assigned/i,
+      /task.*(?:delegat|assign)/i
+    ];
+
+    return handoffPatterns.some(pattern => pattern.test(result));
+  }
+
+  /**
+   * Extract task breakdown from manager output
+   */
+  private extractTaskBreakdown(result: string): string[] {
+    const tasks: string[] = [];
+    
+    // Look for numbered lists
+    const numberedMatches = result.match(/\d+\.\s*([^\n]+)/g);
+    if (numberedMatches) {
+      tasks.push(...numberedMatches.map(m => m.replace(/^\d+\.\s*/, '').trim()));
+    }
+    
+    // Look for bullet points
+    const bulletMatches = result.match(/[*\-]\s*([^\n]+)/g);
+    if (bulletMatches) {
+      tasks.push(...bulletMatches.map(m => m.replace(/^[*\-]\s*/, '').trim()));
+    }
+    
+    // Look for "Work Item" sections
+    const workItemMatches = result.match(/(?:Work Item|Task).*?:\s*([^\n]+)/gi);
+    if (workItemMatches) {
+      tasks.push(...workItemMatches.map(m => m.replace(/(?:Work Item|Task).*?:\s*/i, '').trim()));
+    }
+    
+    return tasks.filter(task => task.length > 10).slice(0, 10); // Filter meaningful tasks
+  }
+
+  /**
+   * Check if manager analysis is complete
+   */
+  private isAnalysisComplete(result: string): boolean {
+    const completionPatterns = [
+      /analysis.*(?:complete|finished|done)/i,
+      /breakdown.*(?:complete|finished|ready)/i,
+      /(?:ready|prepared).*(?:for|to).*(?:implement|execute)/i,
+      /strategy.*(?:defined|complete|ready)/i,
+      /plan.*(?:finalized|complete|ready)/i
+    ];
+
+    return completionPatterns.some(pattern => pattern.test(result));
+  }
+
+  /**
+   * Check if worker task is complete
+   */
+  private isTaskComplete(result: string): boolean {
+    const completionPatterns = [
+      /(?:task|implementation).*(?:complete|finished|done)/i,
+      /successfully.*(?:implemented|created|completed)/i,
+      /all.*(?:requirements|criteria).*(?:met|satisfied)/i,
+      /(?:ready|available).*(?:for|to).*(?:review|test)/i
+    ];
+
+    return completionPatterns.some(pattern => pattern.test(result));
   }
 }

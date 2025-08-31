@@ -9,6 +9,7 @@ import {
   TaskAssignment,
   ProgressUpdate,
   QualityCheck,
+  QualityGate,
   WorkflowState,
   WorkflowPhase,
   AgentState,
@@ -23,6 +24,7 @@ import {
 } from './agentTypes';
 import { ManagerAgent } from './managerAgent';
 import { WorkerAgent } from './workerAgent';
+// Handoff logic is now integrated into this coordinator and outputParser
 
 export interface AgentCoordinatorOptions {
   maxIterations?: number;
@@ -52,6 +54,8 @@ export class AgentCoordinator extends EventEmitter {
   private coordinationInterval: NodeJS.Timeout | null = null;
   private isActive: boolean = false;
   private startTime: Date = new Date();
+  private lastHandoffTime?: Date;
+  private handoffCount: number = 0;
 
   constructor(config: AgentCoordinatorConfig) {
     super();
@@ -222,6 +226,9 @@ export class AgentCoordinator extends EventEmitter {
         this.executionContext.workflowState.totalWorkItems = analysisResult.workItems.length;
         this.executionContext.workflowState.activeWorkItems = analysisResult.workItems.map(item => item.id);
 
+        // Store work items for handoff
+        this.storeWorkItemsForHandoff(analysisResult.workItems);
+
         this.logger.info('Manager analysis completed', {
           workItemCount: analysisResult.workItems.length,
           strategy: analysisResult.strategy
@@ -233,8 +240,11 @@ export class AgentCoordinator extends EventEmitter {
           strategy: analysisResult.strategy
         });
 
-        // Move to planning phase
+        // Move to planning phase and trigger handoff
         this.updateWorkflowPhase('planning');
+        
+        // Immediately trigger handoff to worker
+        await this.triggerWorkerHandoff(analysisResult.workItems[0], analysisResult.strategy);
       }
     } catch (error) {
       await this.handleAgentError('manager', 'tool_failure', error instanceof Error ? error.message : String(error));
@@ -264,11 +274,18 @@ export class AgentCoordinator extends EventEmitter {
           break;
         }
 
+        // Validate agents are ready
+        if (!this.validateAgentsReady()) {
+          this.logger.warning('Agents not ready, waiting...');
+          await this.delay(1000);
+          continue;
+        }
+
         // Coordinate next steps between agents
         await this.coordinateAgentWork();
 
         // Brief pause between iterations
-        await this.delay(2000);
+        await this.delay(1500);
 
       } catch (error) {
         this.logger.error(`Coordination iteration ${currentIteration} failed`, { error });
@@ -281,6 +298,12 @@ export class AgentCoordinator extends EventEmitter {
 
     if (currentIteration >= maxIterations) {
       this.logger.warning('Maximum coordination iterations reached');
+      this.logger.info('Final workflow state', {
+        totalWorkItems: this.executionContext.workflowState.totalWorkItems,
+        completedWorkItems: this.executionContext.workflowState.completedWorkItems,
+        pendingHandoffs: this.handoffQueue.length,
+        pendingWorkItems: this.pendingWorkItems.size
+      });
     }
   }
 
@@ -288,6 +311,9 @@ export class AgentCoordinator extends EventEmitter {
    * Coordinate work between manager and worker agents
    */
   private async coordinateAgentWork(): Promise<void> {
+    // Check for handoff opportunity first
+    await this.evaluateHandoffOpportunity();
+
     // Get pending work items
     const pendingWorkItems = this.getPendingWorkItems();
     
@@ -297,8 +323,90 @@ export class AgentCoordinator extends EventEmitter {
     }
 
     // Process work items based on current workflow phase
-    for (const workItem of pendingWorkItems.slice(0, this.executionContext.config.maxConcurrentTasks)) {
+    for (const workItem of pendingWorkItems.slice(0, this.executionContext.config.maxConcurrentTasks || 1)) {
       await this.processWorkItem(workItem);
+    }
+  }
+
+  /**
+   * Evaluate if a handoff should occur from Manager to Worker
+   */
+  private async evaluateHandoffOpportunity(): Promise<void> {
+    // Skip if Worker is already busy or if we recently handed off
+    if (this.executionContext.workerState.status === 'executing') {
+      return;
+    }
+
+    // Don't evaluate handoffs too frequently
+    if (this.lastHandoffTime && 
+        (Date.now() - this.lastHandoffTime.getTime()) < 30000) { // 30 seconds
+      return;
+    }
+
+    try {
+      // Get recent Manager output for analysis
+      const recentManagerOutput = await this.getRecentManagerOutput();
+      if (!recentManagerOutput) {
+        return;
+      }
+
+      // Build handoff context
+      // Use integrated handoff logic
+      const handoffNeeded = this.checkHandoffConditions();
+      
+      if (handoffNeeded) {
+        await this.processHandoffDecision();
+      }
+
+    } catch (error) {
+      this.logger.error('Handoff evaluation failed', { error });
+    }
+  }
+
+  /**
+   * Execute the handoff to Worker agent
+   */
+  /**
+   * Check if handoff conditions are met
+   */
+  private checkHandoffConditions(): boolean {
+    // Check if manager has completed analysis and there are pending work items
+    const hasAnalysisComplete = this.executionContext.workflowState.phase === 'planning' || this.executionContext.workflowState.phase === 'execution';
+    const hasPendingWork = this.pendingWorkItems.size > 0 || this.handoffQueue.length > 0;
+    const workerIsIdle = this.executionContext.workerState.status === 'idle';
+    
+    return hasAnalysisComplete && hasPendingWork && workerIsIdle;
+  }
+
+  /**
+   * Process handoff decision using integrated logic
+   */
+  private async processHandoffDecision(): Promise<void> {
+    this.logger.info('Processing handoff decision - delegating work to Worker');
+
+    try {
+      if (this.handoffQueue.length > 0) {
+        await this.processPendingHandoffs();
+      } else if (this.pendingWorkItems.size > 0) {
+        const workItem = Array.from(this.pendingWorkItems.values())[0];
+        const context = this.buildWorkItemContext(workItem);
+        await this.executeWorkerTask(workItem, context);
+      }
+
+      // Emit handoff event
+      this.emitCoordinationEvent('MANAGER_WORKER_HANDOFF', 'manager', {
+        handoffCount: this.handoffQueue.length + this.pendingWorkItems.size,
+        reason: 'work_delegation'
+      });
+
+      // Update workflow phase if moving from planning to execution
+      if (this.executionContext.workflowState.phase === 'planning') {
+        this.updateWorkflowPhase('execution');
+      }
+
+    } catch (error) {
+      this.logger.error('Handoff processing failed', { error });
+      throw error;
     }
   }
 
@@ -326,46 +434,14 @@ export class AgentCoordinator extends EventEmitter {
   }
 
   /**
-   * Assign work item to worker agent
+   * Assign work item to worker agent (legacy method - now uses executeWorkerTask)
    */
   private async assignWorkToWorker(workItem: WorkItem): Promise<void> {
     this.logger.info(`Assigning work to worker: ${workItem.title}`);
     
-    this.updateAgentStatus('worker', 'executing');
-    workItem.status = 'assigned';
-    workItem.assignedTo = 'worker';
-
-    try {
-      const assignment: TaskAssignment = {
-        workItem,
-        context: this.buildWorkItemContext(workItem),
-        requiredTools: this.inferRequiredTools(workItem),
-        constraints: [],
-        qualityGates: []
-      };
-
-      const result = await this.workerAgent.executeTask(assignment);
-      
-      if (result.success) {
-        workItem.status = 'in_progress';
-        this.logger.info(`Worker started task: ${workItem.id}`);
-      } else {
-        workItem.status = 'failed';
-        this.logger.error(`Worker task assignment failed: ${workItem.id}`, { result });
-      }
-
-      // Send coordination message
-      this.sendMessage('manager', 'worker', 'task_assignment', {
-        workItem,
-        result
-      });
-
-    } catch (error) {
-      workItem.status = 'failed';
-      await this.handleAgentError('worker', 'tool_failure', error instanceof Error ? error.message : String(error));
-    } finally {
-      this.updateAgentStatus('worker', 'idle');
-    }
+    // Use the new comprehensive execution method
+    const context = this.buildWorkItemContext(workItem);
+    await this.executeWorkerTask(workItem, context);
   }
 
   /**
@@ -699,6 +775,261 @@ export class AgentCoordinator extends EventEmitter {
   }
 
   /**
+   * Storage for work items ready for handoff
+   */
+  private pendingWorkItems: Map<string, WorkItem> = new Map();
+  private handoffQueue: Array<{ workItem: WorkItem; context: string }> = [];
+
+  /**
+   * Store work items for handoff to worker
+   */
+  private storeWorkItemsForHandoff(workItems: WorkItem[]): void {
+    workItems.forEach(item => {
+      this.pendingWorkItems.set(item.id, item);
+      this.handoffQueue.push({
+        workItem: item,
+        context: this.buildWorkItemContext(item)
+      });
+    });
+    
+    this.logger.info('Work items stored for handoff', { count: workItems.length });
+  }
+
+  /**
+   * Check if there are pending handoffs
+   */
+  private hasPendingHandoffs(): boolean {
+    return this.handoffQueue.length > 0;
+  }
+
+  /**
+   * Process pending handoffs
+   */
+  private async processPendingHandoffs(): Promise<void> {
+    if (this.handoffQueue.length === 0) return;
+
+    const handoff = this.handoffQueue.shift();
+    if (handoff) {
+      this.logger.info('Processing handoff', { 
+        workItemId: handoff.workItem.id,
+        title: handoff.workItem.title 
+      });
+
+      await this.executeWorkerTask(handoff.workItem, handoff.context);
+    }
+  }
+
+  /**
+   * Trigger handoff to worker with specific work item
+   */
+  private async triggerWorkerHandoff(workItem: WorkItem, strategy: string): Promise<void> {
+    this.logger.info('Triggering worker handoff', {
+      workItemId: workItem.id,
+      title: workItem.title,
+      strategy: strategy.substring(0, 100)
+    });
+
+    try {
+      // Build comprehensive context for worker
+      const context = this.buildComprehensiveWorkItemContext(workItem, strategy);
+      
+      // Execute task immediately
+      await this.executeWorkerTask(workItem, context);
+      
+      // Emit handoff event
+      this.emitCoordinationEvent('MANAGER_WORKER_HANDOFF', 'manager', {
+        workItem,
+        context,
+        strategy
+      });
+
+    } catch (error) {
+      this.logger.error('Worker handoff failed', {
+        workItemId: workItem.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      // Put work item back in queue
+      this.handoffQueue.unshift({ workItem, context: strategy });
+    }
+  }
+
+  /**
+   * Execute worker task with proper context
+   */
+  private async executeWorkerTask(workItem: WorkItem, context: string): Promise<void> {
+    this.logger.info('Executing worker task', {
+      workItemId: workItem.id,
+      title: workItem.title
+    });
+
+    this.updateAgentStatus('worker', 'executing');
+    workItem.status = 'in_progress';
+    workItem.assignedTo = 'worker';
+
+    try {
+      const assignment: TaskAssignment = {
+        workItem,
+        context,
+        requiredTools: this.inferRequiredTools(workItem),
+        constraints: this.buildTaskConstraints(workItem),
+        qualityGates: this.buildQualityGates(workItem)
+      };
+
+      const result = await this.workerAgent.executeTask(assignment);
+      
+      if (result.success) {
+        workItem.status = 'completed';
+        this.executionContext.workflowState.completedWorkItems++;
+        
+        this.logger.success('Worker task completed', {
+          workItemId: workItem.id,
+          duration: result.duration,
+          artifacts: result.artifactsCreated.length
+        });
+
+        // Trigger manager review
+        setTimeout(() => {
+          this.triggerManagerReview(workItem);
+        }, 1000);
+        
+      } else {
+        workItem.status = 'failed';
+        this.logger.error('Worker task failed', {
+          workItemId: workItem.id,
+          error: result.error
+        });
+      }
+
+      // Send coordination message
+      this.sendMessage('worker', 'manager', 'completion_report', {
+        workItemId: workItem.id,
+        result,
+        workItem
+      });
+
+    } catch (error) {
+      workItem.status = 'failed';
+      await this.handleAgentError('worker', 'tool_failure', error instanceof Error ? error.message : String(error), workItem.id);
+    } finally {
+      this.updateAgentStatus('worker', 'idle');
+    }
+  }
+
+  /**
+   * Trigger manager review of completed work
+   */
+  private async triggerManagerReview(workItem: WorkItem): Promise<void> {
+    this.logger.info('Triggering manager review', {
+      workItemId: workItem.id,
+      title: workItem.title
+    });
+
+    try {
+      await this.managerReviewWork(workItem);
+    } catch (error) {
+      this.logger.error('Manager review failed', {
+        workItemId: workItem.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  /**
+   * Build comprehensive work item context with strategy
+   */
+  private buildComprehensiveWorkItemContext(workItem: WorkItem, strategy: string): string {
+    return `
+STRATEGIC CONTEXT:
+${strategy}
+
+WORK ITEM DETAILS:
+Title: ${workItem.title}
+Description: ${workItem.description}
+Priority: ${workItem.priority}/5
+Estimated Effort: ${workItem.estimatedEffort} hours
+
+ACCEPTANCE CRITERIA:
+${workItem.acceptanceCriteria.map(criteria => `- ${criteria}`).join('\n')}
+
+DEPENDENCIES:
+${workItem.dependencies && workItem.dependencies.length > 0 ? workItem.dependencies.map(dep => `- ${dep}`).join('\n') : 'None'}
+
+QUALITY REQUIREMENTS:
+- Code must follow best practices
+- Include appropriate error handling
+- Add tests where applicable
+- Document complex logic
+- Ensure security considerations
+    `.trim();
+  }
+
+  /**
+   * Build task constraints for worker
+   */
+  private buildTaskConstraints(workItem: WorkItem): string[] {
+    const constraints = [
+      'Follow established coding standards',
+      'Implement proper error handling',
+      'Write maintainable code'
+    ];
+
+    if (workItem.priority >= 4) {
+      constraints.push('High priority - focus on core functionality first');
+    }
+
+    if (workItem.estimatedEffort > 4) {
+      constraints.push('Complex task - break into smaller steps if needed');
+    }
+
+    return constraints;
+  }
+
+  /**
+   * Build quality gates for worker
+   */
+  private buildQualityGates(workItem: WorkItem): QualityGate[] {
+    return [
+      {
+        id: 'functionality-gate',
+        name: 'functionality',
+        criteria: [{ 
+          name: 'acceptance_criteria', 
+          description: 'All acceptance criteria must be met',
+          validator: 'checkAcceptanceCriteria',
+          weight: 1.0
+        }],
+        threshold: 0.9,
+        required: true
+      },
+      {
+        id: 'code-quality-gate',
+        name: 'code_quality',
+        criteria: [{ 
+          name: 'maintainability', 
+          description: 'Code must be clean and maintainable',
+          validator: 'checkCodeQuality',
+          weight: 0.8
+        }],
+        threshold: 0.8,
+        required: true
+      },
+      {
+        id: 'error-handling-gate',
+        name: 'error_handling',
+        criteria: [{ 
+          name: 'error_handling', 
+          description: 'Proper error handling must be implemented',
+          validator: 'checkErrorHandling',
+          weight: 0.8
+        }],
+        threshold: 0.8,
+        required: false
+      }
+    ];
+  }
+
+  /**
    * Helper methods for workflow management
    */
   private updateWorkflowPhase(phase: WorkflowPhase): void {
@@ -736,19 +1067,167 @@ export class AgentCoordinator extends EventEmitter {
 
   private isWorkflowComplete(): boolean {
     const { totalWorkItems, completedWorkItems } = this.executionContext.workflowState;
-    return totalWorkItems > 0 && completedWorkItems >= totalWorkItems;
+    const hasCompletedAllWork = totalWorkItems > 0 && completedWorkItems >= totalWorkItems;
+    const hasNoPendingWork = this.handoffQueue.length === 0 && this.pendingWorkItems.size === 0;
+    
+    return hasCompletedAllWork && hasNoPendingWork;
+  }
+
+  /**
+   * Validate that agents are properly initialized and ready
+   */
+  private validateAgentsReady(): boolean {
+    const managerReady = this.executionContext.managerState.status !== 'offline';
+    const workerReady = this.executionContext.workerState.status !== 'offline';
+    
+    if (!managerReady) {
+      this.logger.warning('Manager agent not ready', { status: this.executionContext.managerState.status });
+    }
+    
+    if (!workerReady) {
+      this.logger.warning('Worker agent not ready', { status: this.executionContext.workerState.status });
+    }
+    
+    return managerReady && workerReady;
+  }
+
+  /**
+   * Enhanced validation that handoffs are occurring
+   */
+  public validateHandoffExecution(): {
+    handoffsTriggered: boolean;
+    workerExecutions: boolean;
+    managerReviews: boolean;
+    communicationFlow: boolean;
+    issues: string[];
+  } {
+    const issues: string[] = [];
+    
+    // Check if handoffs were triggered
+    const handoffsTriggered = this.handoffQueue.length > 0 || this.executionContext.workflowState.completedWorkItems > 0;
+    if (!handoffsTriggered) {
+      issues.push('No handoffs detected - manager may not be delegating work');
+    }
+    
+    // Check if worker executed tasks
+    const workerExecutions = this.executionContext.workerState.currentWorkItems.length > 0 || 
+                            this.executionContext.workflowState.completedWorkItems > 0;
+    if (!workerExecutions) {
+      issues.push('Worker agent not executing tasks');
+    }
+    
+    // Check if manager reviewed work
+    const managerReviews = this.executionContext.communicationHistory.some(
+      msg => msg.type === 'quality_check' && msg.from === 'manager'
+    );
+    if (!managerReviews && this.executionContext.workflowState.completedWorkItems > 0) {
+      issues.push('Manager not reviewing completed work');
+    }
+    
+    // Check communication flow
+    const communicationFlow = this.executionContext.communicationHistory.length > 0;
+    if (!communicationFlow) {
+      issues.push('No inter-agent communication detected');
+    }
+    
+    return {
+      handoffsTriggered,
+      workerExecutions,
+      managerReviews,
+      communicationFlow,
+      issues
+    };
   }
 
   private getPendingWorkItems(): WorkItem[] {
-    // Return work items that need processing
-    // This would be implemented based on the actual work item storage
-    return [];
+    // Return work items from the pending queue
+    return Array.from(this.pendingWorkItems.values()).filter(item => 
+      item.status === 'planned' || item.status === 'blocked'
+    );
   }
 
   private findWorkItem(workItemId: string): WorkItem | null {
-    // Implementation to find work item by ID
-    // This would be implemented based on the actual work item storage
-    return null;
+    // Find work item in pending items or manager's active work items
+    const pendingItem = this.pendingWorkItems.get(workItemId);
+    if (pendingItem) return pendingItem;
+
+    const managerWorkItems = this.managerAgent.getActiveWorkItems();
+    return managerWorkItems.find(item => item.id === workItemId) || null;
+  }
+
+  /**
+   * Get recent Manager output for handoff analysis
+   */
+  private async getRecentManagerOutput(): Promise<ParsedOutput | null> {
+    try {
+      // Get the most recent manager output from message history
+      const recentManagerMessages = this.executionContext.communicationHistory
+        .filter(msg => msg.from === 'manager')
+        .slice(-3); // Get last 3 manager messages
+
+      if (recentManagerMessages.length === 0) {
+        return null;
+      }
+
+      // Combine recent messages into a single output for analysis
+      const combinedContent = recentManagerMessages
+        .map(msg => msg.payload?.content || msg.payload?.result || '')
+        .join('\n');
+
+      return {
+        result: combinedContent,
+        error: undefined
+      };
+
+    } catch (error) {
+      this.logger.error('Failed to get recent manager output', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Get all work items from various sources
+   */
+  private getAllWorkItems(): WorkItem[] {
+    // Collect work items from manager's active work items
+    const managerWorkItems = this.managerAgent.getActiveWorkItems();
+    
+    // Add any pending work items
+    const pendingItems = this.getPendingWorkItems();
+    
+    // Combine and deduplicate
+    const allItems = [...managerWorkItems, ...pendingItems];
+    const uniqueItems = allItems.filter((item, index, self) => 
+      index === self.findIndex(i => i.id === item.id)
+    );
+    
+    return uniqueItems;
+  }
+
+  /**
+   * Get current iteration count for handoff analysis
+   */
+  private getCurrentIterationCount(): number {
+    // This would track the number of coordination cycles in current phase
+    // For now, return a simple estimate based on workflow state
+    const startTime = this.executionContext.workflowState.startTime.getTime();
+    const currentTime = Date.now();
+    const elapsedMinutes = (currentTime - startTime) / (1000 * 60);
+    
+    // Estimate iterations based on elapsed time (assuming ~2-3 minutes per iteration)
+    return Math.floor(elapsedMinutes / 2.5);
+  }
+
+  /**
+   * Get work items that are ready for Worker handoff
+   */
+  private getReadyWorkItems(workItems: WorkItem[]): WorkItem[] {
+    return workItems.filter(item => 
+      item.status === 'planned' &&
+      item.acceptanceCriteria &&
+      item.acceptanceCriteria.length > 0 &&
+      !item.assignedTo // Not already assigned
+    );
   }
 
   private buildWorkItemContext(workItem: WorkItem): string {
@@ -847,6 +1326,9 @@ export class AgentCoordinator extends EventEmitter {
       this.coordinationInterval = null;
     }
 
+    // Validate handoff execution before shutdown
+    const validation = this.validateHandoffExecution();
+    
     // Shutdown agents
     if (this.managerAgent) {
       await this.managerAgent.shutdown();
@@ -859,16 +1341,30 @@ export class AgentCoordinator extends EventEmitter {
     // Save session
     await this.sessionManager.saveSession();
 
-    // Close logger
-    this.logger.close();
+    // Clear handoff queues
+    this.pendingWorkItems.clear();
+    this.handoffQueue = [];
 
     const duration = (Date.now() - this.startTime.getTime()) / 1000;
     this.logger.info('Agent coordination shutdown completed', { 
       duration: `${duration}s`,
-      messagesProcessed: this.executionContext.communicationHistory.length
+      messagesProcessed: this.executionContext.communicationHistory.length,
+      workItemsCompleted: this.executionContext.workflowState.completedWorkItems,
+      handoffValidation: {
+        handoffsTriggered: validation.handoffsTriggered,
+        workerExecutions: validation.workerExecutions,
+        issues: validation.issues
+      }
     });
 
-    this.emit('coordination_shutdown');
+    if (validation.issues.length > 0) {
+      this.logger.warning('Handoff execution issues detected', { issues: validation.issues });
+    }
+
+    // Close logger
+    this.logger.close();
+
+    this.emit('coordination_shutdown', { validation });
   }
 
   /**
@@ -890,6 +1386,21 @@ export class AgentCoordinator extends EventEmitter {
     return {
       manager: { ...this.executionContext.managerState },
       worker: { ...this.executionContext.workerState }
+    };
+  }
+
+  public getHandoffMetrics(): {
+    totalHandoffs: number;
+    lastHandoffTime: Date | undefined;
+    handoffRate: number;
+  } {
+    const elapsedTime = Date.now() - this.startTime.getTime();
+    const handoffRate = elapsedTime > 0 ? (this.handoffCount / (elapsedTime / (1000 * 60))) : 0;
+    
+    return {
+      totalHandoffs: this.handoffCount,
+      lastHandoffTime: this.lastHandoffTime,
+      handoffRate: Math.round(handoffRate * 100) / 100 // handoffs per minute
     };
   }
 }

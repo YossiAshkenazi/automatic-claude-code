@@ -153,7 +153,8 @@ export interface RecoveryStrategy {
 
 // Coordination Types
 export interface CoordinationEvent {
-  type: 'MANAGER_TASK_ASSIGNMENT' | 'WORKER_PROGRESS_UPDATE' | 'MANAGER_QUALITY_CHECK' | 'AGENT_COORDINATION' | 'WORKFLOW_TRANSITION';
+  type: 'MANAGER_TASK_ASSIGNMENT' | 'WORKER_PROGRESS_UPDATE' | 'MANAGER_QUALITY_CHECK' | 'AGENT_COORDINATION' | 
+        'WORKFLOW_TRANSITION' | 'MANAGER_WORKER_HANDOFF' | 'HANDOFF_VALIDATION' | 'TASK_DELEGATION' | 'EXECUTION_COMPLETE';
   agentRole: AgentRole;
   workItemId?: string;
   data: any;

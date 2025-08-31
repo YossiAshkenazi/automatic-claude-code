@@ -128,6 +128,166 @@ CREATE TRIGGER IF NOT EXISTS update_session_summaries_timestamp
         UPDATE session_summaries SET updated_at = CURRENT_TIMESTAMP WHERE session_id = NEW.session_id;
     END;
 
+-- ===============================================
+-- AUTHENTICATION AND USER MANAGEMENT TABLES
+-- ===============================================
+
+-- Users table - Core user accounts
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'viewer')),
+    is_active INTEGER NOT NULL DEFAULT 1,
+    last_login_at DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User sessions table - JWT and session management
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    refresh_token TEXT NOT NULL UNIQUE,
+    permissions TEXT, -- JSON array of permissions
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_accessed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ip_address TEXT,
+    user_agent TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- User profiles table - Extended user information and preferences
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    avatar TEXT, -- URL or file path to avatar image
+    preferences TEXT NOT NULL, -- JSON object with user preferences
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Audit log table - Track all user actions and system access
+CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    action TEXT NOT NULL,
+    resource_type TEXT, -- 'session', 'user', 'system', etc.
+    resource_id TEXT,
+    details TEXT, -- JSON object with action details
+    ip_address TEXT,
+    user_agent TEXT,
+    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- Permissions table - Define available permissions
+CREATE TABLE IF NOT EXISTS permissions (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    category TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User permissions table - Grant specific permissions to users
+CREATE TABLE IF NOT EXISTS user_permissions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    permission_id TEXT NOT NULL,
+    granted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    granted_by TEXT NOT NULL, -- user ID who granted this permission
+    expires_at DATETIME, -- NULL means no expiration
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+    FOREIGN KEY (granted_by) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, permission_id)
+);
+
+-- ===============================================
+-- AUTHENTICATION INDEXES FOR PERFORMANCE
+-- ===============================================
+
+-- User table indexes
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login_at);
+
+-- Session table indexes
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(refresh_token);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expires ON user_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_active ON user_sessions(is_active);
+
+-- Audit log indexes
+CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON audit_log(resource_type, resource_id);
+
+-- Permission indexes
+CREATE INDEX IF NOT EXISTS idx_permissions_name ON permissions(name);
+CREATE INDEX IF NOT EXISTS idx_permissions_category ON permissions(category);
+
+-- User permission indexes
+CREATE INDEX IF NOT EXISTS idx_user_permissions_user_id ON user_permissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_permissions_permission_id ON user_permissions(permission_id);
+CREATE INDEX IF NOT EXISTS idx_user_permissions_expires ON user_permissions(expires_at);
+
+-- ===============================================
+-- AUTHENTICATION TRIGGERS
+-- ===============================================
+
+-- Update user timestamp trigger
+CREATE TRIGGER IF NOT EXISTS update_users_timestamp 
+    AFTER UPDATE ON users
+    BEGIN
+        UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    END;
+
+-- Update user profile timestamp trigger
+CREATE TRIGGER IF NOT EXISTS update_user_profiles_timestamp 
+    AFTER UPDATE ON user_profiles
+    BEGIN
+        UPDATE user_profiles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    END;
+
+-- Update user session timestamp trigger
+CREATE TRIGGER IF NOT EXISTS update_user_sessions_timestamp 
+    AFTER UPDATE ON user_sessions
+    BEGIN
+        UPDATE user_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    END;
+
+-- Audit log trigger for user login/logout
+CREATE TRIGGER IF NOT EXISTS audit_user_login 
+    AFTER UPDATE ON users
+    WHEN NEW.last_login_at != OLD.last_login_at
+    BEGIN
+        INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, timestamp)
+        VALUES (
+            hex(randomblob(16)),
+            NEW.id,
+            'user_login',
+            'user',
+            NEW.id,
+            json_object('username', NEW.username, 'previous_login', OLD.last_login_at),
+            CURRENT_TIMESTAMP
+        );
+    END;
+
 -- Views for common queries
 CREATE VIEW IF NOT EXISTS session_overview AS
 SELECT 
@@ -169,3 +329,38 @@ SELECT
 FROM agent_communications ac
 ORDER BY timestamp DESC
 LIMIT 100;
+
+-- User management views
+CREATE VIEW IF NOT EXISTS user_overview AS
+SELECT 
+    u.id,
+    u.username,
+    u.email,
+    u.role,
+    u.is_active,
+    u.last_login_at,
+    u.created_at,
+    up.display_name,
+    (SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = u.id AND us.is_active = 1 AND us.expires_at > CURRENT_TIMESTAMP) as active_sessions,
+    (SELECT COUNT(*) FROM audit_log al WHERE al.user_id = u.id AND date(al.timestamp) = date('now')) as today_actions
+FROM users u
+LEFT JOIN user_profiles up ON u.id = up.user_id
+WHERE u.is_active = 1;
+
+CREATE VIEW IF NOT EXISTS session_activity_with_users AS
+SELECT 
+    s.id as session_id,
+    s.start_time,
+    s.end_time,
+    s.status,
+    s.initial_task,
+    s.work_dir,
+    u.username as created_by_user,
+    u.role as user_role,
+    ss.total_messages,
+    ss.success_rate
+FROM sessions s
+LEFT JOIN audit_log al ON al.resource_id = s.id AND al.action = 'session_create'
+LEFT JOIN users u ON al.user_id = u.id
+LEFT JOIN session_summaries ss ON s.id = ss.session_id
+ORDER BY s.start_time DESC;

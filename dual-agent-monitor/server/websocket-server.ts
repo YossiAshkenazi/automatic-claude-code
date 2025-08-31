@@ -1247,7 +1247,7 @@ app.get('/api/replay/status', async (req, res) => {
 
 
 // Enhanced port configuration with proper environment variable handling
-const DEFAULT_PORT = 4005;
+const DEFAULT_PORT = 4001;
 const PORT = parseInt(process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT.toString(), 10);
 
 server.listen(PORT, () => {

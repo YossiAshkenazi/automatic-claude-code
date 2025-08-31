@@ -4,6 +4,7 @@
 
 ### 1. Installation and Setup
 
+#### Option 1: Native Installation
 Ensure you have the latest version of Automatic Claude Code with dual-agent capabilities:
 
 ```bash
@@ -12,9 +13,30 @@ git pull origin main
 pnpm install
 pnpm run build
 
+# Make acc command available globally
+npm link
+
 # Verify dual-agent support
 acc --version
 acc config show | grep dualAgentMode
+```
+
+#### Option 2: Docker Installation
+For containerized environments:
+
+```bash
+# Update to latest version
+git pull origin main
+
+# Build Docker image
+pnpm run docker:build
+
+# Verify Docker installation
+docker run --rm automatic-claude-code --version
+
+# Create alias for easy usage
+echo 'alias acc-docker="docker run -it --rm -v \"$(pwd):/workspace:ro\" -v \"$HOME/.claude:/home/nodejs/.claude:ro\" automatic-claude-code"' >> ~/.bashrc
+source ~/.bashrc
 ```
 
 ### 2. Your First Dual-Agent Session
@@ -63,7 +85,7 @@ During execution, you'll see agent-specific output:
 In a separate terminal, monitor the coordination:
 
 ```bash
-# View real-time agent status
+# View real-time agent status (native)
 acc agents --status
 
 # Watch coordination logs
@@ -71,6 +93,30 @@ acc agents --logs --tail
 
 # Performance metrics
 acc agents --performance
+
+# Or start monitoring service
+pnpm run monitor:start  # Persistent monitor at localhost:6007
+# Or
+cd dual-agent-monitor && pnpm run dev  # Full dashboard at localhost:6011
+```
+
+### 5. Docker Monitoring (Optional)
+
+For Docker-based monitoring:
+
+```bash
+# Start Docker development environment
+pnpm run docker:dev
+
+# This starts:
+# - ACC app container
+# - PostgreSQL database
+# - Redis cache
+# - Monitoring backend (localhost:4001)
+# - Monitoring frontend (localhost:6011)
+
+# View Docker logs
+pnpm run docker:logs
 ```
 
 ## When to Use Each Mode
@@ -193,6 +239,7 @@ acc run "integrate React frontend with Express API, handle authentication state,
 
 ### Real-Time Monitoring
 
+#### Native Monitoring
 Keep these commands handy for monitoring long-running sessions:
 
 ```bash
@@ -207,6 +254,22 @@ acc logs --dual-agent --filter quality-gate --tail
 
 # Performance monitoring
 acc agents --performance --live
+```
+
+#### Web-Based Monitoring
+
+```bash
+# Option 1: Persistent lightweight monitor
+pnpm run monitor:start
+# Open http://localhost:6007
+
+# Option 2: Full-featured development dashboard
+cd dual-agent-monitor && pnpm run dev
+# Open http://localhost:6011
+
+# Option 3: Docker-based monitoring
+pnpm run docker:dev
+# Open http://localhost:6011
 ```
 
 ### Debugging Failed Sessions
@@ -232,8 +295,11 @@ acc logs --dual-agent --filter error --session <session-id>
 
 ### 1. Start Simple
 ```bash
-# Good first dual-agent task
+# Native execution - Good first dual-agent task
 acc run "implement user login with password validation and session management" --dual-agent -i 4
+
+# Docker execution - Same task in container
+acc-docker run "implement user login with password validation and session management" --dual-agent -i 4
 
 # Avoid complex tasks initially
 # acc run "build entire e-commerce platform" --dual-agent  # Too complex for first attempt
@@ -250,9 +316,18 @@ acc run "add auth" --dual-agent
 
 ### 3. Monitor Progress Actively
 ```bash
-# Watch coordination in real-time
+# Native: Watch coordination in real-time
 acc agents --status &
 acc run "your task" --dual-agent -v
+
+# Web-based: Start monitoring dashboard
+pnpm run monitor:start &  # Lightweight monitor
+acc run "your task" --dual-agent -v
+
+# Docker: Full monitoring environment
+pnpm run docker:dev &  # Complete environment
+# Use running container:
+docker exec -it automatic-claude-code-app node dist/index.js run "your task" --dual-agent -v
 ```
 
 ### 4. Understand Quality Gates

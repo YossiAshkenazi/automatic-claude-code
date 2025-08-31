@@ -364,37 +364,57 @@ export class ManagerAgent extends EventEmitter {
    */
   private buildTaskAnalysisPrompt(userRequest: string): string {
     return `
-You are a strategic Manager agent in a dual-agent system. Your role is to analyze complex tasks and break them down into manageable work items for implementation.
+You are a strategic Manager agent in a dual-agent system. Your role is to analyze complex tasks and break them down into manageable work items for a Worker agent to implement.
 
 TASK TO ANALYZE:
 ${userRequest}
 
-Please analyze this task and provide a comprehensive breakdown including:
+IMPORTANT: You MUST break down this task into MULTIPLE discrete work items that can be delegated to a Worker agent. Even simple tasks should be broken into at least 2-3 work items.
 
-1. **Work Items**: Break down the task into specific, actionable work items. Each work item should have:
-   - Clear title and description
-   - Acceptance criteria
-   - Priority level (1-5)
-   - Estimated effort in hours
-   - Dependencies on other work items
+Provide your analysis in the following EXACT format:
 
-2. **Implementation Strategy**: Provide a high-level strategy for approaching this task
+## WORK ITEMS
 
-3. **Risk Assessment**: Identify potential risks and challenges
+Work Item 1: [Title]
+Description: [Detailed description of what needs to be done]
+Acceptance Criteria: [What defines this work item as complete]
+Priority: [1-5, where 1 is highest]
+Effort: [Estimated hours]
+Dependencies: [List any dependencies or 'None']
 
-4. **Dependencies**: List any external dependencies or prerequisites
+Work Item 2: [Title]
+Description: [Detailed description of what needs to be done]
+Acceptance Criteria: [What defines this work item as complete]
+Priority: [1-5, where 1 is highest]
+Effort: [Estimated hours]
+Dependencies: [List any dependencies or 'None']
 
-5. **Quality Gates**: Define quality checkpoints and success criteria
+[Continue with more work items as needed...]
 
-Format your response as structured output that can be parsed programmatically.
+## IMPLEMENTATION STRATEGY
+[Your high-level strategy for approaching this task]
 
-Focus on creating work items that are:
-- Specific and measurable
-- Implementable by a skilled developer
-- Testable and verifiable
-- Properly scoped (not too large or too small)
+## RISK ASSESSMENT
+- [Risk 1]
+- [Risk 2]
+[Continue as needed...]
 
-Consider the technical complexity, required tools, and integration points.
+## DEPENDENCIES
+- [Dependency 1]
+- [Dependency 2]
+[Or write 'None' if no external dependencies]
+
+## QUALITY GATES
+- [Quality checkpoint 1]
+- [Quality checkpoint 2]
+[Continue as needed...]
+
+REMEMBER:
+- Break the task into AT LEAST 2-3 work items, even for simple tasks
+- Each work item should be specific and actionable
+- Work items should be sized for 1-4 hours of work
+- Consider creating work items for: implementation, testing, validation, documentation
+- The Worker agent will execute these items, so be clear and specific
     `.trim();
   }
 
@@ -620,70 +640,175 @@ Provide actionable insights that will help coordinate the next phase of work.
   private extractWorkItems(result: string, userRequest: string): WorkItem[] {
     const workItems: WorkItem[] = [];
     
-    // Try to extract structured work items from the result
-    const workItemPattern = /(?:Work Item|Task|Item)\s*(\d+)?[:\-]?\s*(.+?)(?=(?:Work Item|Task|Item)\s*\d+|$)/gis;
-    const matches = result.match(workItemPattern);
+    // More robust pattern to extract work items
+    const workItemSection = result.match(/##\s*WORK\s*ITEMS[\s\S]*?(?=##|$)/i);
+    const workItemText = workItemSection ? workItemSection[0] : result;
+    
+    // Pattern to match individual work items
+    const workItemPattern = /Work\s*Item\s*(\d+)[:\s]*([^\n]+)[\s\S]*?(?=Work\s*Item\s*\d+|##|$)/gi;
+    const matches = [...workItemText.matchAll(workItemPattern)];
     
     if (matches && matches.length > 0) {
       matches.forEach((match, index) => {
-        const workItem = this.parseWorkItemFromText(match, index, userRequest);
+        const fullItemText = match[0];
+        const itemNumber = match[1];
+        const title = match[2].trim();
+        
+        const workItem = this.parseWorkItemFromStructuredText(fullItemText, title, index, userRequest);
         if (workItem) {
           workItems.push(workItem);
         }
       });
     }
     
-    // If no structured items found, create a default work item
+    // If we didn't find properly formatted work items, try a fallback approach
     if (workItems.length === 0) {
-      workItems.push(this.createDefaultWorkItem(userRequest));
+      workItems.push(...this.createFallbackWorkItems(result, userRequest));
+    }
+    
+    // Ensure we always have at least 2 work items for delegation
+    if (workItems.length === 1) {
+      workItems.push(this.createValidationWorkItem(userRequest));
+    }
+    
+    this.logger.info(`Extracted ${workItems.length} work items from Manager analysis`);
+    
+    return workItems;
+  }
+
+  /**
+   * Parse work item from structured text format
+   */
+  private parseWorkItemFromStructuredText(text: string, title: string, index: number, userRequest: string): WorkItem | null {
+    try {
+      // Extract description
+      const descriptionMatch = text.match(/Description:\s*([^\n]+)/i);
+      const description = descriptionMatch ? descriptionMatch[1].trim() : title;
+      
+      // Extract acceptance criteria
+      const criteriaMatch = text.match(/Acceptance\s*Criteria:\s*([^\n]+)/i);
+      const acceptanceCriteria = criteriaMatch 
+        ? [criteriaMatch[1].trim()]
+        : [`Complete: ${title}`];
+      
+      // Extract priority (default to 3)
+      const priorityMatch = text.match(/Priority:\s*(\d+)/i);
+      const priority = priorityMatch ? parseInt(priorityMatch[1]) : 3;
+      
+      // Extract effort estimate (default to 2 hours)
+      const effortMatch = text.match(/Effort:\s*(\d+)/i);
+      const estimatedEffort = effortMatch ? parseInt(effortMatch[1]) : 2;
+      
+      // Extract dependencies
+      const depMatch = text.match(/Dependencies:\s*([^\n]+)/i);
+      const dependencies = depMatch && !depMatch[1].toLowerCase().includes('none')
+        ? [depMatch[1].trim()]
+        : [];
+      
+      return {
+        id: this.generateWorkItemId(),
+        title: title.replace(/\[|\]/g, ''),
+        description,
+        acceptanceCriteria,
+        priority,
+        estimatedEffort,
+        dependencies,
+        status: 'planned' as TaskStatus,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    } catch (error) {
+      this.logger.error('Failed to parse structured work item', { text, error });
+      return null;
+    }
+  }
+
+  /**
+   * Create fallback work items when parsing fails
+   */
+  private createFallbackWorkItems(result: string, userRequest: string): WorkItem[] {
+    const workItems: WorkItem[] = [];
+    const now = new Date();
+    
+    // Always create at least implementation and validation items
+    workItems.push({
+      id: this.generateWorkItemId(),
+      title: 'Implement Core Functionality',
+      description: `Implement the main functionality for: ${userRequest.substring(0, 200)}`,
+      acceptanceCriteria: [
+        'Core functionality implemented',
+        'Code follows best practices',
+        'Basic error handling in place'
+      ],
+      priority: 1,
+      estimatedEffort: 3,
+      dependencies: [],
+      status: 'planned' as TaskStatus,
+      createdAt: now,
+      updatedAt: now
+    });
+    
+    workItems.push({
+      id: this.generateWorkItemId(),
+      title: 'Testing and Validation',
+      description: 'Test the implemented functionality and ensure it meets requirements',
+      acceptanceCriteria: [
+        'Functionality tested',
+        'Edge cases handled',
+        'Meets user requirements'
+      ],
+      priority: 2,
+      estimatedEffort: 2,
+      dependencies: ['Implementation complete'],
+      status: 'planned' as TaskStatus,
+      createdAt: now,
+      updatedAt: now
+    });
+    
+    // Add a third item if the task seems complex
+    if (userRequest.length > 100 || userRequest.toLowerCase().includes('and')) {
+      workItems.push({
+        id: this.generateWorkItemId(),
+        title: 'Documentation and Cleanup',
+        description: 'Document the implementation and clean up any technical debt',
+        acceptanceCriteria: [
+          'Code is documented',
+          'Any TODOs addressed',
+          'Code is production-ready'
+        ],
+        priority: 3,
+        estimatedEffort: 1,
+        dependencies: ['Testing complete'],
+        status: 'planned' as TaskStatus,
+        createdAt: now,
+        updatedAt: now
+      });
     }
     
     return workItems;
   }
 
   /**
-   * Parse individual work item from text
+   * Create a validation work item
    */
-  private parseWorkItemFromText(text: string, index: number, userRequest: string): WorkItem | null {
-    try {
-      // Extract title (first line or sentence)
-      const titleMatch = text.match(/(?:Work Item|Task|Item)\s*\d*[:\-]?\s*([^\n]+)/i);
-      const title = titleMatch ? titleMatch[1].trim() : `Work Item ${index + 1}`;
-      
-      // Extract description
-      const descriptionMatch = text.match(/(?:description|desc)[:\-]\s*([^\n]+)/i);
-      const description = descriptionMatch ? descriptionMatch[1].trim() : title;
-      
-      // Extract acceptance criteria
-      const criteriaMatches = text.match(/(?:criteria|acceptance)[:\-]?\s*([\s\S]*?)(?=(?:priority|effort|dependencies)|$)/i);
-      const acceptanceCriteria = criteriaMatches 
-        ? criteriaMatches[1].split(/[,\n]/).map(c => c.trim()).filter(c => c.length > 0)
-        : ['Implementation completed and tested'];
-      
-      // Extract priority (default to 3)
-      const priorityMatch = text.match(/priority[:\-]?\s*(\d+)/i);
-      const priority = priorityMatch ? parseInt(priorityMatch[1]) : 3;
-      
-      // Extract effort estimate (default to 2 hours)
-      const effortMatch = text.match(/(?:effort|hours?|time)[:\-]?\s*(\d+)/i);
-      const estimatedEffort = effortMatch ? parseInt(effortMatch[1]) : 2;
-      
-      return {
-        id: this.generateWorkItemId(),
-        title,
-        description,
-        acceptanceCriteria,
-        priority,
-        estimatedEffort,
-        dependencies: [],
-        status: 'planned' as TaskStatus,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-    } catch (error) {
-      this.logger.error('Failed to parse work item', { text, error });
-      return null;
-    }
+  private createValidationWorkItem(userRequest: string): WorkItem {
+    const now = new Date();
+    return {
+      id: this.generateWorkItemId(),
+      title: 'Final Validation and Quality Check',
+      description: 'Validate that all requirements have been met and perform quality checks',
+      acceptanceCriteria: [
+        'All requirements validated',
+        'Quality standards met',
+        'Ready for production'
+      ],
+      priority: 2,
+      estimatedEffort: 1,
+      dependencies: ['Primary implementation complete'],
+      status: 'planned' as TaskStatus,
+      createdAt: now,
+      updatedAt: now
+    };
   }
 
   /**

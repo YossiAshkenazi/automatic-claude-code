@@ -12,6 +12,15 @@ Welcome to the comprehensive documentation for the Automatic Claude Code dual-ag
 - Best practices for beginners
 - Common patterns and troubleshooting
 
+### 🐳 [Docker Deployment Guide](../DOCKER.md) **(NEW)**
+**Complete containerization and deployment guide**
+- Docker image building and configuration
+- Development environment setup
+- Production deployment with Docker Compose
+- Container monitoring and health checks
+- Data persistence and backup strategies
+- Troubleshooting containerized deployments
+
 ### 🏗️ [Dual-Agent Architecture](dual-agent-architecture.md)
 **Deep dive into the system design**
 - Manager-Worker agent roles and responsibilities
@@ -83,6 +92,9 @@ Welcome to the comprehensive documentation for the Automatic Claude Code dual-ag
 - **Custom Workflows**: Configurable coordination patterns
 - **Hook Integration**: Event-driven observability and extensions
 - **Cross-platform Support**: Windows, Linux, and macOS compatibility
+- **Container Support**: Full Docker containerization for isolated execution
+- **Service Reliability**: Multiple deployment options with auto-restart capabilities
+- **Persistent Monitoring**: Always-running lightweight monitoring service
 
 ### Development Workflows
 - **Incremental Development**: Step-by-step feature implementation
@@ -90,6 +102,9 @@ Welcome to the comprehensive documentation for the Automatic Claude Code dual-ag
 - **Framework Migrations**: Coordinated technology transitions
 - **Quality Assurance**: Automated testing and validation
 - **Team Collaboration**: Shared sessions and progress tracking
+- **Containerized Development**: Docker-based isolated development environments
+- **Production Deployment**: Docker Compose with database persistence and monitoring
+- **Multi-Environment Support**: Native, Docker, and cloud deployment options
 
 ## 📋 Documentation Standards
 
@@ -123,6 +138,10 @@ Documentation is maintained alongside code versions:
 - ✅ Real-time monitoring and debugging guides
 - ✅ Advanced usage patterns and examples
 - ✅ Complete API reference documentation
+- ✅ **Docker deployment guide** (NEW)
+- ✅ **Persistent monitoring service documentation** (NEW)
+- ✅ **Multi-deployment option guides** (NEW)
+- ✅ **Service reliability and auto-restart documentation** (NEW)
 
 ### Planned Documentation Enhancements
 - 🚧 Interactive tutorials with embedded examples

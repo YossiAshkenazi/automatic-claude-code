@@ -45,6 +45,22 @@ sudo npm run build
 sudo npm link
 ```
 
+### Method 1B: Docker Installation (Recommended for Containerized Environments)
+```bash
+# Clone the repository
+git clone https://github.com/YossiAshkenazi/automatic-claude-code.git
+cd automatic-claude-code
+
+# Build Docker image
+pnpm run docker:build
+
+# Verify Docker installation
+docker run --rm automatic-claude-code
+
+# Use with Docker
+docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" automatic-claude-code run "your task" -i 3
+```
+
 ### Method 2: Local Usage with Alias (Alternative)
 ```bash
 # Clone and build (same as above)
@@ -80,7 +96,8 @@ npm install -g automatic-claude-code
 
 ## Monitoring Setup
 
-To use the real-time monitoring dashboard:
+### Option 1: Development Mode (Full Featured)
+To use the full-featured dual-agent monitoring dashboard:
 
 ```bash
 # In a separate terminal, start the monitoring server
@@ -93,6 +110,40 @@ pnpm run dev
 # - Backend API: http://localhost:4001
 # - WebSocket server for real-time updates
 ```
+
+### Option 2: Persistent Monitoring Service (Always Running)
+For a lightweight, always-running monitoring service:
+
+```bash
+# Start persistent monitoring server
+pnpm run monitor:start
+
+# Or with auto-restart using PM2
+pnpm run monitor:pm2
+
+# Or with PowerShell persistence (Windows)
+pnpm run monitor:persistent
+
+# Monitor service status
+pnpm run monitor:status
+```
+
+### Option 3: Docker Compose (Production Ready)
+```bash
+# Start all services with Docker
+pnpm run docker:prod
+
+# Or start development environment
+pnpm run docker:dev
+
+# Monitor services
+pnpm run docker:logs
+```
+
+**Monitoring Dashboard URLs:**
+- **Persistent Monitor**: http://localhost:6007 (lightweight, always running)
+- **Full Dashboard**: http://localhost:6011 (development mode)
+- **API Server**: http://localhost:4001 (WebSocket + REST API)
 
 ## Prerequisites
 
@@ -218,6 +269,23 @@ acc run "migrate to TypeScript" --dual-agent -c
 acc run "build microservices" --dual-agent --max-concurrent 3 -i 8
 ```
 
+### Docker Options
+
+```bash
+# Run with Docker (development)
+acc_docker_run="docker run -it --rm -v \"$(pwd):/workspace:ro\" -v \"$HOME/.claude:/home/nodejs/.claude:ro\" automatic-claude-code"
+$acc_docker_run run "implement user authentication" --dual-agent -i 5
+
+# Development environment with monitoring
+pnpm run docker:dev
+
+# Production deployment
+pnpm run docker:prod
+
+# View logs
+pnpm run docker:logs
+```
+
 ### Debugging and Session Management
 
 ```bash
@@ -306,6 +374,7 @@ Configuration file is stored at `~/.automatic-claude-code/config.json`:
 
 ## All Available Commands
 
+### Core Functionality
 ```bash
 # Core functionality
 acc run "<task>"              # Run automated development task (single-agent)
@@ -332,6 +401,51 @@ acc logs --agent <manager|worker> # View specific agent logs
 acc logs --coordination      # View agent communication logs
 acc logs --list              # List all log files
 acc logs --tail              # Watch logs in real-time
+```
+
+### Docker Commands
+```bash
+# Docker image management
+pnpm run docker:build        # Build production Docker image
+pnpm run docker:build-dev    # Build development Docker image
+pnpm run docker:shell        # Access container shell
+
+# Development environments
+pnpm run docker:dev          # Start development environment
+pnpm run docker:dev-app      # Start only ACC app container
+pnpm run docker:dev-monitoring # Start only monitoring services
+
+# Production deployment
+pnpm run docker:prod         # Start production environment
+pnpm run docker:prod-full    # Start production with nginx proxy
+
+# Container management
+pnpm run docker:stop         # Stop development services
+pnpm run docker:stop-prod    # Stop production services
+pnpm run docker:logs         # View all container logs
+pnpm run docker:logs-app     # View ACC app logs only
+pnpm run docker:clean        # Clean Docker resources
+pnpm run docker:backup       # Run database backup
+```
+
+### Monitoring Commands
+```bash
+# Persistent monitoring service
+pnpm run monitor:start       # Start lightweight persistent monitor
+pnpm run monitor:status      # Check monitoring service status
+
+# PM2 process management
+pnpm run monitor:pm2         # Start with PM2 auto-restart
+pnpm run monitor:pm2-stop    # Stop PM2 service
+pnpm run monitor:pm2-restart # Restart PM2 service
+pnpm run monitor:pm2-logs    # View PM2 logs
+pnpm run monitor:pm2-status  # View PM2 status
+
+# PowerShell persistence (Windows)
+pnpm run monitor:persistent  # Start with PowerShell auto-restart
+
+# Docker monitoring
+pnpm run monitor:docker      # Start PostgreSQL and Redis only
 ```
 
 ## Session Management
@@ -388,6 +502,39 @@ pnpm run typecheck
 pnpm run build
 ```
 
+### Docker Development
+
+```bash
+# Build Docker image for development
+pnpm run docker:build-dev
+
+# Run development environment
+pnpm run docker:dev
+
+# Access running container shell
+pnpm run docker:shell
+
+# Stop services
+pnpm run docker:stop
+
+# Clean Docker resources
+pnpm run docker:clean
+```
+
+### Monitoring Development
+
+```bash
+# Start persistent monitoring service
+pnpm run monitor:start
+
+# Monitor with PM2
+pnpm run monitor:pm2
+pnpm run monitor:pm2-logs
+
+# Check monitoring status
+pnpm run monitor:status
+```
+
 ## Use Cases
 
 ### 🤖 Perfect for Dual-Agent Mode
@@ -424,6 +571,14 @@ pnpm run build
 - **Verbose logging** for debugging and transparency
 - **Progress checkpoints** for safe interruption and resumption
 
+### 🐳 Container Safety
+- **Isolated execution environment** with Docker containers
+- **Resource limits** and health checks
+- **Read-only workspace mounting** for safety
+- **Non-root user execution** in containers
+- **Automatic service recovery** with restart policies
+- **Persistent monitoring** with crash detection and recovery
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -431,6 +586,35 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 MIT
+
+## Production Deployment
+
+### Docker Compose Production
+```bash
+# Production deployment with all services
+pnpm run docker:prod-full
+
+# Basic production deployment
+pnpm run docker:prod
+
+# View production logs
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Backup data
+pnpm run docker:backup
+```
+
+### Environment Configuration
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Edit production settings
+vim .env
+
+# Start with custom environment
+docker-compose --env-file .env -f docker-compose.prod.yml up -d
+```
 
 ## Disclaimer
 
@@ -442,3 +626,5 @@ This tool runs Claude Code automatically with dual-agent coordination and can ma
 - **Monitor agent communication** - Use `acc agents --logs` to understand decision-making
 - **Verify quality gates** - Ensure Manager validation aligns with your standards
 - **Start with simple tasks** - Build confidence with dual-agent coordination gradually
+- **Use Docker for isolation** - Container execution provides additional safety layers
+- **Monitor service health** - Persistent monitoring ensures system reliability

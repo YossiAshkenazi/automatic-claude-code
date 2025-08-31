@@ -20,15 +20,45 @@
 
 This guide provides comprehensive instructions for deploying the Dual Agent Monitor system to production environments. The system supports multiple deployment architectures:
 
+- **Persistent Monitoring Service** - Lightweight always-running monitor with auto-restart (NEW)
 - **Single Server Deployment** - Docker Compose based deployment for smaller installations
 - **Kubernetes Deployment** - Container orchestration for scalable deployments
 - **Cloud Provider Deployment** - Infrastructure as Code using Terraform for AWS, Azure, or GCP
+
+### Deployment Options Overview
+
+#### Option 1: Persistent Monitoring Service (Recommended for Development)
+- **Use Case**: Development, testing, continuous monitoring
+- **Resources**: Low (< 100MB RAM)
+- **Features**: Basic monitoring, health checks, status dashboard
+- **Setup Time**: < 2 minutes
+- **Auto-restart**: Yes (PM2 or PowerShell)
+
+#### Option 2: Docker Compose (Recommended for Production)
+- **Use Case**: Production deployments, full feature set
+- **Resources**: Medium (500MB-2GB RAM)
+- **Features**: Full monitoring, database persistence, advanced analytics
+- **Setup Time**: < 10 minutes
+- **Auto-restart**: Yes (Docker restart policies)
+
+#### Option 3: Kubernetes (Enterprise)
+- **Use Case**: Large-scale deployments, high availability
+- **Resources**: High (2GB+ RAM)
+- **Features**: Full monitoring, auto-scaling, load balancing
+- **Setup Time**: 30+ minutes
+- **Auto-restart**: Yes (Kubernetes controllers)
 
 ## Prerequisites
 
 ### System Requirements
 
-**Minimum Requirements:**
+**Persistent Monitoring Service:**
+- CPU: 1 core
+- RAM: 128MB
+- Storage: 1GB
+- Network: Any
+
+**Minimum Requirements (Docker Compose):**
 - CPU: 2 cores
 - RAM: 4GB
 - Storage: 20GB SSD
@@ -77,7 +107,15 @@ sudo chown -R dual-agent-deploy:dual-agent-deploy /opt/dual-agent-monitor
 ```bash
 cd /opt/dual-agent-monitor
 git clone https://github.com/your-org/automatic-claude-code.git .
-cd dual-agent-monitor
+```
+
+4. **Install dependencies:**
+```bash
+# For persistent monitoring
+npm install -g pm2  # Optional, for PM2 process management
+
+# For Docker deployments
+# Docker installation already covered above
 ```
 
 ## Infrastructure Options
@@ -125,6 +163,104 @@ cd dual-agent-monitor
 - Less control over infrastructure
 
 **Use Case:** Enterprise deployments, teams preferring managed services
+
+## Persistent Monitoring Service Deployment (NEW)
+
+### Step 1: Quick Setup (< 2 minutes)
+
+```bash
+# Navigate to project directory
+cd /opt/dual-agent-monitor
+
+# Install dependencies (if not already done)
+pnpm install
+pnpm run build
+
+# Start persistent monitoring service
+pnpm run monitor:start
+```
+
+The persistent monitor will be available at http://localhost:6007
+
+### Step 2: Auto-Restart Setup (Optional)
+
+#### Option A: PM2 Process Manager (Recommended)
+```bash
+# Install PM2 globally
+npm install -g pm2
+
+# Start with PM2
+pnpm run monitor:pm2
+
+# Configure PM2 startup (survives reboots)
+pm2 startup
+pm2 save
+
+# Monitor PM2 status
+pm2 list
+pm2 logs acc-monitoring
+```
+
+#### Option B: PowerShell Persistence (Windows)
+```bash
+# Windows PowerShell auto-restart
+pnpm run monitor:persistent
+```
+
+#### Option C: systemd Service (Linux)
+```bash
+# Create systemd service file
+sudo tee /etc/systemd/system/acc-monitor.service > /dev/null <<EOF
+[Unit]
+Description=Automatic Claude Code Monitoring Service
+After=network.target
+
+[Service]
+Type=simple
+User=dual-agent-deploy
+WorkingDirectory=/opt/dual-agent-monitor
+ExecStart=/usr/bin/node monitoring-server.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=6007
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start service
+sudo systemctl enable acc-monitor
+sudo systemctl start acc-monitor
+sudo systemctl status acc-monitor
+```
+
+### Step 3: Verify Persistent Service
+
+```bash
+# Check service status
+pnpm run monitor:status
+
+# Or manually test
+curl -f http://localhost:6007/health
+
+# View logs (if using PM2)
+pm2 logs acc-monitoring
+
+# View logs (if using systemd)
+sudo journalctl -u acc-monitor -f
+```
+
+### Persistent Monitor Features
+
+- **Lightweight Dashboard**: Basic monitoring UI with session count, uptime, memory usage
+- **Health Check Endpoint**: `/health` for external monitoring systems
+- **Status API**: `/api/status` for programmatic status checks
+- **WebSocket Support**: Real-time updates for connected clients
+- **Auto-Restart**: Configurable with PM2, systemd, or PowerShell
+- **Low Resource Usage**: < 100MB RAM, minimal CPU usage
+- **Session Tracking**: Basic session counting and client connection monitoring
+- **Graceful Shutdown**: Proper cleanup on SIGINT/SIGTERM
 
 ## Docker Compose Deployment
 

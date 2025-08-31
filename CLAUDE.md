@@ -17,7 +17,9 @@ Automatic Claude Code is a TypeScript CLI application that runs Claude Code in a
 
 ## Essential Commands
 
-### Installation (Required First Step)
+### Installation Options
+
+#### Option 1: Native Installation (Required First Step)
 ```bash
 # Install acc command globally using npm link
 cd automatic-claude-code
@@ -27,6 +29,19 @@ npm link  # This makes 'acc' available globally
 
 # Verify installation
 acc examples
+```
+
+#### Option 2: Docker Installation (Containerized)
+```bash
+# Build Docker image
+cd automatic-claude-code
+pnpm run docker:build
+
+# Verify Docker installation
+docker run --rm automatic-claude-code
+
+# Use with Docker
+docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" automatic-claude-code run "your task" -i 3
 ```
 
 ### Development Commands
@@ -39,7 +54,9 @@ pnpm run typecheck    # Type-check without emitting
 pnpm run clean        # Remove dist directory
 ```
 
-### Core Usage (with acc command)
+### Core Usage
+
+#### Native Commands (with acc)
 ```bash
 # From ANY project directory - use acc command
 acc run "task" --dual-agent -i 5 -v
@@ -54,14 +71,59 @@ acc logs --tail   # Watch logs in real-time
 node "../automatic-claude-code/dist/index.js" run "task" --dual-agent -i 5 -v
 ```
 
-### Monitoring UI
+#### Docker Commands
+```bash
+# Single container usage
+docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" automatic-claude-code run "task" --dual-agent -i 5 -v
+
+# Development environment
+pnpm run docker:dev
+
+# Production deployment
+pnpm run docker:prod
+
+# View logs
+pnpm run docker:logs
+```
+
+### Monitoring UI Options
+
+#### Full Development Monitoring
 ```bash
 # Start monitoring server
 cd dual-agent-monitor
+pnpm install
 pnpm run dev  # Starts UI on http://localhost:6011, API on http://localhost:4001
 
 # Access monitoring dashboard
 # Open http://localhost:6011 to watch dual-agent coordination in real-time
+```
+
+#### Persistent Monitoring Service (Always Running)
+```bash
+# Start persistent monitoring service
+pnpm run monitor:start  # Lightweight server on http://localhost:6007
+
+# With PM2 auto-restart
+pnpm run monitor:pm2
+
+# With PowerShell persistence (Windows)
+pnpm run monitor:persistent
+
+# Check status
+pnpm run monitor:status
+```
+
+#### Docker Monitoring
+```bash
+# Docker development with monitoring
+pnpm run docker:dev
+
+# Docker production with all services
+pnpm run docker:prod
+
+# Access Docker monitoring
+# Open http://localhost:6011 (frontend) and http://localhost:4001 (API)
 ```
 
 ## Architecture
@@ -225,6 +287,9 @@ The system now provides comprehensive monitoring and analysis:
 - Handles both stdout and stderr streams
 - Implements graceful shutdown with process cleanup
 - Manages session continuity via Claude's `--resume` flag
+- **Docker Support**: Full containerization with multi-stage builds
+- **Service Management**: PM2 integration for auto-restart capabilities
+- **Container Health**: Health checks and resource monitoring
 
 ### Error Handling Strategy
 - Detects errors via exit codes and output patterns
@@ -250,11 +315,23 @@ Enhanced configuration at `~/.automatic-claude-code/config.json`:
     "enabled": true,
     "dashboardPort": 6011,
     "apiPort": 4001,
+    "persistentPort": 6007,
     "autoStart": true,
     "persistSessions": true,
     "enableWebhooks": true,
     "mlInsights": true,
-    "anomalyDetection": true
+    "anomalyDetection": true,
+    "dockerSupport": true
+  },
+  "docker": {
+    "enabled": true,
+    "imageTag": "automatic-claude-code:latest",
+    "networkName": "automatic-claude-code-network",
+    "volumeMounts": {
+      "workspace": "/workspace:ro",
+      "claude": "/home/nodejs/.claude:ro",
+      "config": "/home/nodejs/.automatic-claude-code"
+    }
   },
   "database": {
     "type": "postgresql",
@@ -559,13 +636,33 @@ The system includes comprehensive test suites:
 
 ## Recent Updates (Updated: 2024-08-31)
 
-### Latest Changes (2024-08-31)
+### Latest Major Changes (2024-08-31)
+- **Complete Docker Containerization**: Full Docker support with multi-stage builds
+  - Dockerfile with development and production targets
+  - docker-compose.yml for development environment
+  - docker-compose.prod.yml for production deployment
+  - .dockerignore and .env.example for proper configuration
+- **Persistent Monitoring Service**: Always-running monitoring server
+  - monitoring-server.js with auto-restart capabilities
+  - PM2 integration for process management
+  - PowerShell and batch startup scripts
+  - Health checks and status monitoring
+- **Enhanced Package Scripts**: 30+ new Docker and monitoring commands
+  - docker:build, docker:dev, docker:prod family
+  - monitor:start, monitor:pm2, monitor:persistent commands
+  - Service management and backup utilities
+- **Service Reliability**: Multiple startup and recovery options
+  - Auto-restart on crashes
+  - Process health monitoring
+  - Container health checks
+  - Graceful shutdown handling
+
+### Previous Changes
 - **Global Command Installation**: Added `npm link` setup for global `acc` command access
-- **Monitoring Port Update**: Changed monitoring UI port from 6007 to 6011
+- **Monitoring Port Configuration**: Multiple monitoring options (6007 persistent, 6011 full)
 - **ML Service Temporary Disable**: Disabled problematic ML components for stability
 - **Enhanced Monitoring Integration**: Added `/api/monitoring` endpoint for dual-agent coordination
 - **Improved Cross-Directory Usage**: Streamlined usage from any project directory
-- **Stability Improvements**: Fixed initialization errors in monitoring services
 
 ### Major Features Added
 - **Production Deployment Infrastructure**: Complete Docker, Kubernetes, and Terraform configurations
@@ -592,18 +689,36 @@ The system includes comprehensive test suites:
 - **Comprehensive Documentation**: Production deployment guide (DEPLOYMENT.md)
 
 ### Breaking Changes
-- **Port Configuration**: Monitoring UI now runs on port 6011 (updated from 6007), API on port 4001
+- **Port Configuration**: Multiple monitoring options available
+  - Persistent monitor: port 6007 (lightweight, always running)
+  - Full dashboard: port 6011 (development mode)
+  - API server: port 4001 (WebSocket + REST)
 - **Command Installation**: `acc` command now requires `npm link` for global installation
-- **Configuration Schema**: Extended config.json with monitoring, database, and webhook settings
+- **Configuration Schema**: Extended config.json with Docker, monitoring, database, and webhook settings
+- **Docker Integration**: New container-based deployment options available
+- **Service Management**: Multiple startup options (native, PM2, Docker, PowerShell)
 - **ML Service**: Machine Learning features temporarily disabled to ensure core functionality
 - **Database Requirement**: PostgreSQL recommended for production, in-memory fallback for development
 
 ## Important Notes
 
 - **Package Manager**: Project uses pnpm (primary) with npm fallback for WSL compatibility
-- **Monitoring Ports**: UI Dashboard (6011), API Server (4001), WebSocket (4001)
+- **Monitoring Ports**: Multiple options available
+  - Persistent Monitor (6007) - Lightweight, always running
+  - Full Dashboard (6011) - Development mode with all features
+  - API Server (4001) - WebSocket + REST API
+- **Container Support**: Full Docker containerization available
+  - Single container for ACC CLI
+  - Multi-service development environment
+  - Production-ready deployment with database and monitoring
+- **Service Reliability**: Multiple startup and management options
+  - Native Node.js execution
+  - PM2 process management with auto-restart
+  - Docker containers with health checks
+  - PowerShell/batch scripts for Windows
 - **Database Setup**: PostgreSQL recommended for production, in-memory fallback for development
 - **Session Storage**: All sessions persisted to database with replay capabilities
 - **Process Spawning**: Uses shell execution for cross-platform compatibility
-- **Claude CLI Required**: Must have Claude Code CLI installed and in PATH
+- **Claude CLI Required**: Must have Claude Code CLI installed and in PATH (or use Docker)
 - **Webhook Configuration**: External integrations configurable via config.json or dashboard UI
+- **Cross-Platform**: Native support for Windows, macOS, Linux, plus Docker for any platform

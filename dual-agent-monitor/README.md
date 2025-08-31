@@ -37,7 +37,7 @@ A comprehensive web UI for monitoring and analyzing dual-agent Claude Code syste
 
 ## Quick Start
 
-### Development Mode
+### Option 1: Development Mode (Full Features)
 
 ```bash
 # Install dependencies
@@ -52,7 +52,29 @@ This will start:
 - Backend API server at http://localhost:4001
 - WebSocket server for real-time updates
 
-### Production Mode
+### Option 2: Persistent Monitoring Service (Always Running)
+
+```bash
+# From main project directory
+cd ../
+
+# Start lightweight persistent monitor
+pnpm run monitor:start
+
+# Or with PM2 auto-restart
+pnpm run monitor:pm2
+
+# Check status
+pnpm run monitor:status
+```
+
+This will start:
+- Lightweight monitoring server at http://localhost:6007
+- Basic health and status monitoring
+- Auto-restart capabilities
+- Lower resource usage
+
+### Option 3: Production Mode
 
 ```bash
 # Build the application
@@ -62,7 +84,24 @@ pnpm run build
 pnpm start
 ```
 
-### Docker Deployment
+### Option 4: Docker Deployment
+
+```bash
+# From main project directory - Development environment
+cd ../
+pnpm run docker:dev
+
+# Or production deployment
+pnpm run docker:prod
+
+# View logs
+pnpm run docker:logs
+
+# Stop services
+pnpm run docker:stop
+```
+
+#### Legacy Docker Compose (from dual-agent-monitor directory)
 
 ```bash
 # Build and start with Docker Compose
@@ -200,9 +239,20 @@ The frontend connects to:
 ## Monitoring Integration
 
 ### Current Port Configuration
-The monitoring system uses the following ports:
+The monitoring system supports multiple port configurations:
+
+#### Full Development Mode
 - **Port 4001**: Dual-agent monitor backend (API + WebSocket)
 - **Port 6011**: Dual-agent monitor frontend (development)
+
+#### Persistent Monitoring Mode
+- **Port 6007**: Lightweight persistent monitor (basic dashboard + API)
+
+#### Docker Mode
+- **Port 4001**: Backend API (mapped from container)
+- **Port 6011**: Frontend (mapped from container)
+- **Port 5432**: PostgreSQL database (mapped from container)
+- **Port 6379**: Redis cache (mapped from container)
 
 ### Event Flow
 ```

@@ -31,7 +31,371 @@ const queryClient = new QueryClient({
   },
 });
 
-function EnterpriseAppInner() {\n  const [currentView, setCurrentView] = useState<ViewMode>('overview');
+function EnterpriseAppInner() {
+  const [currentView, setCurrentView] = useState<ViewMode>('overview');
   const [sidebarPath, setSidebarPath] = useState('/overview');
   
-  const {\n    sessions,\n    selectedSession,\n    isLoading,\n    error,\n    isConnected,\n    loadSessions,\n    setSelectedSession,\n    handleWebSocketMessage,\n    setConnectionStatus,\n    clearError,\n  } = useSessionStore();\n\n  const { lastMessage, connectionStatus } = useWebSocket('ws://localhost:6003');\n\n  // Handle WebSocket messages\n  useEffect(() => {\n    if (lastMessage) {\n      try {\n        const message: WebSocketMessage = JSON.parse(lastMessage);\n        handleWebSocketMessage(message);\n      } catch (error) {\n        console.error('Failed to parse WebSocket message:', error);\n      }\n    }\n  }, [lastMessage, handleWebSocketMessage]);\n\n  // Handle connection status changes\n  useEffect(() => {\n    setConnectionStatus(connectionStatus === 'Open');\n  }, [connectionStatus, setConnectionStatus]);\n\n  // Load initial data\n  useEffect(() => {\n    loadSessions();\n  }, [loadSessions]);\n\n  // Handle sidebar navigation\n  const handleSidebarNavigation = (path: string) => {\n    setSidebarPath(path);\n    \n    // Map paths to view modes\n    if (path === '/overview') setCurrentView('overview');\n    else if (path === '/sessions') setCurrentView('sessions');\n    else if (path.startsWith('/agents')) setCurrentView('agents');\n    else if (path.startsWith('/analytics/performance')) setCurrentView('metrics');\n    else if (path.startsWith('/analytics/timeline')) setCurrentView('timeline');\n    else setCurrentView('overview');\n  };\n\n  const handleSelectSession = (sessionId: string) => {\n    setSelectedSession(sessionId);\n    if (currentView === 'sessions') {\n      setCurrentView('dual-pane');\n    }\n  };\n\n  const renderMainContent = () => {\n    if (isLoading && sessions.length === 0) {\n      return (\n        <div className=\"flex-1 flex items-center justify-center\">\n          <div className=\"flex flex-col items-center gap-4 text-muted-foreground\">\n            <Loader2 className=\"w-8 h-8 animate-spin\" />\n            <p>Loading sessions...</p>\n          </div>\n        </div>\n      );\n    }\n\n    if (error) {\n      return (\n        <div className=\"flex-1 flex items-center justify-center\">\n          <Card className=\"w-full max-w-md\">\n            <CardHeader>\n              <CardTitle className=\"flex items-center gap-2 text-error-600\">\n                <AlertCircle className=\"w-5 h-5\" />\n                Connection Error\n              </CardTitle>\n            </CardHeader>\n            <CardContent className=\"space-y-4\">\n              <p className=\"text-muted-foreground\">{error}</p>\n              <div className=\"flex gap-2\">\n                <Button onClick={loadSessions} className=\"flex-1\">\n                  Retry\n                </Button>\n                <Button variant=\"outline\" onClick={clearError}>\n                  Dismiss\n                </Button>\n              </div>\n            </CardContent>\n          </Card>\n        </div>\n      );\n    }\n\n    switch (currentView) {\n      case 'overview':\n        return (\n          <div className=\"flex-1 p-6 space-y-6\">\n            {/* Quick Stats */}\n            <div className=\"grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4\">\n              <Card>\n                <CardContent className=\"p-4\">\n                  <div className=\"flex items-center gap-3\">\n                    <div className=\"p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg\">\n                      <motion.div\n                        animate={{\n                          scale: sessions.filter(s => s.status === 'running').length > 0 ? [1, 1.1, 1] : 1\n                        }}\n                        transition={{ duration: 2, repeat: Infinity }}\n                        className=\"w-6 h-6 bg-blue-600 rounded-full\"\n                      />\n                    </div>\n                    <div>\n                      <p className=\"text-2xl font-bold\">{sessions.filter(s => s.status === 'running').length}</p>\n                      <p className=\"text-sm text-muted-foreground\">Active Sessions</p>\n                    </div>\n                  </div>\n                </CardContent>\n              </Card>\n              \n              <Card>\n                <CardContent className=\"p-4\">\n                  <div className=\"flex items-center gap-3\">\n                    <div className=\"p-2 bg-green-100 dark:bg-green-900/20 rounded-lg\">\n                      <div className=\"w-6 h-6 bg-green-600 rounded-full\" />\n                    </div>\n                    <div>\n                      <p className=\"text-2xl font-bold\">{sessions.filter(s => s.status === 'completed').length}</p>\n                      <p className=\"text-sm text-muted-foreground\">Completed</p>\n                    </div>\n                  </div>\n                </CardContent>\n              </Card>\n              \n              <Card>\n                <CardContent className=\"p-4\">\n                  <div className=\"flex items-center gap-3\">\n                    <div className=\"p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg\">\n                      <div className=\"w-6 h-6 bg-purple-600 rounded-full\" />\n                    </div>\n                    <div>\n                      <p className=\"text-2xl font-bold\">{sessions.reduce((acc, s) => acc + s.messages.length, 0)}</p>\n                      <p className=\"text-sm text-muted-foreground\">Total Messages</p>\n                    </div>\n                  </div>\n                </CardContent>\n              </Card>\n              \n              <Card>\n                <CardContent className=\"p-4\">\n                  <div className=\"flex items-center gap-3\">\n                    <div className={cn(\n                      \"p-2 rounded-lg\",\n                      isConnected \n                        ? \"bg-success-100 dark:bg-success-900/20\" \n                        : \"bg-error-100 dark:bg-error-900/20\"\n                    )}>\n                      <div className={cn(\n                        \"w-6 h-6 rounded-full\",\n                        isConnected ? \"bg-success-600 animate-pulse\" : \"bg-error-600\"\n                      )} />\n                    </div>\n                    <div>\n                      <p className=\"text-sm font-medium\">\n                        {isConnected ? 'Connected' : 'Disconnected'}\n                      </p>\n                      <p className=\"text-xs text-muted-foreground\">WebSocket Status</p>\n                    </div>\n                  </div>\n                </CardContent>\n              </Card>\n            </div>\n\n            {/* Recent Sessions & Performance */}\n            <div className=\"grid grid-cols-1 lg:grid-cols-2 gap-6\">\n              <Card>\n                <CardHeader>\n                  <CardTitle>Recent Sessions</CardTitle>\n                </CardHeader>\n                <CardContent>\n                  <div className=\"space-y-3\">\n                    {sessions.slice(0, 5).map(session => (\n                      <div \n                        key={session.id}\n                        className=\"flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 cursor-pointer transition-colors\"\n                        onClick={() => {\n                          setSelectedSession(session.id);\n                          setCurrentView('dual-pane');\n                        }}\n                      >\n                        <div className=\"flex-1 min-w-0\">\n                          <p className=\"font-medium truncate\">{session.initialTask}</p>\n                          <p className=\"text-sm text-muted-foreground\">{session.messages.length} messages</p>\n                        </div>\n                        <Badge variant={\n                          session.status === 'running' ? 'success' :\n                          session.status === 'completed' ? 'secondary' :\n                          session.status === 'error' ? 'error' : 'warning'\n                        }>\n                          {session.status}\n                        </Badge>\n                      </div>\n                    ))}\n                  </div>\n                </CardContent>\n              </Card>\n\n              <EnhancedPerformanceMetrics className=\"!p-0 !space-y-0\" />\n            </div>\n          </div>\n        );\n\n      case 'sessions':\n        return (\n          <EnhancedSessionList \n            onSelectSession={handleSelectSession}\n            className=\"flex-1\"\n          />\n        );\n\n      case 'dual-pane':\n        if (!selectedSession) {\n          return (\n            <div className=\"flex-1 flex items-center justify-center\">\n              <div className=\"text-center\">\n                <p className=\"text-lg font-medium mb-2\">No session selected</p>\n                <p className=\"text-muted-foreground mb-4\">Select a session to view dual-agent communication</p>\n                <Button onClick={() => setCurrentView('sessions')}>Browse Sessions</Button>\n              </div>\n            </div>\n          );\n        }\n        \n        return (\n          <div className=\"flex-1 flex flex-col\">\n            <ResizablePanels\n              leftPanel={\n                <EnhancedMessagePane\n                  agentType=\"manager\"\n                  messages={selectedSession.messages}\n                  session={selectedSession}\n                  className=\"h-full\"\n                />\n              }\n              rightPanel={\n                <EnhancedMessagePane\n                  agentType=\"worker\"\n                  messages={selectedSession.messages}\n                  session={selectedSession}\n                  className=\"h-full\"\n                />\n              }\n              className=\"flex-1\"\n            />\n          </div>\n        );\n\n      case 'timeline':\n        if (!selectedSession) {\n          return (\n            <div className=\"flex-1 flex items-center justify-center\">\n              <div className=\"text-center\">\n                <p className=\"text-lg font-medium mb-2\">No session selected</p>\n                <p className=\"text-muted-foreground mb-4\">Select a session to view timeline</p>\n                <Button onClick={() => setCurrentView('sessions')}>Browse Sessions</Button>\n              </div>\n            </div>\n          );\n        }\n        \n        return (\n          <EnhancedMessagePane\n            agentType=\"all\"\n            messages={selectedSession.messages}\n            session={selectedSession}\n            className=\"flex-1\"\n          />\n        );\n\n      case 'metrics':\n        return <EnhancedPerformanceMetrics className=\"flex-1\" />;\n\n      case 'agents':\n        return (\n          <div className=\"flex-1 p-6\">\n            <div className=\"text-center py-12\">\n              <p className=\"text-lg font-medium mb-2\">Agent Management</p>\n              <p className=\"text-muted-foreground\">Coming soon - Advanced agent configuration and monitoring</p>\n            </div>\n          </div>\n        );\n\n      default:\n        return null;\n    }\n  };\n\n  return (\n    <div className=\"h-screen bg-background flex overflow-hidden\">\n      {/* Sidebar */}\n      <Sidebar\n        currentPath={sidebarPath}\n        onNavigate={handleSidebarNavigation}\n      />\n      \n      {/* Main Content Area */}\n      <div className=\"flex-1 flex flex-col overflow-hidden\">\n        <Header \n          currentView={currentView}\n          onViewChange={(view) => setCurrentView(view as ViewMode)}\n        />\n        \n        <main className=\"flex-1 overflow-hidden\">\n          <AnimatePresence mode=\"wait\">\n            <motion.div\n              key={currentView}\n              initial={{ opacity: 0, x: 20 }}\n              animate={{ opacity: 1, x: 0 }}\n              exit={{ opacity: 0, x: -20 }}\n              transition={{ duration: 0.2 }}\n              className=\"h-full\"\n            >\n              {renderMainContent()}\n            </motion.div>\n          </AnimatePresence>\n        </main>\n      </div>\n      \n      {/* Connection Status Indicator */}\n      {!isConnected && (\n        <motion.div\n          initial={{ opacity: 0, y: 50 }}\n          animate={{ opacity: 1, y: 0 }}\n          className=\"fixed bottom-4 right-4 z-50\"\n        >\n          <Card className=\"bg-error-50 border-error-200 dark:bg-error-950/20 dark:border-error-800\">\n            <CardContent className=\"p-3\">\n              <div className=\"flex items-center gap-2 text-error-700 dark:text-error-300\">\n                <WifiOff className=\"w-4 h-4\" />\n                <span className=\"text-sm font-medium\">Connection Lost</span>\n              </div>\n            </CardContent>\n          </Card>\n        </motion.div>\n      )}\n    </div>\n  );\n}\n\nexport function EnterpriseApp() {\n  return (\n    <QueryClientProvider client={queryClient}>\n      <ThemeProvider defaultTheme=\"system\" storageKey=\"dual-agent-monitor-theme\">\n        <EnterpriseAppInner />\n        <Toaster />\n      </ThemeProvider>\n    </QueryClientProvider>\n  );\n}
+  const {
+    sessions,
+    selectedSession,
+    isLoading,
+    error,
+    isConnected,
+    loadSessions,
+    setSelectedSession,
+    handleWebSocketMessage,
+    setConnectionStatus,
+    clearError,
+  } = useSessionStore();
+
+  const { lastMessage, connectionStatus } = useWebSocket('ws://localhost:6003');
+
+  // Handle WebSocket messages
+  useEffect(() => {
+    if (lastMessage) {
+      try {
+        const message: WebSocketMessage = JSON.parse(lastMessage);
+        handleWebSocketMessage(message);
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    }
+  }, [lastMessage, handleWebSocketMessage]);
+
+  // Handle connection status changes
+  useEffect(() => {
+    setConnectionStatus(connectionStatus === 'Open');
+  }, [connectionStatus, setConnectionStatus]);
+
+  // Load initial data
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  // Handle sidebar navigation
+  const handleSidebarNavigation = (path: string) => {
+    setSidebarPath(path);
+    
+    // Map paths to view modes
+    if (path === '/overview') setCurrentView('overview');
+    else if (path === '/sessions') setCurrentView('sessions');
+    else if (path.startsWith('/agents')) setCurrentView('agents');
+    else if (path.startsWith('/analytics/performance')) setCurrentView('metrics');
+    else if (path.startsWith('/analytics/timeline')) setCurrentView('timeline');
+    else setCurrentView('overview');
+  };
+
+  const handleSelectSession = (sessionId: string) => {
+    setSelectedSession(sessionId);
+    if (currentView === 'sessions') {
+      setCurrentView('dual-pane');
+    }
+  };
+
+  const renderMainContent = () => {
+    if (isLoading && (!sessions || sessions.length === 0)) {
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4 text-muted-foreground">
+            <Loader2 className="w-8 h-8 animate-spin" />
+            <p>Loading sessions...</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="w-5 h-5" />
+                Connection Error
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground">{error}</p>
+              <div className="flex gap-2">
+                <Button onClick={loadSessions} className="flex-1">
+                  Retry
+                </Button>
+                <Button variant="outline" onClick={clearError}>
+                  Dismiss
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    switch (currentView) {
+      case 'overview':
+        return (
+          <div className="flex-1 p-6 space-y-6">
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                      <motion.div
+                        animate={{
+                          scale: sessions && sessions.filter(s => s.status === 'running').length > 0 ? [1, 1.1, 1] : 1
+                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="w-6 h-6 bg-blue-600 rounded-full"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{sessions ? sessions.filter(s => s.status === 'running').length : 0}</p>
+                      <p className="text-sm text-muted-foreground">Active Sessions</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
+                      <div className="w-6 h-6 bg-green-600 rounded-full" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{sessions ? sessions.filter(s => s.status === 'completed').length : 0}</p>
+                      <p className="text-sm text-muted-foreground">Completed</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                      <div className="w-6 h-6 bg-purple-600 rounded-full" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{sessions ? sessions.reduce((acc, s) => acc + (s.messages?.length || 0), 0) : 0}</p>
+                      <p className="text-sm text-muted-foreground">Total Messages</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "p-2 rounded-lg",
+                      isConnected 
+                        ? "bg-green-100 dark:bg-green-900/20" 
+                        : "bg-red-100 dark:bg-red-900/20"
+                    )}>
+                      <div className={cn(
+                        "w-6 h-6 rounded-full",
+                        isConnected ? "bg-green-600 animate-pulse" : "bg-red-600"
+                      )} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {isConnected ? 'Connected' : 'Disconnected'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">WebSocket Status</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Recent Sessions & Performance */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Sessions</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {sessions && sessions.length > 0 ? sessions.slice(0, 5).map(session => (
+                      <div 
+                        key={session.id}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 cursor-pointer transition-colors"
+                        onClick={() => {
+                          setSelectedSession(session.id);
+                          setCurrentView('dual-pane');
+                        }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{session.initialTask}</p>
+                          <p className="text-sm text-muted-foreground">{session.messages?.length || 0} messages</p>
+                        </div>
+                        <Badge variant={
+                          session.status === 'running' ? 'success' :
+                          session.status === 'completed' ? 'secondary' :
+                          session.status === 'error' ? 'error' : 'warning'
+                        }>
+                          {session.status}
+                        </Badge>
+                      </div>
+                    )) : (
+                      <div className="text-center py-4 text-muted-foreground">
+                        No sessions available
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <EnhancedPerformanceMetrics className="!p-0 !space-y-0" />
+            </div>
+          </div>
+        );
+
+      case 'sessions':
+        return (
+          <EnhancedSessionList 
+            onSelectSession={handleSelectSession}
+            className="flex-1"
+          />
+        );
+
+      case 'dual-pane':
+        if (!selectedSession) {
+          return (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-lg font-medium mb-2">No session selected</p>
+                <p className="text-muted-foreground mb-4">Select a session to view dual-agent communication</p>
+                <Button onClick={() => setCurrentView('sessions')}>Browse Sessions</Button>
+              </div>
+            </div>
+          );
+        }
+        
+        return (
+          <div className="flex-1 flex flex-col">
+            <ResizablePanels
+              leftPanel={
+                <EnhancedMessagePane
+                  agentType="manager"
+                  messages={selectedSession?.messages || []}
+                  session={selectedSession}
+                  className="h-full"
+                />
+              }
+              rightPanel={
+                <EnhancedMessagePane
+                  agentType="worker"
+                  messages={selectedSession?.messages || []}
+                  session={selectedSession}
+                  className="h-full"
+                />
+              }
+              className="flex-1"
+            />
+          </div>
+        );
+
+      case 'timeline':
+        if (!selectedSession) {
+          return (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-lg font-medium mb-2">No session selected</p>
+                <p className="text-muted-foreground mb-4">Select a session to view timeline</p>
+                <Button onClick={() => setCurrentView('sessions')}>Browse Sessions</Button>
+              </div>
+            </div>
+          );
+        }
+        
+        return (
+          <EnhancedMessagePane
+            agentType="all"
+            messages={selectedSession?.messages || []}
+            session={selectedSession}
+            className="flex-1"
+          />
+        );
+
+      case 'metrics':
+        return <EnhancedPerformanceMetrics className="flex-1" />;
+
+      case 'agents':
+        return (
+          <div className="flex-1 p-6">
+            <div className="text-center py-12">
+              <p className="text-lg font-medium mb-2">Agent Management</p>
+              <p className="text-muted-foreground">Coming soon - Advanced agent configuration and monitoring</p>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="h-screen bg-background flex overflow-hidden">
+      {/* Sidebar */}
+      <Sidebar
+        currentPath={sidebarPath}
+        onNavigate={handleSidebarNavigation}
+      />
+      
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header 
+          currentView={currentView}
+          onViewChange={(view) => setCurrentView(view as ViewMode)}
+        />
+        
+        <main className="flex-1 overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentView}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              className="h-full"
+            >
+              {renderMainContent()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+      
+      {/* Connection Status Indicator */}
+      {!isConnected && (
+        <motion.div
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed bottom-4 right-4 z-50"
+        >
+          <Card className="bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800">
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
+                <WifiOff className="w-4 h-4" />
+                <span className="text-sm font-medium">Connection Lost</span>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+export function EnterpriseApp() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider defaultTheme="system" storageKey="dual-agent-monitor-theme">
+        <EnterpriseAppInner />
+        <Toaster />
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+}

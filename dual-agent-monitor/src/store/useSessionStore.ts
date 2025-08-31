@@ -77,7 +77,7 @@ export const useSessionStore = create<SessionStore>()(
 
       updateSession: (sessionId, updates) =>
         set((state) => ({
-          sessions: state.sessions.map((session) =>
+          sessions: (state.sessions || []).map((session) =>
             session.id === sessionId ? { ...session, ...updates } : session
           ),
           selectedSession:
@@ -88,24 +88,25 @@ export const useSessionStore = create<SessionStore>()(
 
       removeSession: (sessionId) =>
         set((state) => ({
-          sessions: state.sessions.filter((session) => session.id !== sessionId),
+          sessions: (state.sessions || []).filter((session) => session.id !== sessionId),
           selectedSession:
             state.selectedSession?.id === sessionId ? null : state.selectedSession,
         })),
 
       setSelectedSession: (sessionId) => {
-        const session = sessionId ? get().sessions.find((s) => s.id === sessionId) : null;
+        const sessions = get().sessions || [];
+        const session = sessionId ? sessions.find((s) => s.id === sessionId) : null;
         set({ selectedSession: session });
       },
 
       // Message actions
       addMessage: (message) =>
         set((state) => {
-          const updatedSessions = state.sessions.map((session) =>
+          const updatedSessions = (state.sessions || []).map((session) =>
             session.id === message.sessionId
               ? {
                   ...session,
-                  messages: [...session.messages, message],
+                  messages: [...(session.messages || []), message],
                   lastActivity: message.timestamp,
                 }
               : session
@@ -115,7 +116,7 @@ export const useSessionStore = create<SessionStore>()(
             state.selectedSession?.id === message.sessionId
               ? {
                   ...state.selectedSession,
-                  messages: [...state.selectedSession.messages, message],
+                  messages: [...(state.selectedSession.messages || []), message],
                   lastActivity: message.timestamp,
                 }
               : state.selectedSession;
@@ -128,9 +129,9 @@ export const useSessionStore = create<SessionStore>()(
 
       updateMessage: (messageId, updates) =>
         set((state) => {
-          const updatedSessions = state.sessions.map((session) => ({
+          const updatedSessions = (state.sessions || []).map((session) => ({
             ...session,
-            messages: session.messages.map((msg) =>
+            messages: (session.messages || []).map((msg) =>
               msg.id === messageId ? { ...msg, ...updates } : msg
             ),
           }));
@@ -138,7 +139,7 @@ export const useSessionStore = create<SessionStore>()(
           const updatedSelectedSession = state.selectedSession
             ? {
                 ...state.selectedSession,
-                messages: state.selectedSession.messages.map((msg) =>
+                messages: (state.selectedSession.messages || []).map((msg) =>
                   msg.id === messageId ? { ...msg, ...updates } : msg
                 ),
               }
@@ -263,7 +264,8 @@ export const useSessionStore = create<SessionStore>()(
 
       exportSession: async (sessionId, format) => {
         try {
-          const session = get().sessions.find(s => s.id === sessionId);
+          const sessions = get().sessions || [];
+          const session = sessions.find(s => s.id === sessionId);
           if (!session) throw new Error('Session not found');
           
           if (format === 'json') {
@@ -277,7 +279,7 @@ export const useSessionStore = create<SessionStore>()(
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
           } else if (format === 'csv') {
-            const csvData = session.messages.map(msg => ({
+            const csvData = (session.messages || []).map(msg => ({
               timestamp: msg.timestamp,
               agentType: msg.agentType,
               messageType: msg.messageType,
@@ -320,14 +322,14 @@ export const useSessionStore = create<SessionStore>()(
       getFilteredSessions: () => {
         const { sessions, filters, sortBy, sortOrder } = get();
         
-        let filtered = sessions.filter((session) => {
+        let filtered = (sessions || []).filter((session) => {
           if (filters.status && session.status !== filters.status) return false;
           if (filters.searchTerm) {
             const term = filters.searchTerm.toLowerCase();
             const searchableText = [
               session.initialTask,
               session.workDir,
-              ...session.messages.map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+              ...(session.messages || []).map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
             ].join(' ').toLowerCase();
             
             if (!searchableText.includes(term)) return false;
@@ -355,8 +357,8 @@ export const useSessionStore = create<SessionStore>()(
               bValue = new Date(b.lastActivity || b.startTime);
               break;
             case 'messageCount':
-              aValue = a.messages.length;
-              bValue = b.messages.length;
+              aValue = (a.messages || []).length;
+              bValue = (b.messages || []).length;
               break;
             default:
               return 0;

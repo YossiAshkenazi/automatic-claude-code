@@ -6,6 +6,24 @@ export default {
   ],
   darkMode: 'class',
   theme: {
+    screens: {
+      'xs': '475px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
+      // Mobile-first breakpoints
+      'mobile': {'max': '767px'},
+      'tablet': {'min': '768px', 'max': '1023px'},
+      'desktop': {'min': '1024px'},
+      // Touch-specific
+      'touch': {'raw': '(hover: none)'},
+      'no-touch': {'raw': '(hover: hover)'},
+      // Orientation
+      'portrait': {'raw': '(orientation: portrait)'},
+      'landscape': {'raw': '(orientation: landscape)'},
+    },
     extend: {
       colors: {
         border: "hsl(var(--border))",
@@ -118,6 +136,33 @@ export default {
       boxShadow: {
         'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
         'glow': '0 0 20px rgba(59, 130, 246, 0.5)',
+        'mobile': '0 4px 20px 0 rgba(0, 0, 0, 0.1)',
+        'mobile-lg': '0 8px 30px 0 rgba(0, 0, 0, 0.15)',
+      },
+      spacing: {
+        'safe-top': 'env(safe-area-inset-top)',
+        'safe-bottom': 'env(safe-area-inset-bottom)',
+        'safe-left': 'env(safe-area-inset-left)',
+        'safe-right': 'env(safe-area-inset-right)',
+        '18': '4.5rem',
+        '88': '22rem',
+      },
+      fontSize: {
+        'xxs': ['0.625rem', { lineHeight: '0.75rem' }],
+      },
+      maxWidth: {
+        'mobile': '428px',
+        'mobile-lg': '480px',
+      },
+      minHeight: {
+        'mobile': 'calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
+        'touch': '44px', // iOS minimum touch target
+      },
+      padding: {
+        'safe': 'env(safe-area-inset-bottom)',
+      },
+      margin: {
+        'safe': 'env(safe-area-inset-bottom)',
       },
     },
   },

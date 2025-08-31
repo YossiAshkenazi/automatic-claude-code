@@ -14,6 +14,8 @@ import { LogViewer } from './logViewer';
 import { launchTUI } from './tuiBrowser';
 import { AgentOrchestrator } from './agentOrchestrator';
 import { ClaudeUtils } from './claudeUtils';
+import { monitoringManager } from './monitoringManager';
+import { config } from './config';
 import Table from 'cli-table3';
 
 interface LoopOptions {
@@ -476,23 +478,54 @@ async function main() {
     .option('-t, --tools <tools>', 'Comma-separated list of allowed tools')
     .option('-c, --continue-on-error', 'Continue loop even if errors occur')
     .option('-v, --verbose', 'Show detailed output')
+    .option('--dual-agent', 'Enable dual-agent mode (Manager + Worker)')
+    .option('--manager-model <model>', 'Manager agent model (sonnet or opus)', 'opus')
+    .option('--worker-model <model>', 'Worker agent model (sonnet or opus)', 'sonnet')
+    .option('--no-monitoring', 'Disable monitoring server')
     .option('--timeout <minutes>', 'Timeout for each Claude execution in minutes (default: 30)', '30')
     .action(async (prompt, options) => {
-      const app = new AutomaticClaudeCode();
-      
-      try {
-        await app.runLoop(prompt, {
-          maxIterations: parseInt(options.iterations),
-          model: options.model,
-          workDir: options.dir,
-          allowedTools: options.tools,
-          continueOnError: options.continueOnError,
-          verbose: options.verbose,
-          timeout: parseInt(options.timeout) * 60000, // Convert minutes to milliseconds
-        });
-      } catch (error) {
-        console.error(chalk.red('Fatal error:'), error);
-        process.exit(1);
+      // Start monitoring server if enabled and not disabled
+      if (!options.noMonitoring && config.isMonitoringEnabled()) {
+        await monitoringManager.startServer();
+      }
+
+      // Handle dual-agent mode
+      if (options.dualAgent) {
+        const orchestrator = new AgentOrchestrator();
+        
+        try {
+          await orchestrator.startDualAgentSession(prompt, {
+            maxIterations: parseInt(options.iterations),
+            managerModel: options.managerModel,
+            workerModel: options.workerModel,
+            workDir: options.dir,
+            allowedTools: options.tools,
+            continueOnError: options.continueOnError,
+            verbose: options.verbose,
+            timeout: parseInt(options.timeout) * 60000,
+          });
+        } catch (error) {
+          console.error(chalk.red('Fatal error in dual-agent mode:'), error);
+          process.exit(1);
+        }
+      } else {
+        // Single-agent mode
+        const app = new AutomaticClaudeCode();
+        
+        try {
+          await app.runLoop(prompt, {
+            maxIterations: parseInt(options.iterations),
+            model: options.model,
+            workDir: options.dir,
+            allowedTools: options.tools,
+            continueOnError: options.continueOnError,
+            verbose: options.verbose,
+            timeout: parseInt(options.timeout) * 60000,
+          });
+        } catch (error) {
+          console.error(chalk.red('Fatal error:'), error);
+          process.exit(1);
+        }
       }
     });
 
@@ -571,11 +604,18 @@ async function main() {
       console.log(chalk.cyan('  acc run "add database connection pooling and optimization" -i 3'));
       
       console.log(chalk.yellow.bold('\n🤖 Dual-Agent Mode:'));
-      console.log(chalk.cyan('  acc dual "design and implement a REST API for user management" -i 8'));
-      console.log(chalk.cyan('  acc dual "refactor legacy code to modern TypeScript patterns" -i 6 --verbose'));
-      console.log(chalk.cyan('  acc dual "create a comprehensive test suite with 90% coverage" -i 5'));
-      console.log(chalk.cyan('  acc dual "implement OAuth2 authentication with refresh tokens" -i 7 --manager opus --worker sonnet'));
-      console.log(chalk.cyan('  acc dual "optimize database queries and add caching layer" -i 4 --continue-on-error'));
+      console.log(chalk.cyan('  acc run "design and implement a REST API for user management" --dual-agent -i 8'));
+      console.log(chalk.cyan('  acc run "refactor legacy code to modern TypeScript patterns" --dual-agent -i 6 --verbose'));
+      console.log(chalk.cyan('  acc run "create a comprehensive test suite with 90% coverage" --dual-agent -i 5'));
+      console.log(chalk.cyan('  acc run "implement OAuth2 authentication with refresh tokens" --dual-agent -i 7 --manager-model opus --worker-model sonnet'));
+      console.log(chalk.cyan('  acc run "optimize database queries and add caching layer" --dual-agent -i 4 --continue-on-error'));
+      
+      console.log(chalk.yellow.bold('\n📊 Monitoring Commands:'));
+      console.log(chalk.cyan('  acc monitor                 Show monitoring status'));
+      console.log(chalk.cyan('  acc monitor --start         Start monitoring server'));
+      console.log(chalk.cyan('  acc monitor --stop          Stop monitoring server'));
+      console.log(chalk.cyan('  acc monitor --config        Show monitoring configuration'));
+      console.log(chalk.cyan('  acc run "task" --no-monitoring  Disable monitoring for this run'));
       
       console.log(chalk.yellow.bold('\n📊 Enhanced Log Viewing:'));
       console.log(chalk.cyan('  acc logs                    Show session summary'));
@@ -588,14 +628,15 @@ async function main() {
       console.log(chalk.cyan('  acc logs --session abc123  View specific session'));
       
       console.log(chalk.yellow.bold('\n⚙️ Useful Options:'));
-      console.log(chalk.gray('  -i, --iterations <num>   Set max iterations (default: 10)'));
-      console.log(chalk.gray('  -m, --model <model>      Use sonnet or opus (default: sonnet)'));
-      console.log(chalk.gray('  -v, --verbose           Show detailed output'));
-      console.log(chalk.gray('  -c, --continue-on-error Continue even if errors occur'));
-      console.log(chalk.gray('  -d, --dir <path>        Specify working directory'));
-      console.log(chalk.gray('  --manager <model>       Manager agent model (dual mode)'));
-      console.log(chalk.gray('  --worker <model>        Worker agent model (dual mode)'));
-      console.log(chalk.gray('  --loop-threshold <num>  Loop detection threshold (dual mode)'));
+      console.log(chalk.gray('  -i, --iterations <num>     Set max iterations (default: 10)'));
+      console.log(chalk.gray('  -m, --model <model>        Use sonnet or opus (default: sonnet)'));
+      console.log(chalk.gray('  -v, --verbose             Show detailed output'));
+      console.log(chalk.gray('  -c, --continue-on-error   Continue even if errors occur'));
+      console.log(chalk.gray('  -d, --dir <path>          Specify working directory'));
+      console.log(chalk.gray('  --dual-agent              Enable dual-agent mode (Manager+Worker)'));
+      console.log(chalk.gray('  --manager-model <model>   Manager agent model (default: opus)'));
+      console.log(chalk.gray('  --worker-model <model>    Worker agent model (default: sonnet)'));
+      console.log(chalk.gray('  --no-monitoring           Disable monitoring server'));
       
       console.log(chalk.yellow.bold('\n📋 Tips for Better Results:'));
       console.log(chalk.green('  • Be specific about what you want to achieve'));
@@ -606,6 +647,90 @@ async function main() {
       console.log(chalk.green('  • Export sessions to HTML for sharing and analysis'));
       console.log(chalk.green('  • Use dual-agent mode for complex tasks requiring planning'));
       console.log(chalk.green('  • Manager agent (opus) handles planning, Worker (sonnet) implements'));
+    });
+
+  program
+    .command('monitor')
+    .description('Manage monitoring server and show status')
+    .option('--start', 'Start monitoring server')
+    .option('--stop', 'Stop monitoring server')
+    .option('--status', 'Show monitoring status')
+    .option('--config', 'Show monitoring configuration')
+    .action(async (options) => {
+      if (options.start) {
+        console.log(chalk.blue('🚀 Starting monitoring server...'));
+        const started = await monitoringManager.startServer();
+        if (started) {
+          const status = await monitoringManager.getStatus();
+          console.log(chalk.green('✅ Monitoring server started'));
+          console.log(chalk.cyan(`   UI: ${status.urls.ui}`));
+          console.log(chalk.cyan(`   API: ${status.urls.server}`));
+        } else {
+          console.log(chalk.red('❌ Failed to start monitoring server'));
+        }
+        return;
+      }
+
+      if (options.stop) {
+        console.log(chalk.yellow('⏹️  Stopping monitoring server...'));
+        monitoringManager.stopServer();
+        console.log(chalk.green('✅ Monitoring server stopped'));
+        return;
+      }
+
+      if (options.config) {
+        const cfg = config.getAll();
+        console.log(chalk.blue.bold('\n📊 Monitoring Configuration:\n'));
+        
+        const configTable = new Table({
+          head: ['Setting', 'Value'],
+          colWidths: [30, 50],
+          style: {
+            head: ['cyan'],
+            border: ['gray']
+          }
+        });
+        
+        configTable.push(
+          ['Enabled', cfg.monitoring.enabled ? 'Yes' : 'No'],
+          ['Server URL', cfg.monitoring.serverUrl],
+          ['WebSocket URL', cfg.monitoring.webSocketUrl],
+          ['UI URL', cfg.monitoring.uiUrl],
+          ['Server Path', cfg.monitoring.serverPath || 'Auto-detect'],
+          ['Auto Start', cfg.monitoring.autoStartServer ? 'Yes' : 'No']
+        );
+        
+        console.log(configTable.toString());
+        return;
+      }
+
+      // Default: show status
+      const status = await monitoringManager.getStatus();
+      console.log(chalk.blue.bold('\n📊 Monitoring Status:\n'));
+      
+      const statusTable = new Table({
+        head: ['Component', 'Status', 'URL'],
+        colWidths: [20, 15, 40],
+        style: {
+          head: ['cyan'],
+          border: ['gray']
+        }
+      });
+      
+      statusTable.push(
+        ['Server', status.serverRunning ? chalk.green('Running') : chalk.red('Stopped'), status.urls.server],
+        ['WebSocket', status.serverRunning ? chalk.green('Available') : chalk.red('Unavailable'), status.urls.webSocket],
+        ['UI', status.serverRunning ? chalk.green('Available') : chalk.red('Unavailable'), status.urls.ui],
+        ['Server Path', status.serverPath ? chalk.green('Found') : chalk.yellow('Not Found'), status.serverPath || 'N/A']
+      );
+      
+      console.log(statusTable.toString());
+      
+      if (!status.serverRunning && status.serverPath) {
+        console.log(chalk.yellow('\n💡 Start the server with: acc monitor --start'));
+      } else if (!status.serverPath) {
+        console.log(chalk.yellow('\n💡 Run from a directory containing dual-agent-monitor/ folder'));
+      }
     });
 
   program

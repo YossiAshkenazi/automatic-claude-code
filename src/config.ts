@@ -13,6 +13,27 @@ export interface Config {
   claudePath?: string;
   defaultWorkDir?: string;
   systemPrompts?: string[];
+  
+  // Dual-agent monitoring settings
+  monitoring: {
+    enabled: boolean;
+    serverUrl: string;
+    webSocketUrl: string;
+    uiUrl: string;
+    serverPath?: string; // Path to dual-agent-monitor
+    autoStartServer: boolean;
+  };
+  
+  // Dual-agent settings
+  dualAgent: {
+    enabled: boolean;
+    managerModel: 'sonnet' | 'opus';
+    workerModel: 'sonnet' | 'opus';
+    coordinationInterval: number;
+    qualityGateThreshold: number;
+    maxConcurrentTasks: number;
+    enableCrossValidation: boolean;
+  };
 }
 
 class ConfigManager {
@@ -38,6 +59,24 @@ class ConfigManager {
     ],
     sessionHistoryLimit: 100,
     autoSaveInterval: 60000,
+    
+    monitoring: {
+      enabled: true,
+      serverUrl: 'http://localhost:4001',
+      webSocketUrl: 'ws://localhost:4001',
+      uiUrl: 'http://localhost:6005',
+      autoStartServer: true,
+    },
+    
+    dualAgent: {
+      enabled: false,
+      managerModel: 'opus',
+      workerModel: 'sonnet',
+      coordinationInterval: 3,
+      qualityGateThreshold: 0.8,
+      maxConcurrentTasks: 2,
+      enableCrossValidation: true,
+    },
   };
 
   constructor() {
@@ -104,6 +143,66 @@ class ConfigManager {
   merge(partialConfig: Partial<Config>): void {
     this.config = { ...this.config, ...partialConfig };
     this.saveConfig(this.config);
+  }
+
+  // Helper methods for monitoring
+  isMonitoringEnabled(): boolean {
+    return this.config.monitoring.enabled;
+  }
+  
+  getMonitoringUrls(): { server: string; webSocket: string; ui: string } {
+    return {
+      server: this.config.monitoring.serverUrl,
+      webSocket: this.config.monitoring.webSocketUrl,
+      ui: this.config.monitoring.uiUrl,
+    };
+  }
+  
+  isDualAgentEnabled(): boolean {
+    return this.config.dualAgent.enabled;
+  }
+  
+  getDualAgentModels(): { manager: string; worker: string } {
+    return {
+      manager: this.config.dualAgent.managerModel,
+      worker: this.config.dualAgent.workerModel,
+    };
+  }
+  
+  // Auto-detect monitoring server path
+  findMonitoringServerPath(): string | null {
+    if (this.config.monitoring.serverPath && fs.existsSync(this.config.monitoring.serverPath)) {
+      return this.config.monitoring.serverPath;
+    }
+    
+    // Common paths to search
+    const possiblePaths = [
+      // Current directory
+      path.join(process.cwd(), 'dual-agent-monitor'),
+      // Parent directory
+      path.join(process.cwd(), '..', 'dual-agent-monitor'),
+      // Same directory as ACC
+      path.join(__dirname, '..', '..', 'dual-agent-monitor'),
+      // Home directory
+      path.join(os.homedir(), 'dual-agent-monitor'),
+      path.join(os.homedir(), 'automatic-claude-code', 'dual-agent-monitor'),
+    ];
+    
+    for (const checkPath of possiblePaths) {
+      const serverPath = path.join(checkPath, 'server', 'websocket-server.ts');
+      if (fs.existsSync(serverPath)) {
+        // Update config with found path
+        this.merge({
+          monitoring: {
+            ...this.config.monitoring,
+            serverPath: checkPath,
+          },
+        });
+        return checkPath;
+      }
+    }
+    
+    return null;
   }
 }
 

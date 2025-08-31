@@ -2,7 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Monitor, Plus, RefreshCw, Wifi, WifiOff, BarChart3, Clock, List, Globe, Network, Activity, Brain, GitBranch } from 'lucide-react';
 import { DualAgentSession, AgentMessage, WebSocketMessage } from './types';
 import { useWebSocket } from './hooks/useWebSocket';
+import { useMobile } from './hooks/useMobile';
+import { usePWA } from './hooks/usePWA';
 import { apiClient } from './utils/api';
+import { formatDate } from './utils/formatters';
+
+// Mobile-optimized components
+import MobileApp from './MobileApp';
+
+// Desktop components
 import { MessagePane } from './components/MessagePane';
 import { SessionControls } from './components/SessionControls';
 import { Timeline } from './components/Timeline';
@@ -16,11 +24,20 @@ import {
   AgentActivityMonitor,
   CommunicationAnalytics
 } from './components/visualization';
-import { formatDate } from './utils/formatters';
+
+// Responsive layout
+import { ResponsiveLayout } from './components/layout/ResponsiveLayout';
 
 type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'analytics' | 'sessions' | 'cross-project' | 'message-flow' | 'comm-timeline' | 'agent-activity' | 'comm-analytics';
 
 function App() {
+  const mobile = useMobile();
+  const pwa = usePWA();
+  
+  // If mobile device, use mobile-optimized app
+  if (mobile.isMobile) {
+    return <MobileApp />;
+  }
   const [sessions, setSessions] = useState<DualAgentSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<DualAgentSession | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('cross-project');
@@ -255,6 +272,16 @@ function App() {
   }
 
   return (
+    <ResponsiveLayout
+      currentView={viewMode as any}
+      onViewChange={setViewMode as any}
+      isConnected={isConnected}
+      selectedSessionTitle={selectedSession?.initialTask}
+      onRefresh={async () => {
+        await Promise.all([loadSessions(), loadCrossProjectData()]);
+      }}
+      showHeader={true}
+    >
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4">
@@ -523,6 +550,7 @@ function App() {
         )}
       </main>
     </div>
+    </ResponsiveLayout>
   );
 }
 

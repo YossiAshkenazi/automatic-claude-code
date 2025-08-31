@@ -41,25 +41,25 @@ A comprehensive web UI for monitoring and analyzing dual-agent Claude Code syste
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Start development servers (frontend + backend)
-npm run dev
+pnpm run dev
 ```
 
 This will start:
-- Frontend dev server at http://localhost:6002
-- Backend API server at http://localhost:6003
+- Frontend dev server at http://localhost:6011
+- Backend API server at http://localhost:4001
 - WebSocket server for real-time updates
 
 ### Production Mode
 
 ```bash
 # Build the application
-npm run build
+pnpm run build
 
 # Start production server
-npm start
+pnpm start
 ```
 
 ### Docker Deployment
@@ -113,6 +113,7 @@ src/
 - `DELETE /sessions/:id` - Delete session
 - `POST /sessions/:id/messages` - Add message to session
 - `POST /events` - Receive events from observability hooks
+- `POST /api/monitoring` - **NEW**: External monitoring endpoint for dual-agent coordination
 
 ### WebSocket Events
 - `new_message` - New agent message received
@@ -125,12 +126,19 @@ src/
 
 The monitor integrates with your existing Claude Code observability setup:
 
-### Hook Scripts Integration
-The existing PowerShell hook scripts in `.claude/hooks/` automatically send events to the monitor:
+### Integration with Automatic Claude Code
 
-```powershell
-# Events are sent to http://localhost:4000/events
-# Monitor server proxies these to the dual-agent system
+The monitoring system integrates directly with the dual-agent coordinator:
+
+```typescript
+// Events are automatically sent to http://localhost:4001/api/monitoring
+// From AgentCoordinator.emitCoordinationEvent() method
+monitoringManager.sendMonitoringData({
+  agentType: 'manager' | 'worker',
+  messageType: 'coordination_event',
+  message: eventData,
+  metadata: { /* coordination details */ }
+});
 ```
 
 ### Session Data Storage
@@ -180,26 +188,25 @@ Each session file contains:
 ### Environment Variables
 ```bash
 NODE_ENV=development|production
-PORT=6003                    # Backend server port
+PORT=4001                    # Backend server port (API + WebSocket)
+FRONTEND_PORT=6011          # Frontend development server port
 ```
 
 ### Frontend Configuration
 The frontend connects to:
-- Backend API: `/api/*` (proxied to localhost:6003)  
-- WebSocket: `/ws` (proxied to ws://localhost:6003)
+- Backend API: `/api/*` (proxied to localhost:4001)  
+- WebSocket: `/ws` (proxied to ws://localhost:4001)
 
 ## Monitoring Integration
 
-### Existing Observability Server
-The monitor extends your existing observability infrastructure:
-- **Port 4000**: Existing observability server
-- **Port 6001**: Current dashboard  
-- **Port 6002**: New dual-agent monitor (frontend)
-- **Port 6003**: Dual-agent monitor backend
+### Current Port Configuration
+The monitoring system uses the following ports:
+- **Port 4001**: Dual-agent monitor backend (API + WebSocket)
+- **Port 6011**: Dual-agent monitor frontend (development)
 
 ### Event Flow
 ```
-Claude Code Hooks → Observability Server (4000) → Dual-Agent Monitor (6003) → Frontend (6002)
+Automatic Claude Code → AgentCoordinator → Monitoring Manager → /api/monitoring (4001) → Frontend (6011)
 ```
 
 ## Development
@@ -226,26 +233,28 @@ Claude Code Hooks → Observability Server (4000) → Dual-Agent Monitor (6003) 
 
 ```bash
 # Run frontend tests
-npm run test
+pnpm run test
 
 # Run backend tests  
-npm run test:server
+pnpm run test:server
 
 # Run E2E tests
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 ## Troubleshooting
 
 ### WebSocket Connection Issues
-- Check that backend is running on port 6003
+- Check that backend is running on port 4001
 - Verify firewall settings allow WebSocket connections
 - Check browser console for connection errors
+- Ensure no other services are using port 4001
 
 ### No Sessions Appearing
-- Verify hook scripts are sending events to correct endpoint
-- Check `.dual-agent-sessions/` directory permissions
+- Verify automatic-claude-code is sending events to `/api/monitoring`
+- Check that dual-agent mode is enabled (`--dual-agent` flag)
 - Review server logs for event processing errors
+- Ensure monitoring integration is not disabled
 
 ### Performance Issues
 - Check session data size (large sessions may be slow to load)

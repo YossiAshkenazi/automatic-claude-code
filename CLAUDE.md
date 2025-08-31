@@ -17,6 +17,19 @@ Automatic Claude Code is a TypeScript CLI application that runs Claude Code in a
 
 ## Essential Commands
 
+### Installation (Required First Step)
+```bash
+# Install acc command globally using npm link
+cd automatic-claude-code
+pnpm install
+pnpm run build
+npm link  # This makes 'acc' available globally
+
+# Verify installation
+acc examples
+```
+
+### Development Commands
 ```bash
 # Development
 pnpm run dev          # Run in development mode with tsx
@@ -24,21 +37,31 @@ pnpm run build        # Compile TypeScript to dist/
 pnpm run lint         # Run ESLint on src/**/*.ts
 pnpm run typecheck    # Type-check without emitting
 pnpm run clean        # Remove dist directory
+```
 
-# Production build & run
-pnpm run build && node dist/index.js run "task" -i 10 -v
+### Core Usage (with acc command)
+```bash
+# From ANY project directory - use acc command
+acc run "task" --dual-agent -i 5 -v
+acc run "task" --manager-model opus --worker-model sonnet -v
+acc monitor        # Check monitoring status
+acc monitor --start # Start monitoring server
+acc examples      # Show example prompts
+acc history       # View session history
+acc logs --tail   # Watch logs in real-time
 
-# From ANY project directory (using relative path to ACC)
+# Legacy method (if acc command not available)
 node "../automatic-claude-code/dist/index.js" run "task" --dual-agent -i 5 -v
-node "../automatic-claude-code/dist/index.js" run "task" --manager-model opus --worker-model sonnet -v
-node "../automatic-claude-code/dist/index.js" monitor        # Check monitoring status
-node "../automatic-claude-code/dist/index.js" monitor --start # Start monitoring server
-node "../automatic-claude-code/dist/index.js" examples      # Show example prompts
-node "../automatic-claude-code/dist/index.js" history       # View session history
-node "../automatic-claude-code/dist/index.js" logs --tail   # Watch logs in real-time
+```
 
-# Monitoring UI
-# Open http://localhost:6007 to watch dual-agent coordination in real-time
+### Monitoring UI
+```bash
+# Start monitoring server
+cd dual-agent-monitor
+pnpm run dev  # Starts UI on http://localhost:6011, API on http://localhost:4001
+
+# Access monitoring dashboard
+# Open http://localhost:6011 to watch dual-agent coordination in real-time
 ```
 
 ## Architecture
@@ -225,7 +248,7 @@ Enhanced configuration at `~/.automatic-claude-code/config.json`:
   },
   "monitoring": {
     "enabled": true,
-    "dashboardPort": 6007,
+    "dashboardPort": 6011,
     "apiPort": 4001,
     "autoStart": true,
     "persistSessions": true,
@@ -313,6 +336,122 @@ The project is configured to work with multiple MCP servers:
 - **context7**: Knowledge base integration
 - **memory**: Persistent memory storage
 
+## Monitoring API Integration
+
+### External Monitoring Endpoint
+
+The system provides a RESTful API endpoint for external monitoring tools and integrations:
+
+#### POST /api/monitoring
+**URL**: `http://localhost:4001/api/monitoring`
+
+**Purpose**: Receives real-time dual-agent coordination data from the main application
+
+**Request Format**:
+```json
+{
+  "agentType": "manager" | "worker",
+  "messageType": "coordination_event" | "prompt" | "response" | "error",
+  "message": "Event description or content",
+  "metadata": {
+    "eventType": "MANAGER_TASK_ASSIGNMENT" | "WORKER_PROGRESS_UPDATE" | "AGENT_COORDINATION",
+    "eventData": { /* Event-specific data */ },
+    "timestamp": "2024-08-31T12:00:00.000Z",
+    "workflowPhase": "planning" | "execution" | "validation" | "completion",
+    "overallProgress": 0.75
+  },
+  "sessionInfo": {
+    "task": "User task description",
+    "workDir": "/path/to/project"
+  }
+}
+```
+
+**Response Format**:
+```json
+{
+  "success": true
+}
+```
+
+**Error Response**:
+```json
+{
+  "success": false,
+  "error": "Error message"
+}
+```
+
+#### Integration in AgentCoordinator
+
+The monitoring integration is automatically triggered during agent coordination:
+
+```typescript
+// Automatically called during agent communication
+this.emitCoordinationEvent('AGENT_COORDINATION', 'manager', {
+  phase: 'task_assignment',
+  workItems: assignedTasks,
+  qualityGates: validationCriteria
+});
+```
+
+**Event Types Sent**:
+- `MANAGER_TASK_ASSIGNMENT`: When Manager assigns work to Worker
+- `WORKER_PROGRESS_UPDATE`: When Worker reports progress
+- `MANAGER_QUALITY_CHECK`: When Manager validates Worker output
+- `AGENT_COORDINATION`: General coordination events
+- `WORKFLOW_TRANSITION`: Phase changes in dual-agent workflow
+- `MANAGER_WORKER_HANDOFF`: Task handoffs between agents
+
+#### Usage Examples
+
+**curl Command**:
+```bash
+curl -X POST http://localhost:4001/api/monitoring \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentType": "manager",
+    "messageType": "coordination_event", 
+    "message": "Task assignment initiated",
+    "metadata": {
+      "eventType": "MANAGER_TASK_ASSIGNMENT",
+      "workflowPhase": "planning",
+      "overallProgress": 0.25
+    },
+    "sessionInfo": {
+      "task": "Implement authentication system",
+      "workDir": "/path/to/project"
+    }
+  }'
+```
+
+**JavaScript Integration**:
+```javascript
+const monitoringData = {
+  agentType: 'worker',
+  messageType: 'response',
+  message: 'Authentication module completed',
+  metadata: {
+    eventType: 'WORKER_PROGRESS_UPDATE',
+    completedTasks: ['JWT setup', 'User model', 'Auth middleware'],
+    overallProgress: 0.8
+  }
+};
+
+fetch('http://localhost:4001/api/monitoring', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(monitoringData)
+});
+```
+
+**Benefits**:
+- Real-time visibility into agent coordination
+- External tool integration (dashboards, alerts, analytics)
+- Session persistence and replay capabilities
+- Performance monitoring and optimization insights
+- Custom webhook and notification support
+
 ## Production Deployment
 
 ### Quick Production Setup
@@ -374,7 +513,7 @@ node dist/index.js run "task" -i 3
 # Frontend development server (React + Vite)
 cd dual-agent-monitor
 pnpm install
-pnpm run dev  # Runs on http://localhost:6007
+pnpm run dev  # Runs on http://localhost:6011
 
 # Backend WebSocket server (in separate terminal)
 cd dual-agent-monitor/server
@@ -385,6 +524,7 @@ pnpm run dev  # Runs on http://localhost:4001
 
 #### Single-Agent Mode (Legacy)
 1. **Basic Functionality**: `acc run "create test.txt with hello" -i 1`
+   - If acc command not available: `node "../automatic-claude-code/dist/index.js" run "create test.txt with hello" -i 1`
 2. **Error Recovery**: Test with intentionally failing tasks
 3. **Session Continuity**: Verify `--resume` functionality
 4. **Output Parsing**: Check both JSON and text fallback modes
@@ -392,6 +532,7 @@ pnpm run dev  # Runs on http://localhost:4001
 
 #### Dual-Agent Mode (Enhanced)
 1. **Agent Coordination**: `acc run "implement user auth system" --dual-agent -i 5 -v`
+   - If acc command not available: `node "../automatic-claude-code/dist/index.js" run "implement user auth system" --dual-agent -i 5 -v`
 2. **Manager Planning**: Verify Manager creates proper task breakdown
 3. **Worker Execution**: Confirm Worker executes assigned tasks correctly
 4. **Quality Gates**: Test Manager's validation of Worker outputs
@@ -418,6 +559,14 @@ The system includes comprehensive test suites:
 
 ## Recent Updates (Updated: 2024-08-31)
 
+### Latest Changes (2024-08-31)
+- **Global Command Installation**: Added `npm link` setup for global `acc` command access
+- **Monitoring Port Update**: Changed monitoring UI port from 6007 to 6011
+- **ML Service Temporary Disable**: Disabled problematic ML components for stability
+- **Enhanced Monitoring Integration**: Added `/api/monitoring` endpoint for dual-agent coordination
+- **Improved Cross-Directory Usage**: Streamlined usage from any project directory
+- **Stability Improvements**: Fixed initialization errors in monitoring services
+
 ### Major Features Added
 - **Production Deployment Infrastructure**: Complete Docker, Kubernetes, and Terraform configurations
 - **Machine Learning Insights Engine**: Anomaly detection, predictive analytics, optimization recommendations
@@ -443,14 +592,16 @@ The system includes comprehensive test suites:
 - **Comprehensive Documentation**: Production deployment guide (DEPLOYMENT.md)
 
 ### Breaking Changes
-- **Port Configuration**: Monitoring UI now runs on port 6007, API on port 4001
+- **Port Configuration**: Monitoring UI now runs on port 6011 (updated from 6007), API on port 4001
+- **Command Installation**: `acc` command now requires `npm link` for global installation
 - **Configuration Schema**: Extended config.json with monitoring, database, and webhook settings
-- **Database Requirement**: PostgreSQL now required for session persistence (optional fallback to in-memory)
+- **ML Service**: Machine Learning features temporarily disabled to ensure core functionality
+- **Database Requirement**: PostgreSQL recommended for production, in-memory fallback for development
 
 ## Important Notes
 
 - **Package Manager**: Project uses pnpm (primary) with npm fallback for WSL compatibility
-- **Monitoring Ports**: UI Dashboard (6007), API Server (4001), WebSocket (4001)
+- **Monitoring Ports**: UI Dashboard (6011), API Server (4001), WebSocket (4001)
 - **Database Setup**: PostgreSQL recommended for production, in-memory fallback for development
 - **Session Storage**: All sessions persisted to database with replay capabilities
 - **Process Spawning**: Uses shell execution for cross-platform compatibility

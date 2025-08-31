@@ -29,6 +29,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: acc-postgres
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=dual_agent_monitor
       - POSTGRES_USER=acc_user
@@ -52,6 +53,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: acc-redis
+    restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -72,7 +74,7 @@ services:
     build:
       context: ./dual-agent-monitor
       dockerfile: Dockerfile
-      target: development
+      target: production
     container_name: acc-monitoring-backend
     volumes:
       - ./dual-agent-monitor:/app
@@ -99,7 +101,7 @@ services:
     build:
       context: ./dual-agent-monitor
       dockerfile: Dockerfile
-      target: development
+      target: production
     container_name: acc-monitoring-frontend
     volumes:
       - ./dual-agent-monitor:/app
@@ -109,7 +111,7 @@ services:
       - VITE_API_URL=http://localhost:4001
       - VITE_WS_URL=ws://localhost:4001
     ports:
-      - "6007:6007"
+      - "6011:6011"
     networks:
       - acc-network
     depends_on:

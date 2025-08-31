@@ -64,7 +64,7 @@ class ConfigManager {
       enabled: true,
       serverUrl: 'http://localhost:4001',
       webSocketUrl: 'ws://localhost:4001',
-      uiUrl: 'http://localhost:6013',
+      uiUrl: 'http://localhost:8091',
       autoStartServer: true,
     },
     

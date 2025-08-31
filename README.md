@@ -29,22 +29,23 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 git clone https://github.com/YossiAshkenazi/automatic-claude-code.git
 cd automatic-claude-code
 
-# For WSL/Linux users (due to permission issues):
-sudo su  # Switch to root if needed
-npm install --force --no-bin-links
-npm run build
-pnpm link --global
-
-# For other systems:
+# Install dependencies and build
 pnpm install
 pnpm run build
-pnpm link --global
 
-# Now you can use 'acc' from anywhere
+# Make 'acc' command available globally
+npm link
+
+# Verify installation works
 acc examples
+
+# Alternative for WSL/Linux users (if npm link fails):
+sudo npm install --force --no-bin-links
+sudo npm run build
+sudo npm link
 ```
 
-### Method 2: Local Usage with Alias (WSL/Linux Recommended)
+### Method 2: Local Usage with Alias (Alternative)
 ```bash
 # Clone and build (same as above)
 git clone https://github.com/YossiAshkenazi/automatic-claude-code.git
@@ -60,18 +61,37 @@ source ~/.bashrc
 acc examples
 ```
 
-### Method 3: Direct Node Usage
+### Method 3: Direct Node Usage (Legacy)
 ```bash
 # After cloning and building, use with full node command
 node dist/index.js run "your task" -i 3 -v
 node dist/index.js examples
 node dist/index.js session --list
+
+# Or from any project directory:
+node "../automatic-claude-code/dist/index.js" run "your task" -i 3 -v
 ```
 
 ### Method 4: NPM Install (Future)
 ```bash
 # When published to NPM (not yet available)
 npm install -g automatic-claude-code
+```
+
+## Monitoring Setup
+
+To use the real-time monitoring dashboard:
+
+```bash
+# In a separate terminal, start the monitoring server
+cd dual-agent-monitor
+pnpm install
+pnpm run dev
+
+# This starts:
+# - Frontend UI: http://localhost:6011
+# - Backend API: http://localhost:4001
+# - WebSocket server for real-time updates
 ```
 
 ## Prerequisites
@@ -123,14 +143,15 @@ Dual-Agent Options (NEW):
 # Get help and see example prompts
 acc examples
 
-# Try dual-agent mode for complex tasks
+# Start monitoring server (optional, in separate terminal)
+cd dual-agent-monitor && pnpm run dev
+
+# Try dual-agent mode for complex tasks (with monitoring)
 acc run "implement user authentication system" --dual-agent -i 5 -v
+# Open http://localhost:6011 to watch agent coordination in real-time
 
 # Use single-agent for simple tasks
 acc run "add unit tests for all functions in src/utils.ts" -i 3 -v
-
-# Monitor agent coordination
-acc agents --status
 
 # Check what happened in your last session
 acc session

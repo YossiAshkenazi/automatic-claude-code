@@ -33,8 +33,9 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/CLAUDE.md ./
 COPY --from=build /app/README.md ./
 
-# Create non-root user
+# Create non-root user and necessary directories
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN mkdir -p /app/.claude-sessions /app/logs && chown -R nodejs:nodejs /app
 USER nodejs
 
 # Expose port (if needed for monitoring integration)

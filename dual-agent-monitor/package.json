@@ -5,21 +5,31 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "node node_modules/concurrently/dist/bin/concurrently.js \"npm run server:dev\" \"npm run client:dev\"",
-    "build": "npm run client:build",
+    "build": "npm run server:build && npm run client:build",
     "start": "node dist/server/index.js",
     "server:dev": "node node_modules/tsx/dist/cli.mjs server/index.ts",
     "server:build": "tsc --project server/tsconfig.json",
     "client:dev": "node node_modules/vite/bin/vite.js",
     "client:build": "node node_modules/vite/bin/vite.js build",
-    "client:preview": "node node_modules/vite/bin/vite.js preview"
+    "client:preview": "node node_modules/vite/bin/vite.js preview",
+    "db:migrate": "node node_modules/tsx/dist/cli.mjs server/database/migrate.ts",
+    "db:seed": "node node_modules/tsx/dist/cli.mjs server/database/seed.ts",
+    "db:reset": "node node_modules/tsx/dist/cli.mjs server/database/reset.ts",
+    "db:backup": "node node_modules/tsx/dist/cli.mjs server/database/backup.ts",
+    "db:restore": "node node_modules/tsx/dist/cli.mjs server/database/restore.ts"
   },
   "dependencies": {
     "@types/cors": "^2.8.14",
     "@types/express": "^4.17.18",
+    "@types/pg": "^8.10.7",
     "@types/uuid": "^9.0.3",
     "@types/ws": "^8.5.5",
+    "better-sqlite3": "^9.2.2",
     "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
     "express": "^4.21.2",
+    "pg": "^8.11.3",
+    "sqlite3": "^5.1.6",
     "uuid": "^9.0.0",
     "ws": "^8.18.3"
   },

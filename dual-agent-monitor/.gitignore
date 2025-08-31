@@ -44,3 +44,14 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/backups/
+*.sqlite
+*.sqlite3
+
+# Database connection files
+database.url

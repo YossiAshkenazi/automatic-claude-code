@@ -408,6 +408,195 @@ class ApiClient {
     div.textContent = text;
     return div.innerHTML;
   }
+
+  // Replay API methods
+  async prepareSessionForReplay(sessionId: string, options: any = {}): Promise<{
+    replayId: string;
+    state: any;
+    metadata: any;
+  }> {
+    return this.request(`/replay/sessions/${sessionId}/prepare`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  async closeReplay(replayId: string): Promise<void> {
+    await this.request(`/replay/${replayId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async playReplay(replayId: string, options: any = {}): Promise<void> {
+    await this.request(`/replay/${replayId}/play`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  async pauseReplay(replayId: string): Promise<void> {
+    await this.request(`/replay/${replayId}/pause`, {
+      method: 'POST',
+    });
+  }
+
+  async stopReplay(replayId: string): Promise<void> {
+    await this.request(`/replay/${replayId}/stop`, {
+      method: 'POST',
+    });
+  }
+
+  async stepReplay(replayId: string, direction: 'forward' | 'backward', options: any = {}): Promise<void> {
+    await this.request(`/replay/${replayId}/step`, {
+      method: 'POST',
+      body: JSON.stringify({ direction, options }),
+    });
+  }
+
+  async seekReplay(replayId: string, position: number): Promise<void> {
+    await this.request(`/replay/${replayId}/seek`, {
+      method: 'POST',
+      body: JSON.stringify({ position }),
+    });
+  }
+
+  async setReplaySpeed(replayId: string, speed: number): Promise<void> {
+    await this.request(`/replay/${replayId}/speed`, {
+      method: 'POST',
+      body: JSON.stringify({ speed }),
+    });
+  }
+
+  async jumpToReplay(replayId: string, type: string, value: any): Promise<void> {
+    await this.request(`/replay/${replayId}/jump`, {
+      method: 'POST',
+      body: JSON.stringify({ type, value }),
+    });
+  }
+
+  async addReplayBookmark(replayId: string, bookmark: {
+    timestamp: Date;
+    messageIndex: number;
+    title: string;
+    description?: string;
+    tags: string[];
+    createdBy: string;
+  }): Promise<any> {
+    return this.request(`/replay/${replayId}/bookmarks`, {
+      method: 'POST',
+      body: JSON.stringify(bookmark),
+    });
+  }
+
+  async updateReplayBookmark(replayId: string, bookmarkId: string, updates: any): Promise<void> {
+    await this.request(`/replay/${replayId}/bookmarks/${bookmarkId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async removeReplayBookmark(replayId: string, bookmarkId: string): Promise<void> {
+    await this.request(`/replay/${replayId}/bookmarks/${bookmarkId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async addReplayAnnotation(replayId: string, annotation: {
+    timestamp: Date;
+    messageIndex: number;
+    content: string;
+    author: string;
+  }): Promise<any> {
+    return this.request(`/replay/${replayId}/annotations`, {
+      method: 'POST',
+      body: JSON.stringify(annotation),
+    });
+  }
+
+  async updateReplayAnnotation(replayId: string, annotationId: string, updates: any): Promise<void> {
+    await this.request(`/replay/${replayId}/annotations/${annotationId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async removeReplayAnnotation(replayId: string, annotationId: string): Promise<void> {
+    await this.request(`/replay/${replayId}/annotations/${annotationId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async addReplaySegment(replayId: string, segment: {
+    title: string;
+    description?: string;
+    startTime: Date;
+    endTime: Date;
+    startIndex: number;
+    endIndex: number;
+    tags: string[];
+    highlightColor?: string;
+    createdBy: string;
+  }): Promise<any> {
+    return this.request(`/replay/${replayId}/segments`, {
+      method: 'POST',
+      body: JSON.stringify(segment),
+    });
+  }
+
+  async exportReplayData(replayId: string, options: {
+    format: 'json' | 'csv' | 'markdown';
+    includeBookmarks: boolean;
+    includeAnnotations: boolean;
+    includeSegments: boolean;
+    timeRange?: { start: Date; end: Date };
+    eventTypes?: string[];
+  }): Promise<any> {
+    return this.request(`/replay/${replayId}/export`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  async exportReplaySegment(replayId: string, segmentId: string, format: 'json' | 'csv' | 'markdown' = 'json'): Promise<any> {
+    return this.request(`/replay/${replayId}/segments/${segmentId}/export`, {
+      method: 'POST',
+      body: JSON.stringify({ format }),
+    });
+  }
+
+  async compareReplaySessions(sessionIds: string[]): Promise<any> {
+    return this.request('/replay/compare', {
+      method: 'POST',
+      body: JSON.stringify({ sessionIds }),
+    });
+  }
+
+  async getReplayCollaborators(replayId: string): Promise<{
+    collaborators: string[];
+    isCollaborative: boolean;
+  }> {
+    return this.request(`/replay/${replayId}/collaborators`);
+  }
+
+  async enableReplayCollaboration(replayId: string, collaborators: string[]): Promise<void> {
+    await this.request(`/replay/${replayId}/collaborators`, {
+      method: 'POST',
+      body: JSON.stringify({ collaborators }),
+    });
+  }
+
+  async addReplayCollaborator(replayId: string, collaboratorId: string): Promise<void> {
+    await this.request(`/replay/${replayId}/collaborators/${collaboratorId}`, {
+      method: 'POST',
+    });
+  }
+
+  async getReplayStatus(): Promise<{
+    activeSessionsCount: number;
+    activeSessionIds: string[];
+  }> {
+    return this.request('/replay/status');
+  }
 }
 
 export const apiClient = new ApiClient();

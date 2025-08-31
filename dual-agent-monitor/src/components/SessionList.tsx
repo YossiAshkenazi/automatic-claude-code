@@ -3,6 +3,7 @@ import { Clock, MessageSquare, DollarSign, CheckCircle, XCircle, Pause, Play, Do
 import { DualAgentSession } from '../types';
 import { formatRelativeTime, formatCost, getStatusBadgeColor, truncateText } from '../utils/formatters';
 import { apiClient } from '../utils/api';
+import { ReplayIconButton } from './replay/ReplayButton';
 
 interface SessionListProps {
   sessions: DualAgentSession[];
@@ -133,6 +134,14 @@ export function SessionList({
             </div>
 
             <div className="flex items-center gap-2">
+              <div onClick={(e) => e.stopPropagation()}>
+                <ReplayIconButton 
+                  session={session}
+                  onReplayStart={(sessionId) => console.log('Starting replay for:', sessionId)}
+                  onReplayEnd={(sessionId) => console.log('Ended replay for:', sessionId)}
+                />
+              </div>
+              
               <button
                 onClick={(e) => handleExport(e, session.id)}
                 disabled={exportingSession === session.id}

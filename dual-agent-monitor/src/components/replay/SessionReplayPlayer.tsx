@@ -10,6 +10,7 @@ import { apiClient } from '../../utils/api';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { Badge } from '../ui/Badge';
 import { formatRelativeTime, formatDuration } from '../../utils/formatters';
+import { useReplayKeyboardShortcuts } from './useReplayKeyboardShortcuts';
 
 interface ReplayState {
   sessionId: string;
@@ -345,6 +346,50 @@ export function SessionReplayPlayer({
       console.error('Failed to export replay:', err);
     }
   };
+
+  // Speed control helpers
+  const handleSpeedIncrease = () => {
+    if (!replayState) return;
+    const speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
+    const currentIndex = speeds.findIndex(s => s >= replayState.playbackSpeed);
+    const nextIndex = Math.min(currentIndex + 1, speeds.length - 1);
+    handleSpeedChange(speeds[nextIndex]);
+  };
+
+  const handleSpeedDecrease = () => {
+    if (!replayState) return;
+    const speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
+    const currentIndex = speeds.findIndex(s => s >= replayState.playbackSpeed);
+    const prevIndex = Math.max(currentIndex - 1, 0);
+    handleSpeedChange(speeds[prevIndex]);
+  };
+
+  const handleJumpToStart = () => {
+    handleSeek(0);
+  };
+
+  const handleJumpToEnd = () => {
+    if (replayState) {
+      handleSeek(replayState.totalEvents - 1);
+    }
+  };
+
+  // Keyboard shortcuts
+  useReplayKeyboardShortcuts({
+    onPlay: handlePlay,
+    onPause: handlePause,
+    onStop: handleStop,
+    onStepForward: handleStepForward,
+    onStepBackward: handleStepBackward,
+    onSpeedIncrease: handleSpeedIncrease,
+    onSpeedDecrease: handleSpeedDecrease,
+    onJumpToStart: handleJumpToStart,
+    onJumpToEnd: handleJumpToEnd,
+    onAddBookmark: handleAddBookmark,
+    onToggleSettings: () => setShowSettings(!showSettings),
+    isPlaying: replayState?.isPlaying || false,
+    disabled: isLoading || !!error
+  });
 
   if (isLoading) {
     return (

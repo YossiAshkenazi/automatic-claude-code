@@ -56,7 +56,7 @@ export interface ReplayExportOptions {
   includeAnnotations: boolean;
   includeSegments: boolean;
   timeRange?: { start: Date; end: Date; };
-  eventTypes?: Array<'message' | 'communication' | 'system_event' | 'performance_metric'>;
+  eventTypes?: Array<'message' | 'communication' | 'system_event' | 'performance_metric' | 'bookmark' | 'annotation'>;
 }
 
 export class SessionReplayManager {

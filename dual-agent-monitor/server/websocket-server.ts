@@ -1256,10 +1256,20 @@ server.listen(PORT, () => {
   console.log(`Database health: ${dbService.getHealthStatus().healthy ? 'healthy' : 'unhealthy'}`);
 });
 
+// Cleanup background tasks
+setInterval(async () => {
+  try {
+    await replayManager.cleanup();
+  } catch (error) {
+    console.error('Error during replay cleanup:', error);
+  }
+}, 60 * 60 * 1000); // Every hour
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down WebSocket server...');
   await analyticsService.shutdown();
+  await replayManager.cleanup();
   dbService.close();
   process.exit(0);
 });
@@ -1267,6 +1277,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('Shutting down WebSocket server...');
   await analyticsService.shutdown();
+  await replayManager.cleanup();
   dbService.close();
   process.exit(0);
 });

@@ -65,7 +65,7 @@ function EnterpriseAppInner() {
     reconnect: reconnectWs,
     reconnectAttempts,
     maxReconnectAttempts
-  } = useWebSocket('ws://localhost:6003', {
+  } = useWebSocket(`ws://${window.location.host}/ws`, {
     onOpen: () => {
       // Refresh sessions when connection is established
       if (sessions.length === 0) {

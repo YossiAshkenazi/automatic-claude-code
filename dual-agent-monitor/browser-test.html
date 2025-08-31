@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Browser Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Dual-Agent Monitor Browser Test</h1>
+        <div id="status" class="status info">
+            Testing UI accessibility...
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <button onclick="testDirectAccess()">Test Direct Access</button>
+            <button onclick="testWebSocket()">Test WebSocket</button>
+            <button onclick="reloadIframe()">Reload UI</button>
+        </div>
+        
+        <h2>Live UI Preview:</h2>
+        <iframe id="uiFrame" src="http://localhost:6003" onload="onIframeLoad()" onerror="onIframeError()">
+            Your browser does not support iframes.
+        </iframe>
+    </div>
+
+    <script>
+        let testResults = [];
+        
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        function onIframeLoad() {
+            updateStatus('✅ UI loaded successfully in iframe! The enterprise interface should be visible above.', 'success');
+        }
+        
+        function onIframeError() {
+            updateStatus('❌ Failed to load UI in iframe. Check if server is running on port 6003.', 'error');
+        }
+        
+        async function testDirectAccess() {
+            updateStatus('🧪 Testing direct API access...', 'info');
+            
+            try {
+                // Test health endpoint
+                const healthResponse = await fetch('http://localhost:6003/health');
+                const healthData = await healthResponse.json();
+                
+                if (healthResponse.ok) {
+                    updateStatus(`✅ Server healthy! Status: ${healthData.status}, Sessions: ${healthData.sessions}`, 'success');
+                } else {
+                    updateStatus('❌ Server health check failed', 'error');
+                }
+                
+                // Test sessions endpoint
+                const sessionsResponse = await fetch('http://localhost:6003/sessions');
+                const sessionsData = await sessionsResponse.json();
+                
+                console.log('Health:', healthData);
+                console.log('Sessions:', sessionsData);
+                
+            } catch (error) {
+                updateStatus(`❌ API test failed: ${error.message}`, 'error');
+                console.error('API Test Error:', error);
+            }
+        }
+        
+        function testWebSocket() {
+            updateStatus('🔗 Testing WebSocket connection...', 'info');
+            
+            try {
+                const ws = new WebSocket('ws://localhost:6003');
+                
+                ws.onopen = function() {
+                    updateStatus('✅ WebSocket connected successfully!', 'success');
+                    ws.close();
+                };
+                
+                ws.onerror = function(error) {
+                    updateStatus('❌ WebSocket connection failed', 'error');
+                    console.error('WebSocket Error:', error);
+                };
+                
+                ws.onclose = function() {
+                    console.log('WebSocket connection closed');
+                };
+                
+            } catch (error) {
+                updateStatus(`❌ WebSocket test failed: ${error.message}`, 'error');
+                console.error('WebSocket Test Error:', error);
+            }
+        }
+        
+        function reloadIframe() {
+            const iframe = document.getElementById('uiFrame');
+            iframe.src = iframe.src;
+            updateStatus('🔄 Reloading UI...', 'info');
+        }
+        
+        // Auto-test on page load
+        window.addEventListener('load', function() {
+            setTimeout(testDirectAccess, 1000);
+        });
+    </script>
+</body>
+</html>

@@ -825,7 +825,7 @@ export class AgentOrchestrator {
       const allArgs = [...baseArgs, ...args];
       
       const claudeProcess = spawn(command, allArgs, {
-        shell: command === 'npx' || command.includes('npx'),
+        shell: true, // Always use shell on Windows for compatibility
         env: { ...process.env, PATH: process.env.PATH },
         cwd: options.workDir || process.cwd(),
         stdio: ['ignore', 'pipe', 'pipe']

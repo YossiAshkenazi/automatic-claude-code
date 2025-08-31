@@ -152,8 +152,8 @@ class AutomaticClaudeCode {
         this.logger.debug(`Using Claude command: ${command} ${allArgs.join(' ')}`);
       }
       
-      // Use shell mode for npx commands to ensure proper PATH resolution
-      const useShell = command === 'npx' || command.includes('npx');
+      // Use shell mode for npx commands and Windows .CMD files to ensure proper PATH resolution
+      const useShell = command === 'npx' || command.includes('npx') || command.endsWith('.CMD') || command.endsWith('.cmd');
       
       const claudeProcess = spawn(command, allArgs, {
         shell: useShell,

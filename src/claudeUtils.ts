@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { config } from './config';
 
 export interface ClaudeCommandInfo {
   command: string;
@@ -9,6 +10,17 @@ export interface ClaudeCommandInfo {
 
 export class ClaudeUtils {
   static getClaudeCommand(): ClaudeCommandInfo {
+    // First check if a specific claude path is configured
+    const configuredPath = config.get('claudePath');
+    if (configuredPath && fs.existsSync(configuredPath)) {
+      try {
+        execSync(`"${configuredPath}" --version`, { stdio: 'ignore' });
+        return { command: configuredPath, baseArgs: ['--dangerously-skip-permissions'] };
+      } catch {
+        // Continue to other methods if configured path doesn't work
+      }
+    }
+
     // For WSL/Linux compatibility, try multiple approaches
     if (process.platform === 'linux' || process.env.WSL_DISTRO_NAME) {
       // First try to find full path to npx

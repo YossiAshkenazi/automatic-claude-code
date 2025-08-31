@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dual-agent-monitor-config
+  namespace: dual-agent-monitor
+data:
+  NODE_ENV: "production"
+  PORT: "8080"
+  LOG_LEVEL: "info"
+  PROMETHEUS_ENABLED: "true"
+  PROMETHEUS_PORT: "9090"
+  RATE_LIMIT_WINDOW_MS: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  MAX_CONNECTIONS: "1000"
+  CONNECTION_TIMEOUT: "30000"
+  KEEP_ALIVE_TIMEOUT: "5000"
+  MAX_FILE_SIZE: "10485760"
+  BACKUP_RETENTION_DAYS: "30"
+  FLUENTD_ENABLED: "true"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: dual-agent-monitor
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+
+    events {
+        worker_connections 4096;
+        use epoll;
+        multi_accept on;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                       '$status $body_bytes_sent "$http_referer" '
+                       '"$http_user_agent" "$http_x_forwarded_for" '
+                       'rt=$request_time uct="$upstream_connect_time" '
+                       'uht="$upstream_header_time" urt="$upstream_response_time"';
+
+        access_log /var/log/nginx/access.log main;
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+        server_tokens off;
+        client_max_body_size 10M;
+
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_proxied any;
+        gzip_comp_level 6;
+        gzip_types
+            text/plain
+            text/css
+            text/xml
+            text/javascript
+            application/javascript
+            application/xml+rss
+            application/json;
+
+        # Rate limiting
+        limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+        limit_conn_zone $binary_remote_addr zone=addr:10m;
+
+        upstream dual_agent_monitor {
+            server dual-agent-monitor-service:8080 max_fails=3 fail_timeout=30s;
+            keepalive 32;
+        }
+
+        server {
+            listen 80;
+            server_name _;
+
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+
+            location /ws/ {
+                proxy_pass http://dual_agent_monitor;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_cache_bypass $http_upgrade;
+                proxy_read_timeout 86400;
+            }
+
+            location /api/ {
+                limit_req zone=api burst=20 nodelay;
+                proxy_pass http://dual_agent_monitor;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+
+            location / {
+                proxy_pass http://dual_agent_monitor;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+    }

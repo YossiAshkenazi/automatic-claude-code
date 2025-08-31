@@ -19,18 +19,17 @@ pnpm run clean        # Remove dist directory
 # Production build & run
 pnpm run build && node dist/index.js run "task" -i 10 -v
 
-# Dual-Agent Mode (NEW)
-acc run "your task" --dual-agent -i 5 -v    # Run with dual-agent architecture
-acc run "your task" --manager-model opus -w sonnet  # Custom models per agent
-acc agents --status                         # View agent status and coordination
-acc agents --logs                          # View agent communication logs
+# From ANY project directory (using relative path to ACC)
+node "../automatic-claude-code/dist/index.js" run "task" --dual-agent -i 5 -v
+node "../automatic-claude-code/dist/index.js" run "task" --manager-model opus --worker-model sonnet -v
+node "../automatic-claude-code/dist/index.js" monitor        # Check monitoring status
+node "../automatic-claude-code/dist/index.js" monitor --start # Start monitoring server
+node "../automatic-claude-code/dist/index.js" examples      # Show example prompts
+node "../automatic-claude-code/dist/index.js" history       # View session history
+node "../automatic-claude-code/dist/index.js" logs --tail   # Watch logs in real-time
 
-# Traditional Single-Agent Mode
-acc run "your task" -i 5 -v              # Run single agent (legacy mode)
-acc examples                             # Show example prompts
-acc session --list                       # List all sessions
-acc history                              # View session history
-acc logs --tail                          # Watch logs in real-time
+# Monitoring UI
+# Open http://localhost:6007 to watch dual-agent coordination in real-time
 ```
 
 ## Architecture

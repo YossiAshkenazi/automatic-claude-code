@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: dual-agent-monitor
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: dual-agent-monitor
+data:
+  redis.conf: |
+    # Redis Configuration for Production
+    bind 0.0.0.0
+    port 6379
+    protected-mode yes
+    
+    # Memory management
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+    
+    # Persistence
+    save 900 1
+    save 300 10
+    save 60 10000
+    
+    # Logging
+    loglevel notice
+    logfile ""
+    
+    # Performance
+    tcp-keepalive 300
+    timeout 0
+    
+    # Security
+    # requirepass will be set via environment variable
+    
+    # Append only file
+    appendonly yes
+    appendfsync everysec
+    
+    # Slow log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: dual-agent-monitor
+  labels:
+    app: redis
+    tier: cache
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        tier: cache
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - /usr/local/etc/redis/redis.conf
+        - --requirepass
+        - $(REDIS_PASSWORD)
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dual-agent-monitor-secrets
+              key: REDIS_PASSWORD
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        - name: redis-config
+          mountPath: /usr/local/etc/redis
+          readOnly: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - --raw
+            - incr
+            - ping
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - --raw
+            - incr
+            - ping
+          initialDelaySeconds: 5
+          timeoutSeconds: 3
+          periodSeconds: 5
+      volumes:
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: redis-pvc
+      - name: redis-config
+        configMap:
+          name: redis-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: dual-agent-monitor
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+  selector:
+    app: redis

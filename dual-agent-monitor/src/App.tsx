@@ -8,10 +8,11 @@ import { SessionControls } from './components/SessionControls';
 import { Timeline } from './components/Timeline';
 import { SessionList } from './components/SessionList';
 import { PerformanceMetrics } from './components/PerformanceMetrics';
+import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { CrossProjectView } from './components/CrossProjectView';
 import { formatDate } from './utils/formatters';
 
-type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'sessions' | 'cross-project';
+type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'analytics' | 'sessions' | 'cross-project';
 
 function App() {
   const [sessions, setSessions] = useState<DualAgentSession[]>([]);
@@ -272,7 +273,8 @@ function App() {
               {getViewModeButton('sessions', <List size={18} />, 'Sessions')}
               {getViewModeButton('dual-pane', <Monitor size={18} />, 'Dual Pane')}
               {getViewModeButton('timeline', <Clock size={18} />, 'Timeline')}
-              {getViewModeButton('metrics', <BarChart3 size={18} />, 'Metrics')}
+              {getViewModeButton('analytics', <BarChart3 size={18} />, 'Analytics')}
+              {getViewModeButton('metrics', <BarChart3 size={18} />, 'Legacy Metrics')}
             </div>
             
             <button
@@ -389,6 +391,18 @@ function App() {
               </div>
             )}
             
+            {viewMode === 'analytics' && (
+              <div className="w-full">
+                <div className="p-6">
+                  <AnalyticsDashboard
+                    sessionIds={selectedSession ? [selectedSession.id] : sessions.map(s => s.id)}
+                    selectedSessionId={selectedSession?.id}
+                    onSessionSelect={handleSessionSelect}
+                  />
+                </div>
+              </div>
+            )}
+            
             {viewMode === 'metrics' && (
               <div className="w-full">
                 <SessionControls 
@@ -401,6 +415,16 @@ function App() {
               </div>
             )}
           </>
+        ) : viewMode === 'analytics' ? (
+          <div className="w-full">
+            <div className="p-6">
+              <AnalyticsDashboard
+                sessionIds={sessions.map(s => s.id)}
+                selectedSessionId={selectedSession?.id}
+                onSessionSelect={handleSessionSelect}
+              />
+            </div>
+          </div>
         ) : (
           <div className="w-full flex items-center justify-center text-gray-500">
             <div className="text-center">

@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import { InMemoryDatabaseService } from './database/InMemoryDatabaseService';
 import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from './types';
+import { AnalyticsService } from './analytics/AnalyticsService';
 import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
@@ -16,9 +17,21 @@ app.use(express.json());
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Initialize database service
+// Initialize database service and analytics
 const dbService = new InMemoryDatabaseService();
+const analyticsService = new AnalyticsService(dbService);
 const clients = new Set<WebSocket>();
+
+// Initialize analytics service
+analyticsService.initialize().catch(console.error);
+
+// Subscribe to real-time analytics updates
+analyticsService.subscribeToRealTime((metrics) => {
+  broadcast({
+    type: 'analytics:realtime',
+    data: metrics
+  });
+});
 
 // In-memory storage for active sessions (will be replaced by database later)
 let currentSession: DualAgentSession | null = null;
@@ -140,6 +153,9 @@ wss.on('connection', (ws) => {
               
               await dbService.addMessage(agentMessage);
               
+              // Collect analytics metrics
+              await analyticsService.collectMetricsFromMessage(agentMessage, currentSession);
+              
               broadcast({
                 type: 'agent:message',
                 data: agentMessage
@@ -159,6 +175,45 @@ wss.on('connection', (ws) => {
             }));
           } catch (error) {
             console.error('Error exporting session:', error);
+          }
+          break;
+
+        case 'analytics:subscribe':
+          try {
+            const { sessionIds, includeRealTime } = data;
+            const dashboardData = await analyticsService.getDashboardData({
+              sessionIds,
+              includeRealTime: includeRealTime || false
+            });
+            
+            ws.send(JSON.stringify({
+              type: 'analytics:dashboard',
+              data: dashboardData
+            }));
+          } catch (error) {
+            console.error('Error getting analytics data:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Failed to get analytics data'
+            }));
+          }
+          break;
+
+        case 'analytics:compare':
+          try {
+            const { sessionIds } = data;
+            const comparison = await analyticsService.compareSessionPerformance(sessionIds);
+            
+            ws.send(JSON.stringify({
+              type: 'analytics:comparison',
+              data: comparison
+            }));
+          } catch (error) {
+            console.error('Error comparing sessions:', error);
+            ws.send(JSON.stringify({
+              type: 'error', 
+              message: 'Failed to compare sessions'
+            }));
           }
           break;
 
@@ -362,6 +417,12 @@ app.post('/api/sessions/:id/messages', async (req, res) => {
     
     await dbService.addMessage(message);
     
+    // Collect analytics metrics
+    const session = await dbService.getSession(req.params.id);
+    if (session) {
+      await analyticsService.collectMetricsFromMessage(message, session);
+    }
+    
     // Broadcast to WebSocket clients
     broadcast({
       type: 'agent:message',
@@ -369,6 +430,138 @@ app.post('/api/sessions/:id/messages', async (req, res) => {
     });
     
     res.json({ success: true, message });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Analytics API endpoints
+app.get('/api/analytics/dashboard', async (req, res) => {
+  try {
+    const { sessionIds, timeRange, includeRealTime } = req.query;
+    
+    const query: any = {
+      includeRealTime: includeRealTime === 'true'
+    };
+    
+    if (sessionIds) {
+      query.sessionIds = Array.isArray(sessionIds) ? sessionIds : [sessionIds];
+    }
+    
+    if (timeRange) {
+      const range = JSON.parse(timeRange as string);
+      query.timeRange = {
+        start: new Date(range.start),
+        end: new Date(range.end)
+      };
+    }
+    
+    const dashboardData = await analyticsService.getDashboardData(query);
+    res.json(dashboardData);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/analytics/performance/:sessionId', async (req, res) => {
+  try {
+    const analytics = await analyticsService.analyzeSession(req.params.sessionId);
+    res.json(analytics);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/analytics/comparison', async (req, res) => {
+  try {
+    const { sessionIds } = req.body;
+    
+    if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+      return res.status(400).json({ error: 'sessionIds array is required' });
+    }
+    
+    const comparison = await analyticsService.compareSessionPerformance(sessionIds);
+    res.json(comparison);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/analytics/trends', async (req, res) => {
+  try {
+    const { sessionIds, timeRange, granularity } = req.query;
+    
+    if (!sessionIds) {
+      return res.status(400).json({ error: 'sessionIds parameter is required' });
+    }
+    
+    if (!timeRange) {
+      return res.status(400).json({ error: 'timeRange parameter is required' });
+    }
+    
+    const ids = Array.isArray(sessionIds) ? sessionIds : [sessionIds];
+    const range = JSON.parse(timeRange as string);
+    
+    const trends = await analyticsService.getPerformanceTrends(
+      ids as string[],
+      {
+        start: new Date(range.start),
+        end: new Date(range.end)
+      },
+      (granularity as 'minute' | 'hour' | 'day') || 'hour'
+    );
+    
+    res.json(trends);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/analytics/realtime', async (req, res) => {
+  try {
+    const metrics = analyticsService.getRealTimeMetrics();
+    res.json(metrics);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/analytics/export', async (req, res) => {
+  try {
+    const { format, query } = req.body;
+    
+    if (!format || !['json', 'csv'].includes(format)) {
+      return res.status(400).json({ error: 'format must be json or csv' });
+    }
+    
+    const data = await analyticsService.exportAnalytics(format, query || {});
+    
+    if (format === 'csv') {
+      res.header('Content-Type', 'text/csv');
+      res.header('Content-Disposition', 'attachment; filename="analytics.csv"');
+      res.send(data);
+    } else {
+      res.json(data);
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/analytics/report', async (req, res) => {
+  try {
+    const { sessionIds, reportType } = req.body;
+    
+    if (!Array.isArray(sessionIds)) {
+      return res.status(400).json({ error: 'sessionIds array is required' });
+    }
+    
+    const report = await analyticsService.generateReport(
+      sessionIds,
+      reportType || 'summary'
+    );
+    
+    res.json(report);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -385,14 +578,16 @@ server.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('Shutting down WebSocket server...');
+  await analyticsService.shutdown();
   dbService.close();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('Shutting down WebSocket server...');
+  await analyticsService.shutdown();
   dbService.close();
   process.exit(0);
 });

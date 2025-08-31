@@ -193,6 +193,17 @@ class AutomaticClaudeCode {
       claudeProcess.on('error', (err) => {
         reject(err);
       });
+
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        this.logger.error('Claude process timed out after 60 seconds');
+        claudeProcess.kill('SIGTERM');
+        reject(new Error('Claude process timed out after 60 seconds'));
+      }, 60000);
+
+      claudeProcess.on('close', () => {
+        clearTimeout(timeout);
+      });
     });
   }
 

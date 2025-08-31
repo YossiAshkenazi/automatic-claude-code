@@ -70,14 +70,7 @@
     "ask": [
       "Bash(mv:*)"
     ],
-    "defaultMode": "acceptEdits",
-    "additionalDirectories": [
-      "C:\\c\\Users\\Dev",
-      "C:\\Users\\Dev\\agents-observability-api-cooldown",
-      "C:\\Users\\Dev\\agents-observability-unknown-event",
-      "C:\\Users\\Dev\\agents-observability-tts-prefix",
-      "C:\\mnt\\c\\Users\\Dev"
-    ]
+    "defaultMode": "acceptEdits"
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [

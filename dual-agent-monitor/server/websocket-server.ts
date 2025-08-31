@@ -6,7 +6,7 @@ import { AgentIntegrationService, AgentMessage, SessionData } from '../src/servi
 
 const app = express();
 app.use(cors({
-  origin: ['http://localhost:6011', 'http://localhost:3000', 'http://localhost:5173'],
+  origin: ['http://localhost:6011', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4001'],
   credentials: true
 }));
 app.use(express.json());
@@ -266,7 +266,7 @@ app.get('/api/sessions/:id/export', (req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 4001;
 server.listen(PORT, () => {
   console.log(`WebSocket server running on ws://localhost:${PORT}`);
   console.log(`REST API available at http://localhost:${PORT}/api`);

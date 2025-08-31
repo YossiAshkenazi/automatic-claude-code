@@ -25,7 +25,7 @@ function App() {
   const [activeProjects, setActiveProjects] = useState<string[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('all');
 
-  const { isConnected, lastMessage } = useWebSocket('ws://localhost:8080');
+  const { isConnected, lastMessage } = useWebSocket('ws://localhost:4001');
 
   // Load initial data
   useEffect(() => {

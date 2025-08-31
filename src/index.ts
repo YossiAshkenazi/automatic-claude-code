@@ -22,6 +22,7 @@ interface LoopOptions {
   sessionId?: string;
   workDir?: string;
   allowedTools?: string;
+  timeout?: number;
 }
 
 interface AnalysisResult {
@@ -207,12 +208,14 @@ class AutomaticClaudeCode {
         reject(err);
       });
 
-      // Add timeout to prevent hanging
+      // Add timeout to prevent hanging (default 10 minutes, configurable)
+      const timeoutMs = options.timeout || 600000; // Default 10 minutes
+      const timeoutMinutes = Math.round(timeoutMs / 60000);
       const timeout = setTimeout(() => {
-        this.logger.error('Claude process timed out after 60 seconds');
+        this.logger.error(`Claude process timed out after ${timeoutMinutes} minutes`);
         claudeProcess.kill('SIGTERM');
-        reject(new Error('Claude process timed out after 60 seconds'));
-      }, 60000);
+        reject(new Error(`Claude process timed out after ${timeoutMinutes} minutes`));
+      }, timeoutMs);
 
       claudeProcess.on('close', () => {
         clearTimeout(timeout);
@@ -467,6 +470,7 @@ async function main() {
     .option('-t, --tools <tools>', 'Comma-separated list of allowed tools')
     .option('-c, --continue-on-error', 'Continue loop even if errors occur')
     .option('-v, --verbose', 'Show detailed output')
+    .option('--timeout <minutes>', 'Timeout for each Claude execution in minutes (default: 10)', '10')
     .action(async (prompt, options) => {
       const app = new AutomaticClaudeCode();
       
@@ -478,6 +482,7 @@ async function main() {
           allowedTools: options.tools,
           continueOnError: options.continueOnError,
           verbose: options.verbose,
+          timeout: parseInt(options.timeout) * 60000, // Convert minutes to milliseconds
         });
       } catch (error) {
         console.error(chalk.red('Fatal error:'), error);

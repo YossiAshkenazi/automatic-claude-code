@@ -12,7 +12,14 @@ const wss = new WebSocket.Server({ server });
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve enterprise demo as default
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'enterprise-demo.html'));
+});
+
+// Static files (after specific routes)
+app.use(express.static(__dirname));
 
 // Session storage
 const SESSIONS_DIR = path.join(__dirname, '.dual-agent-sessions');

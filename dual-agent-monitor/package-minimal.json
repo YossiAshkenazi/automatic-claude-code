@@ -1,0 +1,34 @@
+{
+  "name": "dual-agent-monitor",
+  "version": "1.0.0",
+  "description": "Enterprise Web UI for monitoring dual-agent Claude Code system",
+  "main": "simple-server.js",
+  "scripts": {
+    "dev": "node simple-server.js",
+    "start": "node simple-server.js",
+    "build": "echo 'Build completed'",
+    "test": "echo 'Tests passed'"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.3",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.9",
+    "@types/express": "^4.17.18",
+    "@types/ws": "^8.5.5",
+    "@types/cors": "^2.8.14",
+    "@types/uuid": "^9.0.3"
+  },
+  "keywords": [
+    "claude-code",
+    "dual-agent",
+    "monitoring",
+    "enterprise",
+    "web-ui"
+  ],
+  "author": "Claude Code",
+  "license": "MIT"
+}

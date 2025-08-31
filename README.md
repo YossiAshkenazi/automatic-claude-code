@@ -103,6 +103,7 @@ acc session --list
 
 ```bash
 # 💡 Development Tasks
+acc run "add unit tests for all functions in src/utils.ts" -i 3
 acc run "implement error handling for network requests" -i 4
 acc run "add JSDoc comments to all exported functions" -i 2
 acc run "refactor the authentication module to use JWT" -i 5
@@ -115,10 +116,12 @@ acc run "fix the race condition in async data loading" -i 3
 # 📚 Documentation
 acc run "create comprehensive README with installation guide" -i 2
 acc run "add inline documentation for complex algorithms" -i 3
+acc run "generate API documentation from TypeScript interfaces" -i 2
 
 # 🏗️ Architecture
 acc run "migrate from Express to Fastify framework" -i 6
 acc run "implement dependency injection pattern" -i 4
+acc run "add database connection pooling and optimization" -i 3
 ```
 
 ### Advanced Options
@@ -140,13 +143,16 @@ acc run "add unit tests for all components" -i 5
 ### Debugging and Session Management
 
 ```bash
+# Get help and see all example prompts
+acc examples
+
 # Show all previous sessions
 acc history
 
 # List recent sessions with summaries
 acc session --list
 
-# View detailed session breakdown
+# View detailed session breakdown (shows exact prompts sent and responses received)
 acc session [session-id]
 
 # View raw logs

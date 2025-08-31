@@ -14,9 +14,10 @@ A WSL terminal application that runs Claude Code in an automated loop for contin
 
 ## Installation
 
+### Method 1: Global Installation (Recommended)
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/automatic-claude-code.git
+git clone https://github.com/YossiAshkenazi/automatic-claude-code.git
 cd automatic-claude-code
 
 # Install dependencies
@@ -25,8 +26,29 @@ pnpm install
 # Build the project
 pnpm run build
 
-# Link globally (optional)
+# Link globally for easy access
 pnpm link --global
+
+# Now you can use 'acc' from anywhere
+acc examples
+```
+
+### Method 2: Local Usage
+```bash
+# Clone and build (same as above)
+git clone https://github.com/YossiAshkenazi/automatic-claude-code.git
+cd automatic-claude-code
+pnpm install
+pnpm run build
+
+# Use with node command
+node dist/index.js run "your task" -i 3 -v
+```
+
+### Method 3: NPM Install (Future)
+```bash
+# When published to NPM (not yet available)
+npm install -g automatic-claude-code
 ```
 
 ## Prerequisites
@@ -61,27 +83,77 @@ Options:
   -v, --verbose            Show detailed output
 ```
 
-### Examples
+### Quick Start
 
 ```bash
-# Run with specific iteration limit
-acc run "add unit tests for all components" -i 5
+# Get help and see example prompts
+acc examples
 
+# Run a specific development task
+acc run "add unit tests for all functions in src/utils.ts" -i 3 -v
+
+# Check what happened in your last session
+acc session
+
+# View all your previous sessions
+acc session --list
+```
+
+### Development Examples
+
+```bash
+# 💡 Development Tasks
+acc run "implement error handling for network requests" -i 4
+acc run "add JSDoc comments to all exported functions" -i 2
+acc run "refactor the authentication module to use JWT" -i 5
+
+# 🐛 Bug Fixes  
+acc run "fix the memory leak in the websocket connection" -i 3
+acc run "resolve TypeScript errors in the build process" -i 4
+acc run "fix the race condition in async data loading" -i 3
+
+# 📚 Documentation
+acc run "create comprehensive README with installation guide" -i 2
+acc run "add inline documentation for complex algorithms" -i 3
+
+# 🏗️ Architecture
+acc run "migrate from Express to Fastify framework" -i 6
+acc run "implement dependency injection pattern" -i 4
+```
+
+### Advanced Options
+
+```bash
 # Use Opus model with verbose output
 acc run "refactor the database layer" -m opus -v
 
-# Specify working directory and tools
+# Specify working directory and tools  
 acc run "implement caching" -d ./my-project -t "Read,Write,Edit,Bash"
 
 # Continue on errors
 acc run "migrate to TypeScript" -c
+
+# Run with specific iteration limit
+acc run "add unit tests for all components" -i 5
 ```
 
-### View Session History
+### Debugging and Session Management
 
 ```bash
 # Show all previous sessions
 acc history
+
+# List recent sessions with summaries
+acc session --list
+
+# View detailed session breakdown
+acc session [session-id]
+
+# View raw logs
+acc logs
+
+# Watch logs in real-time  
+acc logs --tail
 ```
 
 ## How It Works
@@ -116,13 +188,35 @@ Configuration file is stored at `~/.automatic-claude-code/config.json`:
 }
 ```
 
+## All Available Commands
+
+```bash
+# Core functionality
+acc run "<task>"           # Run automated development task
+acc examples              # Show example prompts and usage tips
+acc help                  # Show help information
+
+# Session management  
+acc session              # View latest session details
+acc session --list       # List all sessions with summaries  
+acc session <id>         # View specific session details
+acc history              # Show session history
+
+# Logging and debugging
+acc logs                 # View latest log file
+acc logs --list          # List all log files
+acc logs --tail          # Watch logs in real-time
+```
+
 ## Session Management
 
 Sessions are saved in `.claude-sessions/` directory with detailed information:
-- Prompts and outputs for each iteration
-- Files modified and commands executed
-- Timing and cost information
-- Error logs and recovery attempts
+- 📝 **Prompts sent** to Claude Code in each iteration
+- 💬 **Full responses** received from Claude
+- 📁 **Files modified** and commands executed  
+- ⏱️ **Timing data** and cost information
+- 🐛 **Error logs** and recovery attempts
+- 🛠️ **Tools used** (Read, Write, Edit, Bash, etc.)
 
 ## Architecture
 

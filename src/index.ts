@@ -44,15 +44,26 @@ class AutomaticClaudeCode {
   }
 
   private getClaudeCommand(): string {
+    // For WSL/Linux compatibility, prefer npx approach first
+    if (process.platform === 'linux' || process.env.WSL_DISTRO_NAME) {
+      try {
+        this.logger.info('Linux/WSL detected, using npx approach...');
+        execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 15000 });
+        return 'npx @anthropic-ai/claude-code --dangerously-skip-permissions';
+      } catch (error) {
+        this.logger.error(`npx failed: ${error}`);
+      }
+    }
+
     // Try to actually run claude --version to verify it works
     try {
       execSync('claude --version', { stdio: 'ignore' });
       return 'claude --dangerously-skip-permissions';
     } catch {
-      // Try npx approach
+      // Try npx approach as fallback
       try {
         this.logger.info('Claude not directly accessible, trying npx...');
-        execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 10000 });
+        execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 15000 });
         return 'npx @anthropic-ai/claude-code --dangerously-skip-permissions';
       } catch {
         // Try to find claude-code instead of claude

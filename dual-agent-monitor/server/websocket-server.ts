@@ -2,7 +2,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
-import { AgentIntegrationService, AgentMessage, SessionData } from '../src/services/AgentIntegrationService';
+import { InMemoryDatabaseService } from './database/InMemoryDatabaseService';
+import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from './types';
+import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
 app.use(cors({
@@ -14,19 +16,19 @@ app.use(express.json());
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-const agentService = new AgentIntegrationService();
+// Initialize database service
+const dbService = new InMemoryDatabaseService();
 const clients = new Set<WebSocket>();
+
+// In-memory storage for active sessions (will be replaced by database later)
+let currentSession: DualAgentSession | null = null;
 
 // WebSocket connection handling
 wss.on('connection', (ws) => {
   console.log('New WebSocket client connected');
   clients.add(ws);
 
-  // Connection established - no initial message needed
-  // The WebSocket client will detect connection via the open event
-
   // Send current session data if available
-  const currentSession = agentService.getCurrentSession();
   if (currentSession) {
     ws.send(JSON.stringify({
       type: 'session:current',
@@ -34,11 +36,15 @@ wss.on('connection', (ws) => {
     }));
   }
 
-  // Send all sessions
-  ws.send(JSON.stringify({
-    type: 'sessions:list',
-    data: agentService.getAllSessions()
-  }));
+  // Send all sessions from database
+  dbService.getAllSessions().then(sessions => {
+    ws.send(JSON.stringify({
+      type: 'sessions:list',
+      data: sessions
+    }));
+  }).catch(error => {
+    console.error('Error fetching sessions:', error);
+  });
 
   ws.on('message', async (message) => {
     try {
@@ -52,11 +58,20 @@ wss.on('connection', (ws) => {
 
         case 'agents:start':
           try {
-            await agentService.startAgents(data.task, data.options);
+            // Create new session in database
+            const sessionId = await dbService.createSession({
+              startTime: new Date(),
+              status: 'running',
+              initialTask: data.task || 'Agent task',
+              workDir: process.cwd()
+            });
+            
+            currentSession = await dbService.getSession(sessionId);
+            
             broadcast({
               type: 'agents:started',
               data: {
-                sessionId: agentService.getCurrentSession()?.id,
+                sessionId: sessionId,
                 task: data.task
               }
             });
@@ -69,48 +84,82 @@ wss.on('connection', (ws) => {
           break;
 
         case 'agents:stop':
-          await agentService.stopAgents();
-          broadcast({
-            type: 'agents:stopped',
-            data: {
-              sessionId: agentService.getCurrentSession()?.id
-            }
-          });
+          if (currentSession) {
+            await dbService.updateSessionStatus(currentSession.id, 'completed', new Date());
+            currentSession = await dbService.getSession(currentSession.id);
+            
+            broadcast({
+              type: 'agents:stopped',
+              data: {
+                sessionId: currentSession?.id
+              }
+            });
+          }
           break;
 
         case 'session:get':
-          const session = agentService.getSession(data.sessionId);
-          ws.send(JSON.stringify({
-            type: 'session:data',
-            data: session
-          }));
+          try {
+            const session = await dbService.getSession(data.sessionId);
+            ws.send(JSON.stringify({
+              type: 'session:data',
+              data: session
+            }));
+          } catch (error) {
+            console.error('Error fetching session:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Failed to fetch session'
+            }));
+          }
           break;
 
         case 'sessions:list':
-          ws.send(JSON.stringify({
-            type: 'sessions:list',
-            data: agentService.getAllSessions()
-          }));
-          break;
-
-        case 'sessions:historical':
-          const historicalSessions = await agentService.loadHistoricalSessions();
-          ws.send(JSON.stringify({
-            type: 'sessions:historical',
-            data: historicalSessions
-          }));
+          try {
+            const sessions = await dbService.getAllSessions();
+            ws.send(JSON.stringify({
+              type: 'sessions:list',
+              data: sessions
+            }));
+          } catch (error) {
+            console.error('Error fetching sessions:', error);
+          }
           break;
 
         case 'message:send':
-          agentService.sendMessageToAgent(data.agent, data.message);
+          // Add message to database
+          if (currentSession) {
+            try {
+              const agentMessage: AgentMessage = {
+                id: uuidv4(),
+                sessionId: currentSession.id,
+                agentType: data.agent === 'manager' ? 'manager' : 'worker',
+                messageType: 'prompt',
+                content: data.message,
+                timestamp: new Date()
+              };
+              
+              await dbService.addMessage(agentMessage);
+              
+              broadcast({
+                type: 'agent:message',
+                data: agentMessage
+              });
+            } catch (error) {
+              console.error('Error adding message:', error);
+            }
+          }
           break;
 
         case 'session:export':
-          const exportData = agentService.exportSessionData(data.sessionId);
-          ws.send(JSON.stringify({
-            type: 'session:export',
-            data: exportData
-          }));
+          try {
+            const session = await dbService.getSession(data.sessionId);
+            ws.send(JSON.stringify({
+              type: 'session:export',
+              data: session
+            }));
+          } catch (error) {
+            console.error('Error exporting session:', error);
+          }
           break;
 
         default:
@@ -136,63 +185,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Agent Integration Service event listeners
-agentService.on('agent:message', (message: AgentMessage) => {
-  broadcast({
-    type: 'agent:message',
-    data: message
-  });
-});
-
-agentService.on('agents:started', (data) => {
-  broadcast({
-    type: 'agents:started',
-    data
-  });
-});
-
-agentService.on('agents:stopped', (data) => {
-  broadcast({
-    type: 'agents:stopped',
-    data
-  });
-});
-
-agentService.on('agent:error', (data) => {
-  broadcast({
-    type: 'agent:error',
-    data
-  });
-});
-
-agentService.on('task:assigned', (data) => {
-  broadcast({
-    type: 'task:assigned',
-    data
-  });
-});
-
-agentService.on('task:completed', (data) => {
-  broadcast({
-    type: 'task:completed',
-    data
-  });
-});
-
-agentService.on('metrics:updated', (data) => {
-  broadcast({
-    type: 'metrics:updated',
-    data
-  });
-});
-
-agentService.on('session:ended', (data) => {
-  broadcast({
-    type: 'session:ended',
-    data
-  });
-});
-
 // Broadcast to all connected clients
 function broadcast(message: any) {
   const messageStr = JSON.stringify(message);
@@ -205,11 +197,14 @@ function broadcast(message: any) {
 
 // REST API endpoints for non-WebSocket clients
 app.get('/api/health', (req, res) => {
+  const dbHealth = dbService.getHealthStatus();
+  
   res.json({
     status: 'healthy',
+    database: dbHealth,
     agents: {
-      running: agentService.getCurrentSession() ? true : false,
-      sessionId: agentService.getCurrentSession()?.id
+      running: currentSession?.status === 'running',
+      sessionId: currentSession?.id
     },
     websocket: {
       clients: clients.size
@@ -217,16 +212,25 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/api/sessions', (req, res) => {
-  res.json(agentService.getAllSessions());
+app.get('/api/sessions', async (req, res) => {
+  try {
+    const sessions = await dbService.getAllSessions();
+    res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
 });
 
-app.get('/api/sessions/:id', (req, res) => {
-  const session = agentService.getSession(req.params.id);
-  if (session) {
-    res.json(session);
-  } else {
-    res.status(404).json({ error: 'Session not found' });
+app.get('/api/sessions/:id', async (req, res) => {
+  try {
+    const session = await dbService.getSession(req.params.id);
+    if (session) {
+      res.json(session);
+    } else {
+      res.status(404).json({ error: 'Session not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch session' });
   }
 });
 
@@ -238,35 +242,36 @@ app.post('/api/sessions', async (req, res) => {
       return res.status(400).json({ error: 'Initial task is required' });
     }
     
-    // Start agents with the provided task
-    await agentService.startAgents(initialTask, {
-      managerModel: 'opus',
-      workerModel: 'sonnet',
-      maxIterations: 10,
-      verbose: true
+    // Create new session in database
+    const sessionId = await dbService.createSession({
+      startTime: new Date(),
+      status: 'running',
+      initialTask: initialTask,
+      workDir: workDir || process.cwd()
     });
     
-    const session = agentService.getCurrentSession();
+    const session = await dbService.getSession(sessionId);
     if (session) {
+      currentSession = session;
+      
       // Broadcast session creation to all WebSocket clients
       broadcast({
         type: 'session:current',
         data: session
       });
       
+      const allSessions = await dbService.getAllSessions();
       broadcast({
         type: 'sessions:list',
-        data: agentService.getAllSessions()
+        data: allSessions
       });
       
       res.json({
         id: session.id,
-        initialTask,
-        workDir: workDir || process.cwd(),
+        initialTask: session.initialTask,
+        workDir: session.workDir,
         startTime: session.startTime,
         status: session.status,
-        managerAgent: session.managerAgent,
-        workerAgent: session.workerAgent,
         messages: session.messages
       });
     } else {
@@ -280,10 +285,18 @@ app.post('/api/sessions', async (req, res) => {
 
 app.post('/api/agents/start', async (req, res) => {
   try {
-    await agentService.startAgents(req.body.task, req.body.options);
+    const sessionId = await dbService.createSession({
+      startTime: new Date(),
+      status: 'running',
+      initialTask: req.body.task || 'Agent task',
+      workDir: process.cwd()
+    });
+    
+    currentSession = await dbService.getSession(sessionId);
+    
     res.json({
       success: true,
-      sessionId: agentService.getCurrentSession()?.id
+      sessionId: sessionId
     });
   } catch (error: any) {
     res.status(500).json({
@@ -294,25 +307,92 @@ app.post('/api/agents/start', async (req, res) => {
 });
 
 app.post('/api/agents/stop', async (req, res) => {
-  await agentService.stopAgents();
-  res.json({ success: true });
+  try {
+    if (currentSession) {
+      await dbService.updateSessionStatus(currentSession.id, 'completed', new Date());
+      currentSession = await dbService.getSession(currentSession.id);
+    }
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
-app.get('/api/sessions/:id/export', (req, res) => {
+app.get('/api/sessions/:id/export', async (req, res) => {
   try {
-    const data = agentService.exportSessionData(req.params.id);
+    const session = await dbService.getSession(req.params.id);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    // Get additional data for export
+    const communications = await dbService.getSessionCommunications(req.params.id);
+    const events = await dbService.getSessionEvents(req.params.id);
+    const metrics = await dbService.getSessionMetrics(req.params.id);
+    
+    const exportData = {
+      session,
+      communications,
+      events,
+      metrics
+    };
+    
     res.header('Content-Type', 'application/json');
     res.header('Content-Disposition', `attachment; filename="session_${req.params.id}.json"`);
-    res.send(data);
+    res.json(exportData);
   } catch (error: any) {
-    res.status(404).json({ error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Message API endpoint
+app.post('/api/sessions/:id/messages', async (req, res) => {
+  try {
+    const { agentType, messageType, content, metadata } = req.body;
+    
+    const message: AgentMessage = {
+      id: uuidv4(),
+      sessionId: req.params.id,
+      agentType,
+      messageType,
+      content,
+      timestamp: new Date(),
+      metadata
+    };
+    
+    await dbService.addMessage(message);
+    
+    // Broadcast to WebSocket clients
+    broadcast({
+      type: 'agent:message',
+      data: message
+    });
+    
+    res.json({ success: true, message });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
 // Standard port configuration
-const DEFAULT_PORT = 4001;
+const DEFAULT_PORT = 4002;
 const PORT = process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT;
+
 server.listen(PORT, () => {
   console.log(`WebSocket server running on ws://localhost:${PORT}`);
   console.log(`REST API available at http://localhost:${PORT}/api`);
+  console.log(`Database health: ${dbService.getHealthStatus().healthy ? 'healthy' : 'unhealthy'}`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('Shutting down WebSocket server...');
+  dbService.close();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Shutting down WebSocket server...');
+  dbService.close();
+  process.exit(0);
 });

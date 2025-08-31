@@ -117,9 +117,9 @@ class AutomaticClaudeCode {
       args.push('--model', options.model);
     }
     
-    if (options.workDir) {
-      args.push('--add-dir', options.workDir);
-    }
+    // Always add working directory (use current directory if not specified)
+    const workingDir = options.workDir || process.cwd();
+    args.push('--add-dir', workingDir);
     
     if (options.allowedTools) {
       args.push('--allowedTools', options.allowedTools);
@@ -142,6 +142,7 @@ class AutomaticClaudeCode {
       const allArgs = [...baseArgs, ...args];
       this.logger.debug(`Using Claude command: ${command} ${allArgs.join(' ')}`);
       this.logger.debug(`Working directory option: ${options.workDir}`);
+      this.logger.debug(`Resolved working directory: ${workingDir}`);
       this.logger.debug(`Full args: ${JSON.stringify(args)}`);
       
       // Use shell mode for npx commands to ensure proper PATH resolution
@@ -150,7 +151,7 @@ class AutomaticClaudeCode {
       const claudeProcess = spawn(command, allArgs, {
         shell: useShell,
         env: { ...process.env, PATH: process.env.PATH },
-        cwd: options.workDir || process.cwd(),
+        cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'] // Explicit stdio for better error handling
       });
 

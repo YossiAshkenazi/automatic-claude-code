@@ -230,6 +230,54 @@ app.get('/api/sessions/:id', (req, res) => {
   }
 });
 
+app.post('/api/sessions', async (req, res) => {
+  try {
+    const { initialTask, workDir } = req.body;
+    
+    if (!initialTask?.trim()) {
+      return res.status(400).json({ error: 'Initial task is required' });
+    }
+    
+    // Start agents with the provided task
+    await agentService.startAgents(initialTask, {
+      managerModel: 'opus',
+      workerModel: 'sonnet',
+      maxIterations: 10,
+      verbose: true
+    });
+    
+    const session = agentService.getCurrentSession();
+    if (session) {
+      // Broadcast session creation to all WebSocket clients
+      broadcast({
+        type: 'session:current',
+        data: session
+      });
+      
+      broadcast({
+        type: 'sessions:list',
+        data: agentService.getAllSessions()
+      });
+      
+      res.json({
+        id: session.id,
+        initialTask,
+        workDir: workDir || process.cwd(),
+        startTime: session.startTime,
+        status: session.status,
+        managerAgent: session.managerAgent,
+        workerAgent: session.workerAgent,
+        messages: session.messages
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to create session' });
+    }
+  } catch (error: any) {
+    console.error('Error creating session:', error);
+    res.status(500).json({ error: error.message || 'Failed to create session' });
+  }
+});
+
 app.post('/api/agents/start', async (req, res) => {
   try {
     await agentService.startAgents(req.body.task, req.body.options);

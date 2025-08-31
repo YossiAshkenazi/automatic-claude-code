@@ -387,7 +387,50 @@ app.get('/api/health', (req, res) => {
 app.get('/api/sessions', async (req, res) => {
   try {
     const sessions = await dbService.getAllSessions();
-    res.json(sessions);
+    
+    // Parse query parameters for pagination and filtering
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const sortBy = req.query.sortBy as string || 'startTime';
+    const sortOrder = req.query.sortOrder as string || 'desc';
+    
+    // Apply sorting
+    let sortedSessions = [...sessions];
+    sortedSessions.sort((a, b) => {
+      let aValue, bValue;
+      switch (sortBy) {
+        case 'lastActivity':
+          aValue = a.endTime || a.startTime;
+          bValue = b.endTime || b.startTime;
+          break;
+        case 'messageCount':
+          aValue = a.messages?.length || 0;
+          bValue = b.messages?.length || 0;
+          break;
+        default: // startTime
+          aValue = a.startTime;
+          bValue = b.startTime;
+      }
+      
+      if (sortOrder === 'desc') {
+        return new Date(bValue).getTime() - new Date(aValue).getTime();
+      } else {
+        return new Date(aValue).getTime() - new Date(bValue).getTime();
+      }
+    });
+    
+    // Apply pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedSessions = sortedSessions.slice(startIndex, endIndex);
+    
+    // Return paginated response structure expected by UI
+    res.json({
+      sessions: paginatedSessions,
+      total: sessions.length,
+      page: page,
+      limit: limit
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch sessions' });
   }

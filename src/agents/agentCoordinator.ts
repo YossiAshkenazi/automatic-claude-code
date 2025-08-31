@@ -243,8 +243,12 @@ export class AgentCoordinator extends EventEmitter {
         // Move to planning phase and trigger handoff
         this.updateWorkflowPhase('planning');
         
-        // Immediately trigger handoff to worker
-        await this.triggerWorkerHandoff(analysisResult.workItems[0], analysisResult.strategy);
+        // Process all work items for handoff
+        for (const workItem of analysisResult.workItems) {
+          await this.triggerWorkerHandoff(workItem, analysisResult.strategy);
+          // Small delay between handoffs to prevent overwhelming
+          await this.delay(500);
+        }
       }
     } catch (error) {
       await this.handleAgentError('manager', 'tool_failure', error instanceof Error ? error.message : String(error));
@@ -339,7 +343,7 @@ export class AgentCoordinator extends EventEmitter {
 
     // Don't evaluate handoffs too frequently
     if (this.lastHandoffTime && 
-        (Date.now() - this.lastHandoffTime.getTime()) < 30000) { // 30 seconds
+        (Date.now() - this.lastHandoffTime.getTime()) < 15000) { // 15 seconds
       return;
     }
 
@@ -350,12 +354,24 @@ export class AgentCoordinator extends EventEmitter {
         return;
       }
 
-      // Build handoff context
-      // Use integrated handoff logic
-      const handoffNeeded = this.checkHandoffConditions();
+      // Use outputParser to analyze Manager output for handoff triggers
+      const handoffAnalysis = this.outputParser.analyzeAgentOutput(recentManagerOutput, 'manager');
       
-      if (handoffNeeded) {
-        await this.processHandoffDecision();
+      if (handoffAnalysis.needsHandoff && handoffAnalysis.analysisComplete) {
+        this.logger.info('Manager handoff trigger detected', {
+          reason: handoffAnalysis.handoffReason,
+          taskBreakdown: handoffAnalysis.taskBreakdown?.length || 0
+        });
+        
+        await this.processManagerHandoff(handoffAnalysis);
+      } else {
+        // Fallback: check basic handoff conditions
+        const handoffNeeded = this.checkHandoffConditions();
+        
+        if (handoffNeeded) {
+          this.logger.info('Basic handoff conditions met - proceeding with delegation');
+          await this.processHandoffDecision();
+        }
       }
 
     } catch (error) {
@@ -363,9 +379,6 @@ export class AgentCoordinator extends EventEmitter {
     }
   }
 
-  /**
-   * Execute the handoff to Worker agent
-   */
   /**
    * Check if handoff conditions are met
    */
@@ -378,6 +391,51 @@ export class AgentCoordinator extends EventEmitter {
     return hasAnalysisComplete && hasPendingWork && workerIsIdle;
   }
 
+  /**
+   * Process Manager's handoff based on output analysis
+   */
+  private async processManagerHandoff(analysis: { needsHandoff: boolean; handoffReason?: string; taskBreakdown?: string[]; analysisComplete?: boolean; }): Promise<void> {
+    this.logger.info('Processing Manager handoff based on analysis', {
+      reason: analysis.handoffReason,
+      taskCount: analysis.taskBreakdown?.length || 0
+    });
+    
+    try {
+      // Create work items from task breakdown if available
+      if (analysis.taskBreakdown && analysis.taskBreakdown.length > 0) {
+        const workItems = this.createWorkItemsFromBreakdown(analysis.taskBreakdown);
+        this.storeWorkItemsForHandoff(workItems);
+      }
+      
+      // Process the handoff
+      await this.processHandoffDecision();
+      
+    } catch (error) {
+      this.logger.error('Manager handoff processing failed', { error });
+      throw error;
+    }
+  }
+  
+  /**
+   * Create work items from task breakdown
+   */
+  private createWorkItemsFromBreakdown(taskBreakdown: string[]): WorkItem[] {
+    const now = new Date();
+    return taskBreakdown.map((task, index) => ({
+      id: `work-item-${Date.now()}-${index}`,
+      title: task.length > 50 ? task.substring(0, 50) + '...' : task,
+      description: task,
+      status: 'planned' as TaskStatus,
+      priority: 3,
+      estimatedEffort: 2,
+      acceptanceCriteria: [`Complete: ${task}`],
+      dependencies: [],
+      assignedTo: undefined,
+      createdAt: now,
+      updatedAt: now
+    }));
+  }
+  
   /**
    * Process handoff decision using integrated logic
    */
@@ -393,9 +451,13 @@ export class AgentCoordinator extends EventEmitter {
         await this.executeWorkerTask(workItem, context);
       }
 
+      // Increment handoff counter and track timing
+      this.handoffCount++;
+      this.lastHandoffTime = new Date();
+      
       // Emit handoff event
       this.emitCoordinationEvent('MANAGER_WORKER_HANDOFF', 'manager', {
-        handoffCount: this.handoffQueue.length + this.pendingWorkItems.size,
+        handoffCount: this.handoffCount,
         reason: 'work_delegation'
       });
 
@@ -816,6 +878,10 @@ export class AgentCoordinator extends EventEmitter {
       });
 
       await this.executeWorkerTask(handoff.workItem, handoff.context);
+      
+      // Increment handoff counter after processing
+      this.handoffCount++;
+      this.lastHandoffTime = new Date();
     }
   }
 
@@ -836,11 +902,16 @@ export class AgentCoordinator extends EventEmitter {
       // Execute task immediately
       await this.executeWorkerTask(workItem, context);
       
+      // Increment handoff counter and track timing
+      this.handoffCount++;
+      this.lastHandoffTime = new Date();
+      
       // Emit handoff event
       this.emitCoordinationEvent('MANAGER_WORKER_HANDOFF', 'manager', {
         workItem,
         context,
-        strategy
+        strategy,
+        handoffCount: this.handoffCount
       });
 
     } catch (error) {
@@ -1099,6 +1170,8 @@ QUALITY REQUIREMENTS:
     workerExecutions: boolean;
     managerReviews: boolean;
     communicationFlow: boolean;
+    handoffCount: number;
+    messagesExchanged: number;
     issues: string[];
   } {
     const issues: string[] = [];
@@ -1135,6 +1208,8 @@ QUALITY REQUIREMENTS:
       workerExecutions,
       managerReviews,
       communicationFlow,
+      handoffCount: this.handoffCount,
+      messagesExchanged: this.executionContext.communicationHistory.length,
       issues
     };
   }

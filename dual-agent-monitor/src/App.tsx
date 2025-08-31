@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Monitor, Plus, RefreshCw, Wifi, WifiOff, BarChart3, Clock, List, Globe } from 'lucide-react';
+import { Monitor, Plus, RefreshCw, Wifi, WifiOff, BarChart3, Clock, List, Globe, Network, Activity, Brain, GitBranch } from 'lucide-react';
 import { DualAgentSession, AgentMessage, WebSocketMessage } from './types';
 import { useWebSocket } from './hooks/useWebSocket';
 import { apiClient } from './utils/api';
@@ -10,9 +10,15 @@ import { SessionList } from './components/SessionList';
 import { PerformanceMetrics } from './components/PerformanceMetrics';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { CrossProjectView } from './components/CrossProjectView';
+import { 
+  MessageFlowDiagram,
+  CommunicationTimeline,
+  AgentActivityMonitor,
+  CommunicationAnalytics
+} from './components/visualization';
 import { formatDate } from './utils/formatters';
 
-type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'analytics' | 'sessions' | 'cross-project';
+type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'analytics' | 'sessions' | 'cross-project' | 'message-flow' | 'comm-timeline' | 'agent-activity' | 'comm-analytics';
 
 function App() {
   const [sessions, setSessions] = useState<DualAgentSession[]>([]);
@@ -274,6 +280,10 @@ function App() {
               {getViewModeButton('dual-pane', <Monitor size={18} />, 'Dual Pane')}
               {getViewModeButton('timeline', <Clock size={18} />, 'Timeline')}
               {getViewModeButton('analytics', <BarChart3 size={18} />, 'Analytics')}
+              {getViewModeButton('message-flow', <Network size={18} />, 'Message Flow')}
+              {getViewModeButton('comm-timeline', <GitBranch size={18} />, 'Comm Timeline')}
+              {getViewModeButton('agent-activity', <Activity size={18} />, 'Agent Activity')}
+              {getViewModeButton('comm-analytics', <Brain size={18} />, 'Comm Analytics')}
               {getViewModeButton('metrics', <BarChart3 size={18} />, 'Legacy Metrics')}
             </div>
             
@@ -412,6 +422,83 @@ function App() {
                   onDelete={() => handleDeleteSession(selectedSession.id)}
                 />
                 <PerformanceMetrics session={selectedSession} />
+              </div>
+            )}
+            
+            {viewMode === 'message-flow' && (
+              <div className="w-full">
+                <SessionControls 
+                  session={selectedSession}
+                  onStatusChange={handleStatusChange}
+                  onExport={() => handleExportSession(selectedSession.id)}
+                  onDelete={() => handleDeleteSession(selectedSession.id)}
+                />
+                <div className="p-6 h-[calc(100vh-200px)]">
+                  <MessageFlowDiagram
+                    session={selectedSession}
+                    messages={selectedSession.messages}
+                    isRealTime={isConnected}
+                    onMessageSelect={(messageId) => console.log('Selected message:', messageId)}
+                    showFilters={true}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {viewMode === 'comm-timeline' && (
+              <div className="w-full">
+                <SessionControls 
+                  session={selectedSession}
+                  onStatusChange={handleStatusChange}
+                  onExport={() => handleExportSession(selectedSession.id)}
+                  onDelete={() => handleDeleteSession(selectedSession.id)}
+                />
+                <div className="p-6">
+                  <CommunicationTimeline
+                    session={selectedSession}
+                    messages={selectedSession.messages}
+                    isRealTime={isConnected}
+                    onMessageSelect={(messageId) => console.log('Selected message:', messageId)}
+                    height={600}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {viewMode === 'agent-activity' && (
+              <div className="w-full">
+                <SessionControls 
+                  session={selectedSession}
+                  onStatusChange={handleStatusChange}
+                  onExport={() => handleExportSession(selectedSession.id)}
+                  onDelete={() => handleDeleteSession(selectedSession.id)}
+                />
+                <div className="p-6">
+                  <AgentActivityMonitor
+                    session={selectedSession}
+                    messages={selectedSession.messages}
+                    isRealTime={isConnected}
+                    refreshInterval={5000}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {viewMode === 'comm-analytics' && (
+              <div className="w-full">
+                <SessionControls 
+                  session={selectedSession}
+                  onStatusChange={handleStatusChange}
+                  onExport={() => handleExportSession(selectedSession.id)}
+                  onDelete={() => handleDeleteSession(selectedSession.id)}
+                />
+                <div className="p-6">
+                  <CommunicationAnalytics
+                    session={selectedSession}
+                    messages={selectedSession.messages}
+                    comparisonSessions={sessions.filter(s => s.id !== selectedSession.id)}
+                  />
+                </div>
               </div>
             )}
           </>

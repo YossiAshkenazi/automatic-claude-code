@@ -1,8 +1,8 @@
-# Automatic Claude Code (v1.1.1)
+# Automatic Claude Code (v1.2.0)
 
 A powerful dual-agent system that revolutionizes AI-assisted development through coordinated Claude Code automation. Features a Manager-Worker architecture where specialized agents collaborate to tackle complex development tasks with unprecedented sophistication and reliability.
 
-> ⚠️ **Authentication Note**: ACC supports both subscription-based authentication (via dual-agent PTY mode) and API key authentication (legacy single-agent mode). Dual-agent mode is recommended for Claude Pro/Team subscribers. See [Authentication Requirements](#authentication-requirements) below.
+> 🎉 **Major Update**: ACC now uses PTY-based Claude Code control with OAuth authentication! No more API key requirements for dual-agent mode. Works seamlessly with Claude Pro/Team subscriptions via interactive sessions.
 
 ## Features
 
@@ -15,13 +15,15 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 - 🔄 **Adaptive Workflows**: Dynamic strategy adjustment based on progress
 
 ### 🚀 Core Capabilities
-- 🔄 **Automated Loop Execution**: Runs Claude Code via PTY (dual-agent) or headless mode (single-agent)
-- 📊 **Session Management**: Tracks all iterations, outputs, and progress
+- 🔄 **PTY-Based Control**: Interactive Claude Code sessions with real-time stream processing
+- 🔐 **OAuth Authentication**: Automatic token extraction from system credentials (Windows/macOS/Linux)
+- 🎛️ **Dual Execution Modes**: PTY mode (default, subscription-compatible) and headless fallback
+- 📊 **Advanced Session Management**: Up to 28 concurrent PTY sessions with persistence and cleanup
 - 🎯 **Smart Prompt Building**: Automatically generates contextual prompts based on previous outputs
-- 🛠️ **Error Recovery**: Detects and attempts to fix errors automatically
+- 🛠️ **Enhanced Error Recovery**: Advanced JSON stream parsing with ANSI handling and buffer management
 - 📈 **Progress Tracking**: Monitors files modified, commands executed, and overall progress
-- 💾 **Session History**: Saves and allows review of all development sessions
-- ⚙️ **Configurable**: Customizable iteration limits, models, and tool permissions
+- 💾 **Session History**: Saves and allows review of all development sessions with OAuth integration
+- ⚙️ **Configurable**: Customizable iteration limits, models, and tool permissions with PTY support
 
 ### 🖥️ Enhanced Monitoring Dashboard (Updated Sep 1, 2025)
 - ✅ **Data Consistency**: Real-time dynamic session counts (fixed hardcoded values)
@@ -106,58 +108,75 @@ npm install -g automatic-claude-code
 
 ## Authentication Requirements
 
-### ⚠️ Critical: API Credits Required
+### 🎉 New PTY-Based Authentication (v1.2.0)
 
-ACC supports two execution modes:
+ACC now supports **subscription-based authentication** through PTY mode, eliminating the need for API keys in most cases!
 
-- **Dual-Agent PTY Mode** (Recommended): Uses interactive Claude sessions with subscription authentication
-- **Single-Agent Headless Mode** (Legacy): Uses Claude Code's headless mode (`-p` flag) which requires API credits
+#### Execution Modes Available
 
-#### Setting Up API Authentication
+**1. PTY Mode (Default & Recommended)**:
+- ✅ Works with Claude Pro/Team subscriptions
+- ✅ No API key required
+- ✅ Automatic OAuth token extraction from system credentials
+- ✅ Interactive Claude sessions with real-time processing
+- ✅ Cross-platform support (Windows ConPTY, macOS/Linux PTY)
+- ✅ Enhanced error handling and recovery
 
-1. **Authentication Setup**:
-   
-   **For Dual-Agent Mode (Recommended)**: Uses subscription authentication via PTY
-   - Requires an active Claude subscription (Pro or Team)
-   - No API key configuration needed
-   - Automatically uses your subscription credentials
-   
-   **For Single-Agent Mode (Legacy)**: Uses API key authentication
-   - Visit [console.anthropic.com](https://console.anthropic.com)
-   - Add credits to your account  
-   - Generate an API key (starts with `sk-ant-`)
-   - Configure environment variable:
-     ```bash
-     # Linux/macOS
-     export ANTHROPIC_API_KEY="sk-ant-your-key-here"
-     
-     # Windows PowerShell
-     $env:ANTHROPIC_API_KEY = "sk-ant-your-key-here"
-     ```
+**2. Headless Mode (Fallback)**:
+- ⚠️ Requires API credits from console.anthropic.com
+- ⚠️ API key authentication only
+- ⚠️ Legacy mode for specific use cases
 
-2. **Verify Setup**:
-   ```bash
-   # Test dual-agent mode (recommended)
-   acc run "create a test file" --dual-agent -i 2 -v
-   
-   # Test single-agent mode with API key
-   acc run "create a test file" -i 1 -v
-   ```
+#### Quick Setup (Most Users)
 
-#### Authentication Modes Explained
+**For Claude Subscribers** (Recommended):
+```bash
+# 1. Ensure Claude is set up and working
+claude --version
 
-**Dual-Agent PTY Mode**:
-- Uses interactive Claude sessions (not headless)
-- Works with Claude Pro/Team subscriptions
-- Provides better context and collaboration
-- Default and recommended approach
+# 2. Verify subscription authentication
+claude "hello world"  # Should work without API key
 
-**Single-Agent Headless Mode**:
-- Uses headless mode (`-p` flag) for automation  
-- Requires API credits (subscriptions don't work)
-- Legacy mode maintained for backward compatibility
+# 3. Use ACC with PTY mode (default)
+acc run "create a test file" --dual-agent -i 2 -v
+# ACC will automatically extract OAuth tokens from your system
+```
 
-For research into potential workarounds, see `CLAUDE_DESKTOP_RESEARCH_PROMPT.md`.
+**Advanced Setup Options**:
+```bash
+# Force PTY mode (default behavior)
+acc run "task" --use-pty --dual-agent
+
+# Force headless mode (requires API key)
+acc run "task" --no-pty -i 3
+
+# Use specific session limit (PTY mode)
+acc run "task" --dual-agent --max-pty-sessions 10
+```
+
+#### OAuth Token Extraction
+
+ACC automatically extracts OAuth tokens from:
+- **Windows**: Windows Credential Manager
+- **macOS**: Keychain Access
+- **Linux**: Claude credential files (`~/.claude/`)
+
+No manual configuration required for most users!
+
+#### API Key Setup (Only if needed)
+
+If you prefer API key authentication or need headless mode:
+```bash
+# Get API key from console.anthropic.com
+# Set environment variable:
+export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+
+# Or Windows PowerShell:
+$env:ANTHROPIC_API_KEY = "sk-ant-your-key-here"
+
+# Use with headless mode
+acc run "task" --no-pty -i 3
+```
 
 ## Monitoring Setup
 
@@ -244,7 +263,13 @@ Core Options:
   -c, --continue-on-error     Continue loop even if errors occur
   -v, --verbose              Show detailed output
 
-Dual-Agent Options (NEW):
+PTY Mode Options (NEW):
+  --use-pty                  Force PTY mode (default for dual-agent)
+  --no-pty                   Force headless mode (requires API key)
+  --max-pty-sessions <n>     Maximum concurrent PTY sessions (default: 28)
+  --pty-timeout <ms>         PTY session timeout (default: 300000)
+
+Dual-Agent Options:
   --dual-agent               Enable dual-agent mode with Manager-Worker architecture
   --manager-model <model>    Model for Manager Agent (default: opus)
   --worker-model <model>     Model for Worker Agent (default: sonnet)
@@ -262,12 +287,16 @@ acc examples
 # Start monitoring server (optional, in separate terminal)
 cd dual-agent-monitor && pnpm run dev
 
-# Try dual-agent mode for complex tasks (with monitoring)
+# Try dual-agent mode with PTY (subscription users)
 acc run "implement user authentication system" --dual-agent -i 5 -v
+# ACC automatically uses PTY mode with your subscription credentials
 # Open http://localhost:6011 to watch agent coordination in real-time
 
-# Use single-agent for simple tasks
+# Use single-agent PTY mode for simple tasks
 acc run "add unit tests for all functions in src/utils.ts" -i 3 -v
+
+# Force headless mode if you have API key setup
+acc run "simple task" --no-pty -i 2 -v
 
 # Check what happened in your last session
 acc session
@@ -378,29 +407,42 @@ acc logs --tail                # Watch logs in real-time
 
 ## How It Works
 
-### 🤖 Dual-Agent Mode (Default for Complex Tasks)
+### 🎆 PTY-Based Execution (New Architecture)
 
-1. **Task Analysis**: Manager Agent analyzes your request and creates a strategic plan
+**PTY Session Management**:
+1. **OAuth Token Extraction**: Automatically extracts credentials from system stores
+2. **PTY Session Creation**: Creates interactive Claude sessions using node-pty
+3. **Real-time Stream Processing**: Advanced JSON stream parsing with ANSI handling
+4. **Session Pool Management**: Manages up to 28 concurrent sessions with automatic cleanup
+5. **Cross-platform Compatibility**: Windows ConPTY, macOS/Linux PTY support
+
+### 🤖 Dual-Agent Mode (Enhanced with PTY)
+
+1. **PTY-Based Task Analysis**: Manager Agent uses interactive sessions for deeper analysis
 2. **Task Decomposition**: Breaks complex goals into manageable work items with clear acceptance criteria
 3. **Work Assignment**: Manager assigns specific tasks to Worker Agent with detailed context
-4. **Coordinated Execution**: 
-   - Worker performs focused implementation using Claude Code tools
-   - Manager monitors progress and provides guidance
-   - Quality gates ensure deliverables meet standards
+4. **PTY Coordinated Execution**: 
+   - Worker performs focused implementation using interactive Claude sessions
+   - Manager monitors progress through real-time stream processing
+   - Quality gates ensure deliverables meet standards with enhanced feedback
+   - Both agents leverage subscription authentication seamlessly
 5. **Integration & Validation**: Manager validates all work items integrate properly
 6. **Adaptive Planning**: Strategy adjusts based on progress and discoveries
 
-### ⚡ Single-Agent Mode (Legacy/Simple Tasks)
+### ⚡ Single-Agent Mode (PTY + Headless Support)
 
+**PTY Mode (Default)**:
 1. **Initial Prompt**: You provide an initial task or goal
-2. **Claude Code Execution**: The app runs Claude Code in headless mode with your prompt
-3. **Output Analysis**: Parses Claude's output to understand progress and detect issues
-4. **Prompt Generation**: Automatically creates the next prompt based on:
-   - Completed actions
-   - Errors encountered
-   - Remaining tasks
-   - Context from previous iterations
-5. **Loop Continuation**: Repeats until the task is complete or max iterations reached
+2. **PTY Session Creation**: Creates interactive Claude session with subscription auth
+3. **Real-time Output Analysis**: Parses streaming output with advanced JSON detection
+4. **Prompt Generation**: Automatically creates contextual prompts based on stream data
+5. **Loop Continuation**: Repeats with session persistence until task completion
+
+**Headless Mode (Fallback)**:
+1. **API Key Validation**: Verifies API key availability for headless operation
+2. **Claude Code Execution**: Runs Claude Code with `-p` flag and API authentication
+3. **Output Analysis**: Traditional output parsing for compatibility
+4. **Loop Continuation**: Repeats until task complete or max iterations reached
 
 ## Configuration
 
@@ -409,6 +451,21 @@ Configuration file is stored at `~/.automatic-claude-code/config.json`:
 ```json
 {
   "defaultModel": "sonnet",
+  "ptyMode": {
+    "enabled": true,
+    "maxSessions": 28,
+    "sessionTimeout": 300000,
+    "autoCleanup": true,
+    "oauthTokenExtraction": true,
+    "fallbackToHeadless": true,
+    "bufferSize": 8192,
+    "streamProcessing": {
+      "enableJsonDetection": true,
+      "stripAnsiCodes": true,
+      "parseToolUsage": true,
+      "extractErrorMessages": true
+    }
+  },
   "dualAgentMode": {
     "enabled": true,
     "managerModel": "opus",
@@ -417,7 +474,8 @@ Configuration file is stored at `~/.automatic-claude-code/config.json`:
     "qualityGateThreshold": 0.8,
     "maxConcurrentTasks": 2,
     "enableCrossValidation": true,
-    "communicationTimeout": 30000
+    "communicationTimeout": 30000,
+    "usePTY": true
   },
   "maxIterations": 10,
   "continueOnError": false,
@@ -537,18 +595,22 @@ Sessions are saved in `.claude-sessions/` directory with comprehensive dual-agen
 
 ```
 src/
-├── index.ts           # Main application entry point and orchestration
-├── config.ts          # Configuration management
-├── agents/            # Dual-agent system (NEW)
-│   ├── agentCoordinator.ts   # Manages agent communication and workflows
-│   ├── managerAgent.ts       # Strategic planning and oversight
-│   ├── workerAgent.ts        # Task execution and implementation
+├── index.ts           # Main application entry point with PTY support
+├── config.ts          # Configuration management with PTY settings
+├── services/          # Core services (NEW)
+│   ├── claudeExecutor.ts     # Centralized execution service with PTY support
+│   └── ptyController.ts      # PTY session management and OAuth integration
+├── agents/            # Dual-agent system
+│   ├── agentCoordinator.ts   # PTY-enhanced agent communication
+│   ├── managerAgent.ts       # Strategic planning with interactive sessions
+│   ├── workerAgent.ts        # Task execution using PTY
 │   └── agentTypes.ts         # Type definitions for agent communication
-├── sessionManager.ts  # Session tracking with dual-agent support
-├── outputParser.ts    # Enhanced parsing for both agents
+├── sessionManager.ts  # Enhanced session tracking with OAuth support
+├── outputParser.ts    # Advanced stream processing with JSON detection
 ├── promptBuilder.ts   # Agent-aware prompt generation
-├── logger.ts          # Structured logging with agent tracking
-└── tuiBrowser.ts     # Enhanced UI with agent insights
+├── claudeUtils.ts     # Claude Code utilities and OAuth handling
+├── logger.ts          # Structured logging with PTY session tracking
+└── tuiBrowser.ts     # Enhanced UI with PTY session insights
 ```
 
 ## Development
@@ -628,12 +690,16 @@ pnpm run monitor:status
 - **Coordination Timeouts**: Prevents agents from waiting indefinitely
 - **Task Isolation**: Failed work items don't affect other concurrent tasks
 
-### 🔒 General Safety
+### 🔒 Enhanced Safety (PTY Mode)
+- **PTY Session Isolation**: Each session runs in isolated PTY environment
+- **Automatic Session Cleanup**: Prevents resource leaks with up to 28 concurrent sessions
+- **OAuth Token Security**: Secure credential extraction without exposing API keys
+- **Stream Buffer Management**: Controlled memory usage with advanced stream processing
 - **Maximum iteration limits** to prevent infinite loops
-- **Session tracking** for audit and rollback
+- **Session tracking** for audit and rollback with OAuth integration
 - **Tool permission controls** with granular access
-- **Error detection and recovery** mechanisms
-- **Verbose logging** for debugging and transparency
+- **Enhanced error detection and recovery** with JSON stream parsing
+- **Verbose logging** for debugging and transparency with PTY session details
 - **Progress checkpoints** for safe interruption and resumption
 
 ### 🐳 Container Safety

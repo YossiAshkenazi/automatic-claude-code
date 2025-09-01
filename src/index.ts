@@ -196,7 +196,9 @@ class AutomaticClaudeCode {
 
       try {
         const startTime = Date.now();
-        const result = await this.runClaudeCode(currentPrompt, { ...options, sessionId });
+        // Only pass sessionId after the first iteration (when we have an actual Claude session to resume)
+        const claudeSessionId = this.iteration > 1 ? sessionId : undefined;
+        const result = await this.runClaudeCode(currentPrompt, { ...options, sessionId: claudeSessionId });
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
         
         console.log(chalk.green(`✓ Completed in ${duration}s`));

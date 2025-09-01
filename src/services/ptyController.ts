@@ -8,6 +8,7 @@ try {
 import stripAnsi from 'strip-ansi';
 import * as os from 'os';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { EventEmitter } from 'events';
 import { Logger } from '../logger';
@@ -532,6 +533,7 @@ export class ACCPTYManager {
    * Generate a unique session ID
    */
   private generateSessionId(): string {
-    return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // Generate a proper UUID v4 format that Claude CLI expects
+    return crypto.randomUUID();
   }
 }

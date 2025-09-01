@@ -1,24 +1,29 @@
-# Getting Started with Dual-Agent Development
+# Getting Started with PTY-Enhanced Dual-Agent Development
 
 ## Quick Start Guide
 
-### 1. Installation and Setup
+### 1. Installation and Setup (v1.2.0)
 
-#### Option 1: Native Installation
-Ensure you have the latest version of Automatic Claude Code with dual-agent capabilities:
+#### Option 1: Native Installation with PTY Support
+Ensure you have the latest version with revolutionary PTY-based Claude Code control:
 
 ```bash
-# Update to latest version
+# Update to latest version (v1.2.0)
 git pull origin main
 pnpm install
+
+# Install PTY dependencies (if not already installed)
+pnpm add node-pty
+
+# Build with PTY support
 pnpm run build
 
 # Make acc command available globally
 npm link
 
-# Verify dual-agent support
-acc --version
-acc config show | grep dualAgentMode
+# Verify PTY and dual-agent support
+acc --version  # Should show 1.2.0
+acc config show | grep -E "(ptyMode|dualAgentMode)"
 ```
 
 #### Option 2: Docker Installation
@@ -39,20 +44,31 @@ echo 'alias acc-docker="docker run -it --rm -v \"$(pwd):/workspace:ro\" -v \"$HO
 source ~/.bashrc
 ```
 
-### 2. Your First Dual-Agent Session
+### 2. Your First PTY-Enhanced Dual-Agent Session
 
-Start with a simple but complete task to understand the dual-agent workflow:
-
+#### Test Basic PTY Functionality First
 ```bash
-# Enable dual-agent mode for a straightforward task
+# Verify Claude CLI is working with subscription
+claude --version
+claude "hello world"  # Should work without API key
+
+# Test PTY mode with simple task
+acc run "create a hello.txt file" --use-pty -i 1 -v
+```
+
+#### Start with PTY Dual-Agent Mode
+```bash
+# Enable PTY dual-agent mode (default behavior)
 acc run "create a user authentication system with password hashing and JWT tokens" --dual-agent -i 5 -v
 ```
 
-**What you'll see:**
-- Manager Agent analyzes the request and creates a task plan
-- Worker Agent implements each component step by step
-- Manager Agent validates each deliverable
-- Real-time coordination between agents
+**What you'll see with PTY enhancement:**
+- **OAuth Token Extraction**: Automatic credential detection from your system
+- **Interactive Sessions**: Manager Agent uses PTY for deeper strategic analysis
+- **Real-time Streams**: Live JSON parsing and ANSI handling
+- **Enhanced Coordination**: Worker Agent leverages interactive Claude sessions
+- **Better Context**: PTY sessions maintain context better than headless mode
+- **Subscription Integration**: No API key required with Claude Pro/Team
 
 ### 3. Understanding the Output
 
@@ -129,16 +145,19 @@ pnpm run docker:logs
 - Full-stack features (user management, payment processing)
 - Quality-critical code (security features, data handling)
 
-**Example Commands:**
+**Example Commands with PTY:**
 ```bash
-# Large feature implementation
+# Large feature implementation (PTY mode default)
 acc run "implement complete user management system with RBAC" --dual-agent -i 8
 
-# Architecture refactoring
+# Architecture refactoring with enhanced context
 acc run "refactor to hexagonal architecture with DI container" --dual-agent -i 7
 
-# Framework migration
+# Framework migration with interactive sessions
 acc run "migrate Express app to Fastify with performance optimization" --dual-agent -i 6
+
+# Force headless mode if needed (requires API key)
+acc run "simple refactor" --no-pty --dual-agent -i 4
 ```
 
 ### Use Single-Agent for Simple Tasks
@@ -163,14 +182,27 @@ acc run "add validation to contact form" -i 3
 
 ## Configuration Quickstart
 
-### Basic Dual-Agent Configuration
+### Enhanced PTY + Dual-Agent Configuration (v1.2.0)
 
-Create or update `~/.automatic-claude-code/config.json`:
+Create or update `~/.automatic-claude-code/config.json` with PTY support:
 
 ```json
 {
+  "ptyMode": {
+    "enabled": true,
+    "maxSessions": 28,
+    "sessionTimeout": 300000,
+    "oauthTokenExtraction": true,
+    "fallbackToHeadless": true,
+    "streamProcessing": {
+      "enableJsonDetection": true,
+      "stripAnsiCodes": true,
+      "parseToolUsage": true
+    }
+  },
   "dualAgentMode": {
     "enabled": true,
+    "usePTY": true,
     "managerModel": "opus",
     "workerModel": "sonnet",
     "coordinationInterval": 3,
@@ -206,20 +238,23 @@ For project-specific settings, create `.acc-config.json` in your project root:
 Let's build a complete REST API with authentication:
 
 ```bash
-# Step 1: Initialize project structure
-acc run "create Node.js project structure for REST API with src/, tests/, and config/ directories" --dual-agent -i 3
+# Step 1: Initialize project structure (PTY provides enhanced context)
+acc run "create Node.js project structure for REST API with src/, tests/, and config/ directories" --dual-agent -i 3 -v
 
-# Step 2: Implement core models
-acc run "create User and Product models with Mongoose schemas and validation" --dual-agent -i 4
+# Step 2: Implement core models (OAuth authentication automatic)
+acc run "create User and Product models with Mongoose schemas and validation" --dual-agent -i 4 -v
 
-# Step 3: Build authentication
-acc run "implement JWT authentication with login, register, and password reset endpoints" --dual-agent -i 6
+# Step 3: Build authentication (PTY sessions maintain context)
+acc run "implement JWT authentication with login, register, and password reset endpoints" --dual-agent -i 6 -v
 
-# Step 4: Add CRUD operations
-acc run "implement full CRUD operations for users and products with proper error handling" --dual-agent -i 5
+# Step 4: Add CRUD operations (enhanced error recovery)
+acc run "implement full CRUD operations for users and products with proper error handling" --dual-agent -i 5 -v
 
-# Step 5: Add testing
-acc run "create comprehensive unit and integration tests with Jest" --dual-agent -i 4
+# Step 5: Add testing (JSON stream parsing for test results)
+acc run "create comprehensive unit and integration tests with Jest" --dual-agent -i 4 -v
+
+# Alternative: Use API key mode if needed
+acc run "quick fix" --no-pty -i 2 -v
 ```
 
 ### Tutorial 2: Frontend-Backend Integration
@@ -316,15 +351,21 @@ acc run "add auth" --dual-agent
 
 ### 3. Monitor Progress Actively
 ```bash
-# Native: Watch coordination in real-time
+# Native: Watch PTY coordination in real-time
 acc agents --status &
 acc run "your task" --dual-agent -v
+# Shows PTY session information and OAuth status
 
-# Web-based: Start monitoring dashboard
-pnpm run monitor:start &  # Lightweight monitor
+# Monitor PTY sessions specifically
+acc logs --pty-sessions --tail &
 acc run "your task" --dual-agent -v
 
-# Docker: Full monitoring environment
+# Web-based: Enhanced monitoring with PTY support
+pnpm run monitor:start &  # Lightweight monitor
+acc run "your task" --dual-agent -v
+# Dashboard now shows PTY session metrics
+
+# Docker: Full monitoring environment with PTY
 pnpm run docker:dev &  # Complete environment
 # Use running container:
 docker exec -it automatic-claude-code-app node dist/index.js run "your task" --dual-agent -v

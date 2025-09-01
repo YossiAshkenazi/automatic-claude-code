@@ -1,53 +1,106 @@
-# Dual-Agent Architecture Guide
+# PTY-Enhanced Dual-Agent Architecture Guide (v1.2.0)
 
 ## Overview
 
-The Automatic Claude Code dual-agent system represents a revolutionary approach to AI-assisted development. By employing specialized Manager and Worker agents, complex development tasks are handled with unprecedented sophistication and reliability.
+The Automatic Claude Code dual-agent system represents a revolutionary approach to AI-assisted development, now enhanced with PTY-based Claude Code control. By employing specialized Manager and Worker agents operating through interactive PTY sessions, complex development tasks are handled with unprecedented sophistication, reliability, and context preservation.
+
+## PTY Architecture Integration (v1.2.0)
+
+### PTY-Enhanced Agent Communication
+
+**Interactive Session Management**:
+- Both Manager and Worker agents use dedicated PTY sessions
+- Real-time context preservation across interactions
+- Enhanced error recovery through session persistence
+- Cross-platform OAuth authentication (Windows/macOS/Linux)
+
+**Stream Processing**:
+- Advanced JSON detection in real-time streams
+- ANSI code handling for proper output formatting
+- Tool usage extraction and categorization
+- Enhanced error message parsing and context preservation
+
+```
+[PTY Manager Session] - Strategic Planning & Oversight
+├── OAuth Token: Automatically extracted from system
+├── Session Type: Interactive PTY (no -p flag)
+├── Context: Maintained across planning iterations
+└── Output: Real-time JSON stream processing
+
+[PTY Worker Session] - Task Execution & Implementation  
+├── OAuth Token: Shared from Manager or independently extracted
+├── Session Type: Interactive PTY with tool execution
+├── Context: Task-specific with Manager coordination
+└── Output: Advanced stream parsing with ANSI handling
+```
 
 ## Agent Roles & Responsibilities
 
-### Manager Agent (Strategic Coordinator)
+### PTY Manager Agent (Strategic Coordinator)
 
-**Primary Role**: Strategic planning, oversight, and quality assurance
+**Primary Role**: Strategic planning, oversight, and quality assurance through interactive sessions
+
+**Enhanced PTY Capabilities**:
+- **Interactive Strategic Planning**: Uses PTY sessions for deeper context analysis
+- **Real-time Coordination**: Stream-based communication with Worker agent
+- **Context Preservation**: PTY sessions maintain strategic context across iterations
+- **OAuth Integration**: Seamless subscription authentication without API keys
 
 **Key Responsibilities**:
 - **Task Decomposition**: Breaks complex user requests into manageable work items
 - **Strategic Planning**: Creates high-level execution plans with clear milestones
 - **Resource Management**: Identifies required tools, files, and dependencies
-- **Quality Gates**: Validates Worker outputs against acceptance criteria
-- **Error Recovery**: Handles failures and provides corrective guidance
-- **Progress Monitoring**: Tracks overall project progress and adjusts strategy
-- **Integration Oversight**: Ensures all work items integrate properly
+- **Quality Gates**: Validates Worker outputs against acceptance criteria with enhanced feedback
+- **Error Recovery**: Handles failures through PTY session recovery and guidance
+- **Progress Monitoring**: Tracks overall project progress through real-time streams
+- **Integration Oversight**: Ensures all work items integrate properly with session context
 
 **Typical Model**: Claude Opus (for superior reasoning and planning capabilities)
+**Execution Mode**: PTY with interactive sessions (default)
 
-**Example Activities**:
+**Enhanced PTY Example Activities**:
 ```
-[Manager] Analyzing request: "Implement user authentication system"
-[Manager] Task breakdown:
-  1. Database schema design for users table
-  2. Password hashing implementation
-  3. JWT token generation/validation
-  4. Login/logout API endpoints
-  5. Authentication middleware
-  6. Unit tests for auth functions
-  7. Integration tests for API endpoints
-[Manager] Assigning Task 1 to Worker: "Create users table schema with email, password_hash, created_at fields"
+[PTY Manager Session #1] OAuth token extracted from Windows Credential Manager
+[PTY Manager] Analyzing request: "Implement user authentication system"
+[PTY Manager] Interactive context analysis through PTY session...
+[PTY Manager] Enhanced task breakdown with session context:
+  1. Database schema design for users table (Priority: High)
+  2. Password hashing implementation (Dependencies: bcrypt)
+  3. JWT token generation/validation (Dependencies: jsonwebtoken)
+  4. Login/logout API endpoints (Dependencies: express-validator)
+  5. Authentication middleware (Dependencies: Tasks 1,2,3)
+  6. Unit tests for auth functions (Test coverage target: >90%)
+  7. Integration tests for API endpoints (End-to-end validation)
+[PTY Manager] Creating PTY Worker session for Task 1...
+[PTY Manager → PTY Worker] Assigning Task 1 with full context:
+  "Create users table schema with email, password_hash, created_at, updated_at fields.
+   Consider: email uniqueness, password hash length (60 chars for bcrypt), 
+   timestamps for audit trail, soft delete support"
+[PTY Worker Session #2] Receiving assignment through stream interface...
+[PTY Worker] Task 1 implementation starting with preserved context...
 ```
 
-### Worker Agent (Task Executor)
+### PTY Worker Agent (Task Executor)
 
-**Primary Role**: Focused implementation of assigned tasks
+**Primary Role**: Focused implementation through interactive Claude sessions
+
+**Enhanced PTY Capabilities**:
+- **Interactive Implementation**: Uses PTY sessions for better context and error handling
+- **Real-time Tool Execution**: Enhanced tool usage through interactive sessions
+- **Stream-based Reporting**: Live progress updates through JSON stream processing
+- **Session Persistence**: Maintains implementation context across iterations
 
 **Key Responsibilities**:
 - **Code Implementation**: Writes actual code, configurations, and documentation
-- **Tool Execution**: Uses Claude Code tools (Read, Write, Edit, Bash, etc.)
-- **Progress Reporting**: Regular updates to Manager on task completion
-- **Blocker Communication**: Reports obstacles and requests guidance
-- **Detail-Oriented Work**: Focuses on implementation specifics
-- **Testing Execution**: Runs tests and validates implementations
+- **Enhanced Tool Execution**: Uses Claude Code tools with PTY session benefits
+- **Real-time Progress Reporting**: Streams updates to Manager through PTY coordination
+- **Interactive Blocker Resolution**: Handles obstacles with better context preservation
+- **Detail-Oriented Work**: Focuses on implementation specifics with session continuity
+- **Advanced Testing**: Runs tests with enhanced error detection and reporting
+- **Context-Aware Development**: Leverages PTY session context for better implementations
 
 **Typical Model**: Claude Sonnet (for speed and efficiency in implementation)
+**Execution Mode**: PTY with subscription authentication (default)
 
 **Example Activities**:
 ```

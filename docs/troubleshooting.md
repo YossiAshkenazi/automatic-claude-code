@@ -74,72 +74,200 @@ This was fixed in v1.1.2. If you encounter this issue with custom deployments:
 
 **Fixed in v1.1.2**: All session counts now use dynamic, real-time data from backend APIs.
 
-### Authentication Issues (Critical)
+### Authentication Issues (v1.2.0 Updates)
 
-#### Symptom: "Credit balance is too low" Error
+#### ✅ RESOLVED: Subscription Authentication Now Supported!
+
+As of **v1.2.0**, ACC fully supports subscription authentication through PTY mode!
+
+```bash
+# Now works with Claude Pro/Team subscriptions
+acc run "your task" --dual-agent -i 3 -v
+# ACC automatically extracts OAuth tokens from your system
 ```
-Credit balance is too low
-❌ Error in iteration 1: Error: Claude Code exited with code 1
-```
 
-**Root Cause:**
-ACC uses Claude Code's headless mode (`-p` flag) which **requires API keys with credits**. Subscription authentication (OAuth tokens from `claude setup-token`) does not work with headless mode.
+#### PTY Mode Authentication (Default)
 
-**Current Status:** 
-⚠️ **This is a fundamental limitation** - Claude Code's headless mode only supports API key authentication, not subscription authentication.
+**Benefits**:
+- ✅ Works with Claude Pro/Team subscriptions
+- ✅ No API key required
+- ✅ Automatic OAuth token extraction
+- ✅ Enhanced error recovery and context
 
-**Solutions:**
+**Troubleshooting PTY Authentication**:
 
-1. **Get API Credits (Required for ACC)**
+1. **Verify Claude CLI Setup**:
    ```bash
-   # Visit https://console.anthropic.com
-   # Add credits to your account
-   # Generate an API key
+   # Test basic Claude functionality
+   claude --version
+   claude "hello world"  # Should work without API key
    
-   # Set the API key
-   export ANTHROPIC_API_KEY="sk-ant-..."
-   
-   # Or on Windows PowerShell:
-   $env:ANTHROPIC_API_KEY = "sk-ant-..."
-   
-   # Make it permanent (Windows):
-   [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
+   # If this fails, run:
+   claude auth login  # Follow the authentication flow
    ```
 
-2. **Use Claude Code Interactively (Without ACC)**
+2. **Check OAuth Token Extraction**:
    ```bash
-   # Works with subscription (no -p flag)
-   claude "your task here"
-   
-   # This won't work with ACC automation
+   # Run with verbose logging to see token extraction
+   acc run "simple task" --use-pty -v
+   # Look for "OAuth token extracted" or similar messages
    ```
 
-3. **Future Solutions (Under Investigation)**
-   - See `CLAUDE_DESKTOP_RESEARCH_PROMPT.md` for research into alternatives
-   - Potential workarounds using pseudo-TTY or process control
-   - Waiting for Anthropic to add subscription support to headless mode
+3. **Platform-Specific Issues**:
+   
+   **Windows**: Credential Manager access
+   ```bash
+   # If token extraction fails, try refreshing credentials
+   claude auth logout
+   claude auth login
+   ```
+   
+   **macOS**: Keychain access
+   ```bash
+   # Grant keychain access if prompted
+   security find-generic-password -s "claude" -a "$USER"
+   ```
+   
+   **Linux**: Credential file access
+   ```bash
+   # Check credential files exist and are readable
+   ls -la ~/.claude/
+   cat ~/.claude/credentials  # Should contain token data
+   ```
 
-#### Symptom: "Invalid API key · Fix external API key"
+#### Legacy API Key Authentication (Fallback)
+
+For users who prefer API keys or need headless mode:
+
+```bash
+# Set up API key authentication
+export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+
+# Force headless mode
+acc run "task" --no-pty -i 3 -v
+```
+
+**When to use API keys**:
+- Server environments without interactive sessions
+- CI/CD pipelines
+- When PTY is unavailable or problematic
+
+#### Symptom: "node-pty not available" Error
+```
+Error: node-pty module not available. Install with: pnpm add node-pty
+```
+
+**Solution**:
+```bash
+# Install node-pty dependency
+pnpm add node-pty
+
+# If installation fails, ensure build tools are available:
+# Windows: Visual Studio Build Tools
+# macOS: Xcode Command Line Tools  
+# Linux: build-essential, python3
+
+# Rebuild the project
+pnpm run build
+```
+
+#### Symptom: PTY Session Creation Fails
+```
+ERROR: Failed to create PTY session
+Timeout waiting for Claude to initialize
+```
+
+**Solutions**:
+```bash
+# 1. Increase PTY timeout
+acc run "task" --pty-timeout 600000 --dual-agent  # 10 minutes
+
+# 2. Reduce concurrent sessions
+acc run "task" --max-pty-sessions 5 --dual-agent
+
+# 3. Fall back to headless mode
+acc run "task" --no-pty --dual-agent
+
+# 4. Check system resources
+acc agents --performance
+```
+
+#### Symptom: "Invalid API key" (Legacy Headless Mode)
 ```
 PS C:\Users\Dev> claude "hello world" -p
 Invalid API key · Fix external API key
 ```
 
 **Cause:** 
-The `-p` (print/headless) flag requires an API key. Your subscription token won't work here.
+You're using headless mode (`-p` flag or `--no-pty`) which requires an API key.
 
-**Solution:**
-You must use API credits for headless/automated operation. Subscription tokens only work in interactive mode.
+**Solutions:**
 
-#### Symptom: setup-token Fails in PowerShell
+1. **Use PTY Mode (Recommended)**:
+   ```bash
+   # Switch to PTY mode (works with subscription)
+   acc run "task" --use-pty --dual-agent  # Default behavior
+   ```
+
+2. **Set Up API Key for Headless Mode**:
+   ```bash
+   # Get API key from console.anthropic.com
+   export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+   acc run "task" --no-pty -i 3
+   ```
+
+#### Symptom: OAuth Token Extraction Fails
 ```
-Error: Raw mode is not supported on the current process.stdin
+WARNING: Could not extract OAuth token from system credentials
+Falling back to headless mode
 ```
 
 **Solutions:**
-1. Try Command Prompt (cmd) instead of PowerShell
-2. Use Git Bash if available
-3. The token may have been saved despite the error - check if it works
+
+1. **Re-authenticate Claude CLI**:
+   ```bash
+   claude auth logout
+   claude auth login
+   # Follow the browser-based authentication flow
+   ```
+
+2. **Check Platform-Specific Credentials**:
+   
+   **Windows PowerShell**:
+   ```powershell
+   # Check if credentials exist in Credential Manager
+   cmdkey /list | findstr "claude"
+   
+   # If setup-token fails in PowerShell, try Command Prompt
+   cmd /c "claude auth login"
+   ```
+   
+   **macOS Terminal**:
+   ```bash
+   # Check keychain access
+   security find-generic-password -s "claude"
+   
+   # Grant access if prompted during authentication
+   ```
+   
+   **Linux Terminal**:
+   ```bash
+   # Check credential files
+   ls -la ~/.claude/
+   
+   # Re-create credentials if missing
+   mkdir -p ~/.claude
+   claude auth login
+   ```
+
+3. **Manual Token Verification**:
+   ```bash
+   # Test if authentication is working
+   claude "test message"  # Should work without API key
+   
+   # If this works, ACC should detect the credentials
+   acc run "simple task" --use-pty -v
+   ```
 
 #### Symptom: Dashboard Component Errors or Crashes
 ```
@@ -563,6 +691,86 @@ acc profile --compare single dual --task "implement auth"
 
 # Bottleneck analysis
 acc profile --bottlenecks --session <session-id>
+```
+
+### PTY-Specific Issues (v1.2.0)
+
+#### Symptom: High PTY Session Memory Usage
+```
+WARNING: PTY sessions using 1.2GB memory
+Consider reducing concurrent sessions
+```
+
+**Solutions**:
+```bash
+# Reduce maximum concurrent PTY sessions
+acc run "task" --max-pty-sessions 10 --dual-agent
+
+# Configure in config file
+{
+  "ptyMode": {
+    "maxSessions": 10,
+    "sessionTimeout": 180000  # 3 minutes
+  }
+}
+
+# Monitor PTY resource usage
+acc agents --performance --pty-sessions
+```
+
+#### Symptom: PTY Session Cleanup Issues
+```
+ERROR: PTY session cleanup failed
+Orphan sessions detected
+```
+
+**Solutions**:
+```bash
+# Force cleanup of all PTY sessions
+acc pty --cleanup-all
+
+# Enable automatic cleanup
+acc config set ptyMode.autoCleanup true
+
+# Check for orphan sessions
+ps aux | grep claude  # Look for zombie processes
+killall claude  # If necessary
+```
+
+#### Symptom: ANSI Code Rendering Issues
+```
+Output contains escape sequences: \u001b[32m
+Text formatting not properly stripped
+```
+
+**Solutions**:
+```bash
+# Enable ANSI stripping (should be default)
+acc config set ptyMode.streamProcessing.stripAnsiCodes true
+
+# Check output parser configuration
+acc run "task" --use-pty -v | grep "ANSI"
+
+# For debugging, disable ANSI stripping temporarily
+acc config set ptyMode.streamProcessing.stripAnsiCodes false
+```
+
+#### Symptom: JSON Stream Parsing Failures
+```
+WARNING: JSON detection failed in stream
+Fallback to text parsing
+```
+
+**Solutions**:
+```bash
+# Enable enhanced JSON detection
+acc config set ptyMode.streamProcessing.enableJsonDetection true
+
+# Increase buffer size for complex outputs
+acc config set ptyMode.bufferSize 16384
+
+# Debug stream processing
+acc run "task" --use-pty --debug-streams -v
 ```
 
 ## Configuration Tuning

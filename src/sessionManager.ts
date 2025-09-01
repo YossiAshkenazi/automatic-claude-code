@@ -371,9 +371,8 @@ export class SessionManager {
   }
 
   private generateSessionId(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 7);
-    return `session-${timestamp}-${random}`;
+    // Generate a proper UUID v4 format that Claude CLI expects
+    return crypto.randomUUID();
   }
 }
 

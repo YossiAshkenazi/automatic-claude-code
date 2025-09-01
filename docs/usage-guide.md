@@ -1,51 +1,79 @@
-# Usage Guide - Dual-Agent Development
+# Usage Guide - PTY-Enhanced Dual-Agent Development (v1.2.0)
 
-## Getting Started with Dual-Agent Mode
+## Getting Started with PTY Dual-Agent Mode
 
-### Quick Start
+### Quick Start with PTY Authentication
 
-The dual-agent system is designed to handle complex development tasks through coordinated Manager-Worker collaboration. Here's how to get started:
+The dual-agent system now features PTY-based Claude Code control with automatic OAuth authentication, eliminating API key requirements for most users:
 
 ```bash
-# Enable dual-agent mode for complex tasks
+# Enable PTY dual-agent mode (default, no API key needed)
 acc run "implement user authentication system" --dual-agent -v
+# ACC automatically extracts OAuth tokens from your system
 
-# Use specific models for each agent
+# Use specific models with PTY sessions
 acc run "migrate to microservices" --manager-model opus --worker-model sonnet --dual-agent
 
-# Monitor agent coordination
-acc agents --status
+# Monitor PTY-enhanced agent coordination
+acc agents --status  # Shows PTY session information
+acc logs --pty-sessions --tail  # PTY-specific logs
+
+# Force headless mode if API key is preferred
+acc run "simple task" --no-pty --dual-agent -i 3
 ```
+
+### PTY Mode Benefits
+
+**Enhanced Context & Coordination**:
+- ✅ Interactive Claude sessions maintain better context between iterations
+- ✅ Real-time JSON stream parsing with ANSI handling
+- ✅ Improved error recovery through PTY session management
+- ✅ Up to 28 concurrent sessions for complex workflows
+
+**Subscription Authentication**:
+- ✅ Works seamlessly with Claude Pro/Team subscriptions
+- ✅ Automatic OAuth token extraction (Windows/macOS/Linux)
+- ✅ No API key configuration required
+- ✅ Fallback to API key mode when needed
 
 ## When to Use Each Mode
 
 ### 🤖 Choose Dual-Agent Mode For:
 
-**Large-Scale Architecture**
+**Large-Scale Architecture (Enhanced with PTY)**
 ```bash
-# Microservices implementation
-acc run "convert monolith to microservices architecture" --dual-agent -i 8
+# Microservices implementation with PTY context preservation
+acc run "convert monolith to microservices architecture" --dual-agent -i 8 -v
 
-# Clean architecture setup
-acc run "implement clean architecture with DDD patterns" --dual-agent -i 6
+# Clean architecture setup with interactive sessions
+acc run "implement clean architecture with DDD patterns" --dual-agent -i 6 -v
+
+# Complex refactoring with enhanced error recovery
+acc run "refactor entire codebase to hexagonal architecture" --dual-agent --max-pty-sessions 15 -i 10
 ```
 
-**Complex Feature Development**
+**Complex Feature Development (PTY-Powered)**
 ```bash
-# Full authentication system
-acc run "implement JWT authentication with refresh tokens, role-based access, and password reset" --dual-agent -i 7
+# Full authentication system with subscription auth
+acc run "implement JWT authentication with refresh tokens, role-based access, and password reset" --dual-agent -i 7 -v
 
-# Real-time features
-acc run "add real-time chat with WebSockets, message persistence, and typing indicators" --dual-agent -i 6
+# Real-time features with stream processing
+acc run "add real-time chat with WebSockets, message persistence, and typing indicators" --dual-agent -i 6 -v
+
+# Advanced features with PTY session management
+acc run "build complete e-commerce checkout with payment processing and inventory management" --dual-agent --pty-timeout 600000 -i 12
 ```
 
-**Framework Migrations**
+**Framework Migrations (Interactive Sessions)**
 ```bash
-# Major framework change
-acc run "migrate React class components to hooks and functional components" --dual-agent -i 8
+# Major framework change with enhanced context
+acc run "migrate React class components to hooks and functional components" --dual-agent -i 8 -v
 
-# Backend framework migration  
-acc run "migrate Express.js application to Fastify with performance optimization" --dual-agent -i 6
+# Backend framework migration with PTY coordination
+acc run "migrate Express.js application to Fastify with performance optimization" --dual-agent -i 6 -v
+
+# Database migration with session persistence
+acc run "migrate from MongoDB to PostgreSQL with data transformation" --dual-agent --max-pty-sessions 20 -i 10
 ```
 
 **Multi-Module Refactoring**

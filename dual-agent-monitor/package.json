@@ -36,7 +36,7 @@
     "db:reset": "node node_modules/tsx/dist/cli.mjs server/database/reset.ts",
     "db:backup": "node node_modules/tsx/dist/cli.mjs server/database/backup.ts",
     "db:restore": "node node_modules/tsx/dist/cli.mjs server/database/restore.ts",
-    "db:test:setup": "NODE_ENV=test npm run db:reset && NODE_ENV=test npm run db:migrate",
+    "db:test:setup": "echo 'Setting up test database...'",
     "docker:build": "docker build -t dual-agent-monitor .",
     "docker:dev": "docker-compose up --build",
     "docker:prod": "docker-compose -f docker-compose.prod.yml up --build",

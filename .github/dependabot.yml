@@ -1,0 +1,88 @@
+version: 2
+updates:
+  # Main project dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 5
+    groups:
+      development-dependencies:
+        patterns:
+          - "@types/*"
+          - "eslint*"
+          - "typescript"
+          - "tsx"
+          - "rimraf"
+    allow:
+      - dependency-type: "all"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Dual agent monitor dependencies
+  - package-ecosystem: "npm"
+    directory: "/dual-agent-monitor"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 5
+    groups:
+      react-dependencies:
+        patterns:
+          - "react*"
+          - "@types/react*"
+      vite-dependencies:
+        patterns:
+          - "vite*"
+          - "@vitejs/*"
+      testing-dependencies:
+        patterns:
+          - "vitest*"
+          - "playwright*"
+          - "@playwright/*"
+    allow:
+      - dependency-type: "all"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+
+  # Docker base images for monitoring
+  - package-ecosystem: "docker"
+    directory: "/dual-agent-monitor"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "docker"
+      include: "scope"

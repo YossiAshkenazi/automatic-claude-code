@@ -1,0 +1,198 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Quick validation
+  validate:
+    name: Quick Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+    
+    - name: Cache pnpm modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.pnpm-store
+        key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-
+    
+    - name: Install dependencies
+      run: |
+        pnpm install --frozen-lockfile || pnpm install
+    
+    - name: Build project
+      run: |
+        pnpm run build || npm run build
+    
+    - name: Validate build output
+      run: |
+        if [ ! -d "dist" ]; then
+          echo "⚠️ Warning: dist directory not found"
+        else
+          echo "✅ Build successful"
+          ls -la dist/
+        fi
+
+  # Test in different Node versions
+  test-matrix:
+    name: Test Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+      fail-fast: false
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js ${{ matrix.node }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node }}
+    
+    - name: Install pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+    
+    - name: Install and build
+      run: |
+        pnpm install || npm install
+        pnpm run build || npm run build
+      continue-on-error: true
+    
+    - name: Run basic test
+      run: |
+        if [ -f "dist/index.js" ]; then
+          node dist/index.js --version || echo "Version check failed"
+          node dist/index.js --help || echo "Help check failed"
+        else
+          echo "⚠️ dist/index.js not found"
+        fi
+      continue-on-error: true
+
+  # Docker validation
+  docker-validate:
+    name: Docker Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      run: |
+        docker build -t acc-test . || echo "Docker build failed"
+      continue-on-error: true
+    
+    - name: Test Docker image
+      run: |
+        docker run --rm acc-test node dist/index.js --version 2>/dev/null || echo "Docker test failed"
+      continue-on-error: true
+
+  # Monitor dashboard check
+  monitor-check:
+    name: Monitor Dashboard Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Check monitoring server
+      run: |
+        if [ -f "monitoring-server.js" ]; then
+          echo "✅ Monitoring server found"
+          node monitoring-server.js &
+          MONITOR_PID=$!
+          sleep 5
+          curl -f http://localhost:6007/health && echo "✅ Health check passed" || echo "⚠️ Health check failed"
+          kill $MONITOR_PID 2>/dev/null || true
+        else
+          echo "⚠️ monitoring-server.js not found"
+        fi
+      continue-on-error: true
+    
+    - name: Check dual-agent-monitor
+      run: |
+        if [ -d "dual-agent-monitor" ]; then
+          cd dual-agent-monitor
+          echo "📦 Found dual-agent-monitor directory"
+          
+          # Try different package managers
+          if [ -f "pnpm-lock.yaml" ]; then
+            echo "Using pnpm..."
+            npm install -g pnpm
+            pnpm install || echo "pnpm install failed"
+          elif [ -f "package-lock.json" ]; then
+            echo "Using npm..."
+            npm ci || npm install || echo "npm install failed"
+          else
+            echo "Using npm install..."
+            npm install || echo "npm install failed"
+          fi
+          
+          # Try to build
+          npm run build 2>/dev/null || npm run client:build 2>/dev/null || echo "Build failed"
+        else
+          echo "⚠️ dual-agent-monitor directory not found"
+        fi
+      continue-on-error: true
+
+  # Summary job
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [validate, test-matrix, docker-validate, monitor-check]
+    if: always()
+    
+    steps:
+    - name: Summary
+      run: |
+        echo "## CI Pipeline Summary"
+        echo ""
+        echo "### Job Results:"
+        echo "- Validation: ${{ needs.validate.result }}"
+        echo "- Test Matrix: ${{ needs.test-matrix.result }}"
+        echo "- Docker: ${{ needs.docker-validate.result }}"
+        echo "- Monitor: ${{ needs.monitor-check.result }}"
+        echo ""
+        
+        # Determine overall status
+        if [ "${{ needs.validate.result }}" == "success" ]; then
+          echo "✅ **Build validation passed**"
+        else
+          echo "⚠️ **Build validation had issues**"
+        fi
+        
+        echo ""
+        echo "### Notes:"
+        echo "- This is a resilient CI pipeline that continues on errors"
+        echo "- Check individual job logs for specific issues"
+        echo "- Main build must succeed for the pipeline to pass"

@@ -1,4 +1,4 @@
-import pty from 'node-pty';
+import * as pty from '@lydell/node-pty';
 import stripAnsi from 'strip-ansi';
 import * as os from 'os';
 import * as path from 'path';

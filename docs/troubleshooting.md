@@ -44,6 +44,36 @@ This was fixed in v1.1.1. If you encounter this issue:
 
 **Fixed in v1.1.1**: Frontend now always uses nginx proxy (`/api`) instead of direct port calls.
 
+#### Symptom: Hardcoded Session Counts in Dashboard
+```
+Sidebar shows "3" sessions regardless of actual session count
+Mobile app displays static badge values
+Session counts don't update with real-time data
+```
+
+**Root Cause:**
+Dashboard components contained hardcoded values instead of dynamic data binding.
+
+**Solution:**
+This was fixed in v1.1.2. If you encounter this issue with custom deployments:
+
+1. **Verify dynamic data binding:**
+   ```bash
+   # Check if API returns correct session counts
+   curl http://localhost:4005/api/sessions | jq '.length'
+   
+   # Verify WebSocket updates are received
+   # Open browser dev tools → Network → WS tab
+   # Should see session count updates in real-time
+   ```
+
+2. **Component fixes applied:**
+   - Fixed `dual-agent-monitor/src/components/ui/Sidebar.tsx` - now uses dynamic session count
+   - Updated `dual-agent-monitor/src/components/mobile/MobileApp.tsx` - real-time calculations
+   - Enhanced data consistency across all dashboard components
+
+**Fixed in v1.1.2**: All session counts now use dynamic, real-time data from backend APIs.
+
 ### Authentication Issues (Critical)
 
 #### Symptom: "Credit balance is too low" Error
@@ -111,6 +141,43 @@ Error: Raw mode is not supported on the current process.stdin
 2. Use Git Bash if available
 3. The token may have been saved despite the error - check if it works
 
+#### Symptom: Dashboard Component Errors or Crashes
+```
+Dashboard shows "Something went wrong" error boundaries
+Components failing to load or update
+UI freezes or becomes unresponsive
+```
+
+**Root Cause:**
+React component errors that weren't properly handled, causing entire dashboard sections to crash.
+
+**Solution:**
+Enhanced error boundary protection was added in v1.1.2:
+
+1. **Error boundaries implemented:**
+   ```bash
+   # Check browser console for component errors
+   # Open DevTools → Console
+   # Look for React component error logs
+   ```
+
+2. **Component reliability improvements:**
+   - Added comprehensive error boundaries throughout dashboard components
+   - Enhanced error handling for API data loading failures
+   - Improved component state management and consistency
+   - Better handling of WebSocket connection state changes
+
+3. **Recovery mechanisms:**
+   ```bash
+   # If dashboard components are stuck, refresh specific sections
+   # Most errors now auto-recover without full page refresh
+   
+   # For persistent issues, clear browser cache:
+   # Ctrl+Shift+Del (Chrome) or Cmd+Shift+Del (Safari)
+   ```
+
+**Enhanced in v1.1.2**: Comprehensive error boundary protection prevents component crashes and provides graceful degradation.
+
 ### Agent Communication Problems
 
 #### Symptom: Agent Communication Timeouts
@@ -144,6 +211,44 @@ Manager waiting for Worker response to task assignment
    # Restart with verbose logging
    acc run "task" --dual-agent -v --debug
    ```
+
+#### Symptom: WebSocket Connection Instability (Fixed in v1.1.2)
+```
+WebSocket frequently disconnects and reconnects
+"Connection Lost" errors appear intermittently
+Real-time updates delayed or missing
+```
+
+**Root Cause:**
+Insufficient WebSocket error handling and reconnection logic.
+
+**Solution:**
+Enhanced WebSocket reliability was implemented in v1.1.2:
+
+1. **Improved connection management:**
+   ```bash
+   # Check WebSocket connection status in dashboard
+   # Status should show "Connected" with green indicator
+   # Automatic reconnection should occur within 5 seconds of disconnection
+   ```
+
+2. **New reliability features:**
+   - **Auto-reconnection logic**: Automatic reconnection with exponential backoff
+   - **Heartbeat monitoring**: Regular ping/pong to detect connection issues early
+   - **Connection state management**: Better handling of connection lifecycle events
+   - **Error recovery**: Graceful handling of network interruptions
+
+3. **Monitoring WebSocket health:**
+   ```bash
+   # Check WebSocket connection in browser dev tools
+   # Network tab → WS → Should show stable connection
+   # No frequent disconnects/reconnects
+   
+   # If issues persist, restart monitoring services:
+   cd dual-agent-monitor && docker-compose restart
+   ```
+
+**Enhanced in v1.1.2**: WebSocket connections now include comprehensive error handling, auto-reconnection, and heartbeat monitoring for maximum reliability.
 
 3. **Model Overload**
    ```bash

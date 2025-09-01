@@ -1,5 +1,5 @@
 import * as pty from 'node-pty';
-import * as stripAnsi from 'strip-ansi';
+import stripAnsi from 'strip-ansi';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -294,64 +294,25 @@ export class ClaudeCodePTYController extends EventEmitter {
   }
 
   /**
-   * Extract OAuth token from system credentials
+   * Extract OAuth token from system credentials using centralized extractor
    */
   private async extractOAuthToken(): Promise<string | undefined> {
     try {
-      if (process.platform === 'darwin') {
-        // macOS Keychain extraction
-        const { exec } = require('child_process');
-        const { promisify } = require('util');
-        const execAsync = promisify(exec);
-        
-        try {
-          const { stdout } = await execAsync(
-            'security find-generic-password -s "Claude Code-credentials" -w'
-          );
-          return stdout.trim();
-        } catch (e) {
-          this.logger.debug('No OAuth token found in macOS Keychain');
-        }
+      const { OAuthExtractor } = await import('./oauthExtractor');
+      const extractor = new OAuthExtractor(this.logger);
+      const result = await extractor.extractOAuthToken();
+      
+      if (result.token) {
+        this.logger.debug(`OAuth token extracted from: ${result.source}${result.cached ? ' (cached)' : ''}`);
+        return result.token;
       } else {
-        // Windows credential file
-        if (process.platform === 'win32') {
-          const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
-          if (fs.existsSync(credPath)) {
-            const creds = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-            return creds.oauth_token;
-          }
-        }
-        
-        // Linux credential file and session tokens
-        const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
-        if (fs.existsSync(credPath)) {
-          const creds = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-          return creds.oauth_token || creds.session_token;
-        }
-        
-        // Try to extract from existing session files
-        const sessionsPath = path.join(os.homedir(), '.claude', 'projects');
-        if (fs.existsSync(sessionsPath)) {
-          const sessionFiles = fs.readdirSync(sessionsPath);
-          for (const sessionFile of sessionFiles) {
-            try {
-              const sessionPath = path.join(sessionsPath, sessionFile, 'conversation.jsonl');
-              if (fs.existsSync(sessionPath)) {
-                // Found active session, can proceed without explicit token
-                return 'session-exists';
-              }
-            } catch (e) {
-              // Continue to next session
-            }
-          }
-        }
+        this.logger.debug(`No OAuth token found: ${result.error || 'No token available'}`);
+        return undefined;
       }
     } catch (error) {
       this.logger.debug(`Failed to extract OAuth token: ${error}`);
+      return undefined;
     }
-    
-    // Check environment variables as last resort
-    return process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.CLAUDE_SESSION_TOKEN;
   }
 
   /**

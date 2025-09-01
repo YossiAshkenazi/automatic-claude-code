@@ -1,6 +1,8 @@
-# Automatic Claude Code
+# Automatic Claude Code (v1.1.0)
 
 A powerful dual-agent system that revolutionizes AI-assisted development through coordinated Claude Code automation. Features a Manager-Worker architecture where specialized agents collaborate to tackle complex development tasks with unprecedented sophistication and reliability.
+
+> ⚠️ **Important**: ACC requires Claude API credits to function. Subscription authentication is not currently supported for automated/headless operation. See [Authentication Requirements](#authentication-requirements) below.
 
 ## Features
 
@@ -93,6 +95,48 @@ node "../automatic-claude-code/dist/index.js" run "your task" -i 3 -v
 # When published to NPM (not yet available)
 npm install -g automatic-claude-code
 ```
+
+## Authentication Requirements
+
+### ⚠️ Critical: API Credits Required
+
+ACC uses Claude Code's headless mode (`-p` flag) for automation, which **requires API credits**. Subscription authentication does not work with headless mode.
+
+#### Setting Up API Authentication
+
+1. **Get API Credits**:
+   - Visit [console.anthropic.com](https://console.anthropic.com)
+   - Add credits to your account
+   - Generate an API key (starts with `sk-ant-`)
+
+2. **Configure API Key**:
+   ```bash
+   # Linux/macOS
+   export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+   
+   # Windows PowerShell
+   $env:ANTHROPIC_API_KEY = "sk-ant-your-key-here"
+   
+   # Make it permanent (Windows)
+   [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-your-key-here", "User")
+   ```
+
+3. **Verify Setup**:
+   ```bash
+   # Test Claude CLI with API key
+   claude "hello" -p
+   
+   # Test ACC
+   acc run "create a test file" -i 1 -v
+   ```
+
+#### Why Subscription Auth Doesn't Work
+
+- **Interactive vs Headless**: Subscriptions work only in interactive mode
+- **ACC Requirements**: Automation needs headless mode (`-p` flag)
+- **Current Limitation**: No subscription support for headless operation
+
+For research into potential workarounds, see `CLAUDE_DESKTOP_RESEARCH_PROMPT.md`.
 
 ## Monitoring Setup
 

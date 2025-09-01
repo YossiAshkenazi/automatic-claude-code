@@ -2,6 +2,73 @@
 
 ## Common Issues and Solutions
 
+### Authentication Issues (Critical)
+
+#### Symptom: "Credit balance is too low" Error
+```
+Credit balance is too low
+❌ Error in iteration 1: Error: Claude Code exited with code 1
+```
+
+**Root Cause:**
+ACC uses Claude Code's headless mode (`-p` flag) which **requires API keys with credits**. Subscription authentication (OAuth tokens from `claude setup-token`) does not work with headless mode.
+
+**Current Status:** 
+⚠️ **This is a fundamental limitation** - Claude Code's headless mode only supports API key authentication, not subscription authentication.
+
+**Solutions:**
+
+1. **Get API Credits (Required for ACC)**
+   ```bash
+   # Visit https://console.anthropic.com
+   # Add credits to your account
+   # Generate an API key
+   
+   # Set the API key
+   export ANTHROPIC_API_KEY="sk-ant-..."
+   
+   # Or on Windows PowerShell:
+   $env:ANTHROPIC_API_KEY = "sk-ant-..."
+   
+   # Make it permanent (Windows):
+   [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
+   ```
+
+2. **Use Claude Code Interactively (Without ACC)**
+   ```bash
+   # Works with subscription (no -p flag)
+   claude "your task here"
+   
+   # This won't work with ACC automation
+   ```
+
+3. **Future Solutions (Under Investigation)**
+   - See `CLAUDE_DESKTOP_RESEARCH_PROMPT.md` for research into alternatives
+   - Potential workarounds using pseudo-TTY or process control
+   - Waiting for Anthropic to add subscription support to headless mode
+
+#### Symptom: "Invalid API key · Fix external API key"
+```
+PS C:\Users\Dev> claude "hello world" -p
+Invalid API key · Fix external API key
+```
+
+**Cause:** 
+The `-p` (print/headless) flag requires an API key. Your subscription token won't work here.
+
+**Solution:**
+You must use API credits for headless/automated operation. Subscription tokens only work in interactive mode.
+
+#### Symptom: setup-token Fails in PowerShell
+```
+Error: Raw mode is not supported on the current process.stdin
+```
+
+**Solutions:**
+1. Try Command Prompt (cmd) instead of PowerShell
+2. Use Git Bash if available
+3. The token may have been saved despite the error - check if it works
+
 ### Agent Communication Problems
 
 #### Symptom: Agent Communication Timeouts

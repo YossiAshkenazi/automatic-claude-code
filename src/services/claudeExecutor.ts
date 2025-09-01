@@ -41,6 +41,27 @@ export class NetworkError extends Error {
   }
 }
 
+export class AuthenticationError extends Error {
+  constructor(details: string) {
+    super(`Authentication error: ${details}`);
+    this.name = 'AuthenticationError';
+  }
+}
+
+export class HeadlessModeError extends Error {
+  constructor(details: string) {
+    super(`Headless mode (-p flag) error: ${details}`);
+    this.name = 'HeadlessModeError';
+  }
+}
+
+export class APIKeyRequiredError extends Error {
+  constructor() {
+    super('API key required for headless mode. Set ANTHROPIC_API_KEY environment variable or use interactive mode.');
+    this.name = 'APIKeyRequiredError';
+  }
+}
+
 /**
  * Execution options for Claude Code
  */
@@ -104,7 +125,7 @@ export class ClaudeExecutor {
     }
 
     const workingDir = options.workDir || process.cwd();
-    const timeout = options.timeout || 1800000; // 30 minutes default
+    const timeout = options.timeout || 120000; // 2 minutes default (reduced from 30 minutes)
 
     return new Promise((resolve, reject) => {
       let claudeProcess: ChildProcess;
@@ -166,8 +187,14 @@ export class ClaudeExecutor {
           const chunk = data.toString();
           errorOutput += chunk;
           
-          // Log errors in real-time
-          this.logger.error(`Claude error: ${chunk}`);
+          // Log errors in real-time with special handling for headless mode errors
+          if (this.isHeadlessModeError(chunk)) {
+            this.logger.error(`[HEADLESS MODE ERROR] ${chunk}`);
+            // Send to monitoring system if available
+            this.notifyMonitoring('headless_error', chunk);
+          } else {
+            this.logger.error(`Claude error: ${chunk}`);
+          }
           
           if (options.verbose) {
             process.stderr.write(chalk.red(chunk));
@@ -220,6 +247,35 @@ export class ClaudeExecutor {
    */
   private categorizeError(errorOutput: string, exitCode: number): Error {
     const lowerError = errorOutput.toLowerCase();
+    
+    // API Key and Authentication errors (specific to headless mode)
+    if (lowerError.includes('api key') || 
+        lowerError.includes('api_key') ||
+        lowerError.includes('anthropic_api_key') ||
+        lowerError.includes('missing api key') ||
+        lowerError.includes('no api key found')) {
+      return new APIKeyRequiredError();
+    }
+    
+    // Authentication errors
+    if (lowerError.includes('authentication') || 
+        lowerError.includes('unauthorized') ||
+        lowerError.includes('401') ||
+        lowerError.includes('forbidden') ||
+        lowerError.includes('invalid token') ||
+        lowerError.includes('token expired')) {
+      return new AuthenticationError(errorOutput.trim());
+    }
+    
+    // Headless mode specific errors
+    if ((lowerError.includes('headless') || 
+         lowerError.includes('-p flag') ||
+         lowerError.includes('print mode')) &&
+        (lowerError.includes('error') || 
+         lowerError.includes('failed') ||
+         lowerError.includes('not supported'))) {
+      return new HeadlessModeError(errorOutput.trim());
+    }
     
     // Network-related errors
     if (lowerError.includes('network') || 
@@ -306,5 +362,48 @@ export class ClaudeExecutor {
            line.includes('claude-code:') ||
            line.match(/^\d{4}-\d{2}-\d{2}/) !== null ||
            line.includes('session-');
+  }
+
+  /**
+   * Check if error is related to headless mode
+   */
+  private isHeadlessModeError(error: string): boolean {
+    const lowerError = error.toLowerCase();
+    return lowerError.includes('api key') ||
+           lowerError.includes('api_key') ||
+           lowerError.includes('headless') ||
+           lowerError.includes('-p flag') ||
+           lowerError.includes('print mode') ||
+           lowerError.includes('authentication') ||
+           lowerError.includes('unauthorized');
+  }
+
+  /**
+   * Notify monitoring system about errors
+   */
+  private notifyMonitoring(errorType: string, message: string): void {
+    // Send to monitoring endpoint if available
+    const monitoringUrl = 'http://localhost:4001/api/monitoring';
+    
+    fetch(monitoringUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentType: 'system',
+        messageType: 'error',
+        message: message,
+        metadata: {
+          eventType: 'HEADLESS_MODE_ERROR',
+          errorType: errorType,
+          timestamp: new Date().toISOString()
+        },
+        sessionInfo: {
+          task: 'Claude Code Execution',
+          workDir: process.cwd()
+        }
+      })
+    }).catch(() => {
+      // Silently fail if monitoring is not available
+    });
   }
 }

@@ -42,7 +42,10 @@
     "monitor:pm2-stop": "pm2 stop acc-monitoring",
     "monitor:pm2-restart": "pm2 restart acc-monitoring",
     "monitor:pm2-logs": "pm2 logs acc-monitoring",
-    "monitor:pm2-status": "pm2 list"
+    "monitor:pm2-status": "pm2 list",
+    "sdk:types": "tsc --declaration --emitDeclarationOnly --outDir types",
+    "sdk:validate": "node -e \"require('@anthropic-ai/claude-code'); console.log('SDK validation passed')\"",
+    "postinstall": "pnpm run sdk:validate || echo 'SDK validation skipped'"
   },
   "keywords": [
     "claude",
@@ -56,6 +59,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.98",
     "@stoneagebr/windows-credman": "^1.1.1",
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
@@ -76,9 +80,9 @@
     "@types/jest": "^29.5.12",
     "@types/node": "^20.11.0",
     "@types/ws": "^8.5.12",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
     "jest": "^29.7.0",
     "rimraf": "^5.0.5",
     "ts-jest": "^29.1.2",

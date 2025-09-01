@@ -12,6 +12,10 @@ interface SessionIteration {
   exitCode: number;
   duration: number;
   timestamp: Date;
+  // SDK-specific fields
+  executionMode?: 'cli' | 'sdk' | 'browser-auth';
+  sdkSessionId?: string;
+  authMethod?: 'api-key' | 'browser' | 'oauth';
 }
 
 interface Session {
@@ -22,6 +26,11 @@ interface Session {
   workDir: string;
   iterations: SessionIteration[];
   status: 'running' | 'completed' | 'failed';
+  // SDK-specific fields
+  executionMode?: 'cli' | 'sdk' | 'browser-auth';
+  authenticationState?: 'authenticated' | 'pending' | 'failed';
+  continueToken?: string; // SDK continue token
+  browserAuthRequired?: boolean;
 }
 
 interface SessionSummary {
@@ -54,6 +63,15 @@ interface SessionState {
     createdAt: Date;
     lastAccessed: Date;
     resumeCount: number;
+  };
+  // SDK-specific state
+  sdkState?: {
+    executionMode: 'cli' | 'sdk' | 'browser-auth';
+    authenticationState: 'authenticated' | 'pending' | 'failed';
+    continueToken?: string;
+    lastSDKSessionId?: string;
+    browserAuthRequired: boolean;
+    migrationRequired: boolean;
   };
 }
 
@@ -371,8 +389,134 @@ export class SessionManager {
   }
 
   private generateSessionId(): string {
-    // Generate a proper UUID v4 format that Claude CLI expects
+    // Generate a proper UUID v4 format that Claude CLI and SDK both expect
     return crypto.randomUUID();
+  }
+
+  /**
+   * Create SDK-compatible session with browser auth support
+   */
+  async createSDKSession(initialPrompt: string, workDir: string, executionMode: 'sdk' | 'browser-auth' = 'sdk'): Promise<string> {
+    await this.ensureSessionsDir();
+    
+    const sessionId = this.generateSessionId();
+    this.currentSession = {
+      id: sessionId,
+      startTime: new Date(),
+      initialPrompt,
+      workDir,
+      iterations: [],
+      status: 'running',
+      executionMode,
+      authenticationState: executionMode === 'browser-auth' ? 'pending' : 'authenticated',
+      browserAuthRequired: executionMode === 'browser-auth'
+    };
+    
+    this.sessionFile = path.join(this.sessionsDir, `${sessionId}.json`);
+    await this.saveCurrentSession();
+    
+    return sessionId;
+  }
+
+  /**
+   * Resume session with SDK continue support
+   */
+  async resumeSDKSession(sessionId: string, continueToken?: string): Promise<Session> {
+    const session = await this.loadSession(sessionId);
+    
+    // Update for SDK resume
+    session.status = 'running';
+    session.continueToken = continueToken;
+    delete session.endTime;
+    
+    // Detect if migration from CLI to SDK is needed
+    if (!session.executionMode) {
+      session.executionMode = continueToken ? 'sdk' : 'cli';
+    }
+    
+    this.currentSession = session;
+    this.sessionFile = path.join(this.sessionsDir, `${sessionId}.json`);
+    await this.saveCurrentSession();
+    
+    return session;
+  }
+
+  /**
+   * Add SDK iteration with authentication tracking
+   */
+  async addSDKIteration(iteration: Omit<SessionIteration, 'timestamp'> & { 
+    sdkSessionId?: string;
+    authMethod?: 'api-key' | 'browser' | 'oauth';
+    executionMode?: 'cli' | 'sdk' | 'browser-auth';
+  }): Promise<void> {
+    if (!this.currentSession) {
+      throw new Error('No active session');
+    }
+    
+    const fullIteration: SessionIteration = {
+      ...iteration,
+      timestamp: new Date(),
+      executionMode: iteration.executionMode || this.currentSession.executionMode || 'cli',
+      sdkSessionId: iteration.sdkSessionId,
+      authMethod: iteration.authMethod || (this.currentSession.browserAuthRequired ? 'browser' : 'api-key')
+    };
+    
+    this.currentSession.iterations.push(fullIteration);
+    
+    // Update authentication state based on execution success
+    if (iteration.exitCode === 0 && this.currentSession.authenticationState === 'pending') {
+      this.currentSession.authenticationState = 'authenticated';
+    } else if (iteration.exitCode !== 0 && iteration.output.error?.includes('auth')) {
+      this.currentSession.authenticationState = 'failed';
+    }
+    
+    await this.saveCurrentSession();
+  }
+
+  /**
+   * Check if session needs authentication
+   */
+  async checkAuthenticationRequired(sessionId?: string): Promise<boolean> {
+    if (!sessionId || !this.currentSession) return false;
+    
+    try {
+      const session = sessionId === this.currentSession.id ? 
+        this.currentSession : 
+        await this.loadSession(sessionId);
+        
+      return session.browserAuthRequired || session.authenticationState === 'pending';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Migrate CLI session to SDK format
+   */
+  async migrateToSDK(sessionId: string): Promise<void> {
+    const session = await this.loadSession(sessionId);
+    
+    // Add SDK fields if missing
+    if (!session.executionMode) {
+      session.executionMode = 'cli';
+      session.authenticationState = 'authenticated'; // Assume CLI was working
+      session.browserAuthRequired = false;
+      
+      // Update all iterations
+      session.iterations = session.iterations.map(iter => ({
+        ...iter,
+        executionMode: 'cli',
+        authMethod: 'api-key'
+      }));
+      
+      // Save migrated session
+      if (this.currentSession?.id === sessionId) {
+        this.currentSession = session;
+      }
+      
+      const sessionFile = path.join(this.sessionsDir, `${sessionId}.json`);
+      await fs.writeFile(sessionFile, JSON.stringify(session, null, 2), 'utf-8');
+    }
   }
 }
 
@@ -409,9 +553,9 @@ export class EnhancedSessionManager extends SessionManager {
   }
 
   /**
-   * Create a new session with enhanced state tracking
+   * Create a new session with enhanced state tracking and SDK support
    */
-  async createSession(initialPrompt: string, workDir: string): Promise<string> {
+  async createSession(initialPrompt: string, workDir: string, executionMode: 'cli' | 'sdk' | 'browser-auth' = 'cli'): Promise<string> {
     // Check concurrent session limit
     const runningSessions = Array.from(this.sessionStates.values())
       .filter(state => state.status === 'running').length;
@@ -420,8 +564,10 @@ export class EnhancedSessionManager extends SessionManager {
       throw new SessionLimitError(this.maxConcurrentSessions, runningSessions);
     }
 
-    // Create base session
-    const sessionId = await super.createSession(initialPrompt, workDir);
+    // Create base session with SDK support
+    const sessionId = executionMode === 'cli' ? 
+      await super.createSession(initialPrompt, workDir) :
+      await super.createSDKSession(initialPrompt, workDir, executionMode);
     
     // Create enhanced state tracking
     const paths = SessionPathEncoder.createSessionPaths(sessionId, workDir, this.sessionsDir);
@@ -437,6 +583,13 @@ export class EnhancedSessionManager extends SessionManager {
         createdAt: new Date(),
         lastAccessed: new Date(),
         resumeCount: 0
+      },
+      // SDK-specific state
+      sdkState: {
+        executionMode,
+        authenticationState: executionMode === 'browser-auth' ? 'pending' : 'authenticated',
+        browserAuthRequired: executionMode === 'browser-auth',
+        migrationRequired: false
       }
     };
     
@@ -455,16 +608,26 @@ export class EnhancedSessionManager extends SessionManager {
       sessionState.processInfo.error = error instanceof Error ? error.message : String(error);
     }
     
-    this.logger.info(`Created session ${sessionId} for ${workDir}`);
+    this.logger.info(`Created ${executionMode} session ${sessionId} for ${workDir}`);
     return sessionId;
   }
 
   /**
-   * Resume an existing session with additional context
+   * Resume an existing session with SDK support and migration
    */
-  async resumeSession(sessionId: string, additionalPrompt?: string): Promise<string> {
+  async resumeSession(sessionId: string, additionalPrompt?: string, continueToken?: string): Promise<string> {
     try {
       const session = await this.loadSession(sessionId);
+      
+      // Check if migration is needed (old CLI-only session)
+      if (!session.executionMode) {
+        await this.migrateToSDK(sessionId);
+        // Reload after migration
+        const migratedSession = await this.loadSession(sessionId);
+        this.currentSession = migratedSession;
+      } else {
+        this.currentSession = session;
+      }
       
       // Update session state
       const state = this.sessionStates.get(sessionId);
@@ -474,20 +637,34 @@ export class EnhancedSessionManager extends SessionManager {
         state.metadata.resumeCount++;
         state.processInfo.lastActivity = new Date();
         
+        // Update SDK state
+        if (state.sdkState) {
+          state.sdkState.continueToken = continueToken;
+          if (continueToken) {
+            state.sdkState.executionMode = 'sdk';
+          }
+        }
+        
         // Clear end time
         if (session.endTime) {
           delete session.endTime;
         }
         session.status = 'running';
         
+        // Store continue token for SDK
+        if (continueToken) {
+          session.continueToken = continueToken;
+        }
+        
         // Add resume context if provided
         if (additionalPrompt) {
-          await this.addIteration({
+          await this.addSDKIteration({
             iteration: session.iterations.length + 1,
             prompt: `[RESUME] ${additionalPrompt}`,
             output: { result: 'Session resumed', files: [], commands: [], totalCost: 0 },
             exitCode: 0,
-            duration: 0
+            duration: 0,
+            executionMode: session.executionMode || 'cli'
           });
         }
         
@@ -503,7 +680,7 @@ export class EnhancedSessionManager extends SessionManager {
         }
       }
       
-      this.logger.info(`Resumed session ${sessionId}`);
+      this.logger.info(`Resumed ${session.executionMode || 'cli'} session ${sessionId}`);
       return sessionId;
     } catch (error) {
       throw new Error(`Session ${sessionId} not found or could not be resumed`);
@@ -722,7 +899,7 @@ export class EnhancedSessionManager extends SessionManager {
   }
 
   /**
-   * Get statistics about current session usage
+   * Get statistics about current session usage including SDK breakdown
    */
   getSessionStatistics(): {
     total: number;
@@ -730,15 +907,51 @@ export class EnhancedSessionManager extends SessionManager {
     completed: number;
     failed: number;
     maxConcurrent: number;
+    // SDK-specific stats
+    byExecutionMode: {
+      cli: number;
+      sdk: number;
+      browserAuth: number;
+    };
+    authenticationStatus: {
+      authenticated: number;
+      pending: number;
+      failed: number;
+    };
   } {
     const states = Array.from(this.sessionStates.values());
+    
+    const byMode = { cli: 0, sdk: 0, browserAuth: 0 };
+    const authStatus = { authenticated: 0, pending: 0, failed: 0 };
+    
+    states.forEach(state => {
+      if (state.sdkState) {
+        switch (state.sdkState.executionMode) {
+          case 'cli': byMode.cli++; break;
+          case 'sdk': byMode.sdk++; break;
+          case 'browser-auth': byMode.browserAuth++; break;
+        }
+        
+        switch (state.sdkState.authenticationState) {
+          case 'authenticated': authStatus.authenticated++; break;
+          case 'pending': authStatus.pending++; break;
+          case 'failed': authStatus.failed++; break;
+        }
+      } else {
+        // Legacy session, assume CLI
+        byMode.cli++;
+        authStatus.authenticated++;
+      }
+    });
     
     return {
       total: states.length,
       running: states.filter(s => s.status === 'running').length,
       completed: states.filter(s => s.status === 'completed').length,
       failed: states.filter(s => s.status === 'failed').length,
-      maxConcurrent: this.maxConcurrentSessions
+      maxConcurrent: this.maxConcurrentSessions,
+      byExecutionMode: byMode,
+      authenticationStatus: authStatus
     };
   }
 
@@ -808,4 +1021,142 @@ export class EnhancedSessionManager extends SessionManager {
 }
 
 // Export types for external use
-export { SessionState };
+export type { SessionState };
+
+/**
+ * Session compatibility utilities for SDK integration
+ */
+export class SessionCompatibilityManager {
+  private sessionManager: EnhancedSessionManager;
+  private logger: Logger;
+  
+  constructor(sessionManager: EnhancedSessionManager, logger: Logger) {
+    this.sessionManager = sessionManager;
+    this.logger = logger;
+  }
+  
+  /**
+   * Create a session optimized for the execution mode
+   */
+  async createOptimalSession(
+    initialPrompt: string, 
+    workDir: string, 
+    preferredMode: 'auto' | 'cli' | 'sdk' | 'browser-auth' = 'auto'
+  ): Promise<{ sessionId: string; executionMode: 'cli' | 'sdk' | 'browser-auth' }> {
+    let executionMode: 'cli' | 'sdk' | 'browser-auth' = 'cli';
+    
+    if (preferredMode === 'auto') {
+      // Auto-detect best execution mode
+      // Check for API key availability
+      const hasApiKey = !!(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY);
+      
+      if (hasApiKey) {
+        executionMode = 'cli';
+      } else {
+        // No API key, prefer SDK with browser auth
+        executionMode = 'browser-auth';
+      }
+    } else {
+      executionMode = preferredMode as 'cli' | 'sdk' | 'browser-auth';
+    }
+    
+    const sessionId = await this.sessionManager.createSession(initialPrompt, workDir, executionMode);
+    
+    this.logger.info(`Created optimal session: ${executionMode} mode for ${workDir}`);
+    
+    return { sessionId, executionMode };
+  }
+  
+  /**
+   * Resume session with automatic mode detection
+   */
+  async resumeOptimalSession(
+    sessionId: string, 
+    additionalPrompt?: string,
+    continueToken?: string
+  ): Promise<{ sessionId: string; executionMode: string; authRequired: boolean }> {
+    try {
+      const resumedId = await this.sessionManager.resumeSession(sessionId, additionalPrompt, continueToken);
+      const session = await this.sessionManager.loadSession(resumedId);
+      const authRequired = await this.sessionManager.checkAuthenticationRequired(resumedId);
+      
+      return {
+        sessionId: resumedId,
+        executionMode: session.executionMode || 'cli',
+        authRequired
+      };
+    } catch (error) {
+      this.logger.error(`Failed to resume session ${sessionId}: ${error}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * Migrate all old sessions to new format
+   */
+  async migrateAllSessions(): Promise<{ migrated: number; errors: string[] }> {
+    const sessions = await this.sessionManager.listSessions();
+    let migrated = 0;
+    const errors: string[] = [];
+    
+    for (const sessionInfo of sessions) {
+      try {
+        const session = await this.sessionManager.loadSession(sessionInfo.id);
+        if (!session.executionMode) {
+          await this.sessionManager.migrateToSDK(sessionInfo.id);
+          migrated++;
+          this.logger.debug(`Migrated session ${sessionInfo.id}`);
+        }
+      } catch (error) {
+        const errorMsg = `Failed to migrate session ${sessionInfo.id}: ${error}`;
+        errors.push(errorMsg);
+        this.logger.error(errorMsg);
+      }
+    }
+    
+    this.logger.info(`Migration complete: ${migrated} sessions migrated, ${errors.length} errors`);
+    
+    return { migrated, errors };
+  }
+  
+  /**
+   * Get session compatibility status
+   */
+  async getCompatibilityStatus(): Promise<{
+    totalSessions: number;
+    sdkCompatible: number;
+    migrationRequired: number;
+    authenticationIssues: number;
+  }> {
+    const stats = this.sessionManager.getSessionStatistics();
+    const sessions = await this.sessionManager.listSessions();
+    
+    let sdkCompatible = 0;
+    let migrationRequired = 0;
+    let authenticationIssues = 0;
+    
+    for (const sessionInfo of sessions) {
+      try {
+        const session = await this.sessionManager.loadSession(sessionInfo.id);
+        if (session.executionMode) {
+          sdkCompatible++;
+          if (session.authenticationState === 'failed') {
+            authenticationIssues++;
+          }
+        } else {
+          migrationRequired++;
+        }
+      } catch {
+        // Count as needing migration
+        migrationRequired++;
+      }
+    }
+    
+    return {
+      totalSessions: sessions.length,
+      sdkCompatible,
+      migrationRequired,
+      authenticationIssues
+    };
+  }
+}

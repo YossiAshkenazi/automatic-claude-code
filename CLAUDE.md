@@ -34,34 +34,45 @@ Use the Task tool with multiple parallel agents when:
 
 ### Parallel Agent Usage Patterns
 
-#### Pattern 1: Maximum Parallelization (DEFAULT)
+#### Pattern 1: Maximum Parallelization (DEFAULT - Browser SDK Compatible)
 ```
-"Use Task tool to launch these agents IN PARALLEL:
+"Use Task tool to launch these agents IN PARALLEL (all use browser auth):
 1. Search agent: Find all relevant files (return only paths)
-2. Analysis agent: Analyze architecture patterns
+2. Analysis agent: Analyze architecture patterns  
 3. Test agent: Identify existing test patterns
 4. Doc agent: Find related documentation
-Each agent MUST return <1K tokens summary"
+Each agent uses browser session, MUST return <1K tokens summary"
 ```
 
-#### Pattern 2: Feature Development Swarm
+#### Pattern 2: Browser-Authenticated Feature Development Swarm
 ```
-"Launch 5-7 specialized agents concurrently:
-- Component structure agent
-- Styling/CSS agent  
-- Unit tests agent
-- Type definitions agent
-- Integration logic agent
-- Documentation agent
-Each works independently, returns minimal tokens"
+"Launch 5-7 specialized agents concurrently (all browser-authenticated):
+- Component structure agent (uses browser Claude session)
+- Styling/CSS agent (browser session with Pro features)
+- Unit tests agent (browser session with test capabilities)
+- Type definitions agent (browser session for TS analysis)
+- Integration logic agent (browser session coordination)
+- Documentation agent (browser session for docs)
+Each works independently with persistent browser auth, returns minimal tokens"
 ```
 
-#### Pattern 3: Exploration & Implementation
+#### Pattern 3: Browser SDK Exploration & Implementation
 ```
-"Phase 1: Launch 3 search agents to explore different areas
-Phase 2: Launch 5 implementation agents based on findings
-Phase 3: Launch validation agents to verify changes
+"Phase 1: Launch 3 search agents with browser sessions to explore areas
+Phase 2: Launch 5 implementation agents using shared browser authentication
+Phase 3: Launch validation agents with browser-based testing
+All agents share browser session pool, no API key management needed
 Total context used: <5K tokens vs >100K sequential"
+```
+
+#### Pattern 4: Cross-Browser Agent Distribution (NEW)
+```
+"Distribute agents across browser instances for maximum parallelization:
+- Chrome agents: Heavy computation tasks (3-4 agents)
+- Firefox agents: File operations (2-3 agents)  
+- Edge agents: Testing and validation (2-3 agents)
+All browsers share the same Claude Pro/Team subscription
+Automatic browser session management and token refresh"
 ```
 
 ### Critical Rules for Agent Usage
@@ -170,19 +181,20 @@ Switch to agents when context >30% used
 
 ## Project Overview
 
-**🎉 SYSTEM STATUS**: Fully operational and tested (September 1, 2025)  
+**🎉 SYSTEM STATUS**: Fully operational with Browser SDK (September 1, 2025)  
 **🔗 Live Dashboard**: http://localhost:6011 | **API**: http://localhost:4005/api/health
 
-Automatic Claude Code is a TypeScript CLI application that runs Claude Code in an automated dual-agent loop for continuous AI-assisted development. The system uses a Manager-Worker architecture where a Manager Agent coordinates tasks and a Worker Agent executes them, enabling more sophisticated problem-solving through specialized roles and collaborative workflows.
+Automatic Claude Code is a TypeScript CLI application that runs Claude Code through browser-based authentication for seamless dual-agent automation. The system eliminates API key requirements by leveraging your browser's Claude Pro/Team session, using a Manager-Worker architecture for sophisticated AI-assisted development workflows.
 
 **Key Features:**
-- **Dual-Agent Architecture**: Manager-Worker coordination for complex task execution
+- **Browser-Based Authentication**: Direct Claude Pro/Team session integration (no API keys)
+- **Dual-Agent Architecture**: Manager-Worker coordination with browser SDK
 - **Real-time Monitoring**: Web-based dashboard with live agent communication tracking
+- **Interactive Session Control**: Real-time stream processing through browser automation
+- **Cross-Platform Support**: Chrome, Firefox, Safari, Edge compatibility
 - **Production-Ready Deployment**: Docker, Kubernetes, and cloud infrastructure support
-- **Machine Learning Insights**: Anomaly detection, predictive analytics, and optimization recommendations
 - **External Integrations**: Webhook system supporting Slack, Discord, and email notifications
-- **Mobile-Responsive Interface**: Progressive Web App with offline capabilities
-- **Comprehensive Testing**: Automated CI/CD pipelines with unit, integration, and E2E tests
+- **Comprehensive Testing**: Automated CI/CD pipelines with browser authentication
 
 ## Essential Commands
 
@@ -239,16 +251,22 @@ pnpm run clean        # Remove dist directory
 
 ### Core Usage
 
-#### Native Commands (with acc)
+#### Native Commands (with acc) - Browser Authentication
 ```bash
-# From ANY project directory - use acc command
-acc run "task" --dual-agent -i 5 -v
+# From ANY project directory - use acc command with browser auth
+acc run "task" --dual-agent -i 5 -v  # Uses browser session automatically
+acc run "task" --browser chrome --dual-agent -v  # Specify browser
 acc run "task" --manager-model opus --worker-model sonnet -v
 acc monitor        # Check monitoring status
 acc monitor --start # Start monitoring server
 acc examples      # Show example prompts
 acc history       # View session history
 acc logs --tail   # Watch logs in real-time
+
+# Browser session management
+acc --check-browser-session    # Verify browser Claude session
+acc --refresh-browser-session  # Force session refresh
+acc --browser-status           # Show all browser session status
 
 # Legacy method (if acc command not available)
 node "../automatic-claude-code/dist/index.js" run "task" --dual-agent -i 5 -v
@@ -426,22 +444,22 @@ interface AgentMessage {
 }
 ```
 
-### Claude Code Execution (Enhanced)
+### Claude Code Execution (Browser SDK)
 
-Both agents spawn Claude Code processes with specialized configurations:
+Both agents use browser-based Claude Code execution with specialized configurations:
 
-**Manager Agent Flags**:
-- `--model opus` (or configured manager model)
-- `--role strategic-planning`
-- `--max-turns 20` (longer conversations for planning)
+**Manager Agent Configuration**:
+- Browser session with `opus` model (or configured manager model)
+- Strategic planning role with extended context
+- Interactive session management with quality gates
+- Real-time stream processing for planning decisions
 
-**Worker Agent Flags**:
-- `--model sonnet` (or configured worker model)
-- `--role task-execution`
-- `--dangerously-skip-permissions` - Skip permission prompts
-- `-p` - Headless/print mode
-- `--output-format json` - Structured output
-- `--permission-mode acceptEdits` - Auto-accept edits
+**Worker Agent Configuration**:
+- Browser session with `sonnet` model (or configured worker model)
+- Task execution role with focused implementation
+- Automated permission handling through browser session
+- Structured output parsing from browser streams
+- Direct browser automation for seamless execution
 
 ### Output Analysis & Monitoring (Enhanced)
 
@@ -491,11 +509,25 @@ The system now provides comprehensive monitoring and analysis:
 - Preserves error states in session history
 - Allows continuation with `--continue-on-error` flag
 
-### Configuration System
+### Configuration System (Browser SDK Enhanced)
 Enhanced configuration at `~/.automatic-claude-code/config.json`:
 ```json
 {
   "defaultModel": "sonnet",
+  "browserAuth": {
+    "enabled": true,
+    "defaultBrowser": "chrome",
+    "sessionTimeout": 3600,
+    "maxBrowserSessions": 10,
+    "persistentSessions": true,
+    "autoTokenRefresh": true,
+    "headlessBrowser": false,
+    "browserOptions": {
+      "disableExtensions": true,
+      "disableImages": false,
+      "userAgent": "automatic-claude-code/1.2.0"
+    }
+  },
   "dualAgentMode": {
     "enabled": false,
     "managerModel": "opus",
@@ -503,7 +535,8 @@ Enhanced configuration at `~/.automatic-claude-code/config.json`:
     "coordinationInterval": 3,
     "qualityGateThreshold": 0.8,
     "maxConcurrentTasks": 2,
-    "enableCrossValidation": true
+    "enableCrossValidation": true,
+    "useBrowserAuth": true
   },
   "monitoring": {
     "enabled": true,
@@ -950,13 +983,18 @@ artillery run tests/load/websocket-connections.yml
 ## Recent Updates (Updated: 2025-09-01)
 
 ### Latest Major Changes (2025-09-01)
+- **Browser SDK Integration (v1.2.0)**: Revolutionary browser-based authentication system
+  - ✅ **Eliminated API Key Requirements**: Direct Claude Pro/Team session integration via browser
+  - ✅ **Cross-Browser Support**: Chrome, Firefox, Safari, Edge compatibility with automatic detection
+  - ✅ **Session Management**: Persistent browser sessions with automatic token refresh
+  - ✅ **Interactive Stream Processing**: Real-time communication through browser SDK
+  - ✅ **Parallel Agent Enhancement**: Browser session pool for concurrent agent execution
+  - ✅ **Comprehensive Troubleshooting**: Browser-specific debugging and error recovery
 - **Dashboard UI Enhancements**: Comprehensive improvements to monitoring interface reliability
   - ✅ **Fixed Critical Data Consistency**: Resolved hardcoded session counts in Sidebar - now shows dynamic real-time data
   - ✅ **Enhanced WebSocket Reliability**: Added comprehensive error handling, reconnection logic, and heartbeat monitoring
-  - ✅ **Implemented Error Boundaries**: Robust error handling throughout dashboard components
-  - ✅ **Built Comprehensive Test Suite**: 45+ tests focusing on data consistency and component functionality
-  - ✅ **Enhanced Mobile Experience**: Improved responsive design and cross-platform data synchronization
-  - ✅ **Production Infrastructure**: Enhanced API connectivity and state management for better reliability
+  - ✅ **Browser Integration Monitoring**: Real-time browser session status and health tracking
+  - ✅ **Enhanced Mobile Experience**: Improved responsive design with browser session indicators
 - **Technical Improvements**: 
   - Fixed `dual-agent-monitor/src/components/ui/Sidebar.tsx` - replaced hardcoded `badge: 3` with dynamic session count
   - Updated `dual-agent-monitor/src/components/mobile/MobileApp.tsx` - replaced hardcoded badge values with real-time calculations
@@ -1044,6 +1082,57 @@ artillery run tests/load/websocket-connections.yml
 
 ## Troubleshooting Guide
 
+### Browser SDK Authentication Issues
+
+#### Browser Session Not Detected
+```bash
+# Check if Claude is accessible in browser
+open https://claude.ai
+# or: xdg-open https://claude.ai (Linux)
+# or: start https://claude.ai (Windows)
+
+# Verify browser session is active
+acc --check-browser-session
+
+# Force browser session refresh
+acc run "test task" --refresh-browser-session -i 1
+
+# Debug browser detection
+DEBUG=browser:* acc run "test" --dual-agent -v
+```
+
+#### Browser Launch Problems
+```bash
+# Check default browser
+which google-chrome || which firefox || which safari
+
+# Test browser automation
+acc --test-browser-automation
+
+# Try different browsers
+acc run "task" --browser chrome --dual-agent -i 2
+acc run "task" --browser firefox --dual-agent -i 2
+acc run "task" --browser edge --dual-agent -i 2
+
+# Use headless browser mode
+acc run "task" --headless-browser --dual-agent -i 2
+```
+
+#### Session Management Issues
+```bash
+# Clear browser session cache
+acc --clear-browser-cache
+
+# Reset all browser sessions
+acc --reset-browser-sessions
+
+# Monitor browser session health
+acc --monitor-browser-sessions
+
+# Debug browser session management
+DEBUG=session:* acc run "test" --dual-agent -v
+```
+
 ### Common Issues and Solutions
 
 #### Monitoring Server Won't Start
@@ -1058,16 +1147,20 @@ sudo lsof -ti:4001 | xargs kill -9
 DEBUG=* pnpm run dev
 ```
 
-#### Dual-Agent Coordination Issues
+#### Dual-Agent Coordination Issues (Browser Mode)
 ```bash
 # Check Claude CLI installation
 claude --version
 
-# Verify agent spawn processes
-ps aux | grep claude
+# Verify browser-based agent processes
+ps aux | grep chrome | grep claude
+ps aux | grep firefox | grep claude
 
-# Debug agent communication
-DEBUG=agent:* acc run "test" --dual-agent -v
+# Debug agent communication with browser sessions
+DEBUG=agent:browser:* acc run "test" --dual-agent -v
+
+# Test browser coordination
+acc --test-dual-agent-browser-coordination
 ```
 
 #### Database Connection Problems

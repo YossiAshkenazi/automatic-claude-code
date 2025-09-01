@@ -16,7 +16,18 @@ import { AgentCoordinator } from './agents/agentCoordinator';
 import { ClaudeUtils } from './claudeUtils';
 import { monitoringManager } from './monitoringManager';
 import { config } from './config';
-import { ClaudeExecutor, ClaudeExecutionOptions } from './services/claudeExecutor';
+import { 
+  ClaudeExecutor, 
+  ClaudeExecutionOptions,
+  AuthenticationError,
+  BrowserAuthRequiredError,
+  SDKNotInstalledError,
+  ClaudeInstallationError,
+  NetworkError,
+  APIKeyRequiredError,
+  ModelQuotaError,
+  RetryExhaustedError
+} from './services/claudeExecutor';
 import Table from 'cli-table3';
 
 interface LoopOptions {
@@ -258,15 +269,16 @@ class AutomaticClaudeCode {
         }
 
       } catch (error) {
-        console.error(chalk.red(`\n❌ Error in iteration ${this.iteration}:`), error);
-        this.logger.error(`Error in iteration ${this.iteration}`, { error: error instanceof Error ? error.message : error });
+        const handled = this.handleIterationError(error, this.iteration, options);
         
-        if (!options.continueOnError) {
+        if (!handled && !options.continueOnError) {
           this.logger.close();
           throw error;
         }
         
-        currentPrompt = `Previous attempt failed with error: ${error}. Please try a different approach.`;
+        if (handled && options.continueOnError) {
+          currentPrompt = `Previous attempt failed with error: ${(error as Error).message}. Please try a different approach.`;
+        }
       }
     }
 
@@ -334,6 +346,100 @@ class AutomaticClaudeCode {
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Enhanced error handling with user-friendly prompts and guidance
+   */
+  private handleIterationError(error: any, iteration: number, options: LoopOptions): boolean {
+    this.logger.error(`Error in iteration ${iteration}`, { error: error instanceof Error ? error.message : error });
+
+    // Handle specific error types with user guidance
+    if (error instanceof AuthenticationError || error instanceof BrowserAuthRequiredError) {
+      console.error(chalk.red.bold('\n🔐 Authentication Issue'));
+      console.log(chalk.yellow('This error indicates Claude needs authentication.'));
+      console.log(chalk.cyan('\n📋 To fix this:'));
+      console.log(chalk.white('  1. Open your browser and go to claude.ai'));
+      console.log(chalk.white('  2. Log in to your Claude account'));
+      console.log(chalk.white('  3. Keep the browser tab open'));
+      console.log(chalk.white('  4. Run the command again'));
+      console.log(chalk.yellow('\n💡 Alternative: Set ANTHROPIC_API_KEY for headless mode'));
+      return true;
+    }
+
+    if (error instanceof SDKNotInstalledError || error instanceof ClaudeInstallationError) {
+      console.error(chalk.red.bold('\n📦 Claude Installation Issue'));
+      console.log(chalk.yellow('Claude Code is not properly installed.'));
+      console.log(chalk.cyan('\n📋 Installation Options:'));
+      console.log(chalk.white('  Option 1 (Recommended): npm install -g @anthropic-ai/claude-code'));
+      console.log(chalk.white('  Option 2: curl -sL https://claude.ai/install.sh | sh'));
+      console.log(chalk.white('  Option 3: Download from https://claude.ai/download'));
+      console.log(chalk.yellow('\n💡 After installation, run "claude auth" to authenticate'));
+      return false; // Don't continue for installation issues
+    }
+
+    if (error instanceof NetworkError) {
+      console.error(chalk.red.bold('\n🌐 Network Issue'));
+      console.log(chalk.yellow('Unable to connect to Claude services.'));
+      console.log(chalk.cyan('\n📋 Troubleshooting:'));
+      console.log(chalk.white('  1. Check your internet connection'));
+      console.log(chalk.white('  2. Verify firewall/proxy settings'));
+      console.log(chalk.white('  3. Try again in a few moments'));
+      console.log(chalk.white('  4. Check https://status.anthropic.com for service status'));
+      return true;
+    }
+
+    if (error instanceof APIKeyRequiredError) {
+      console.error(chalk.red.bold('\n🗝️  API Key Required'));
+      console.log(chalk.yellow('Headless mode requires an API key.'));
+      console.log(chalk.cyan('\n📋 API Key Setup Options:'));
+      console.log(chalk.white('  Option 1: export ANTHROPIC_API_KEY="your-key-here"'));
+      console.log(chalk.white('  Option 2: Set CLAUDE_API_KEY environment variable'));
+      console.log(chalk.white('  Option 3: Use interactive mode (remove API key)'));
+      console.log(chalk.yellow('\n💡 Get your API key from https://console.anthropic.com'));
+      return false; // Don't continue without API key
+    }
+
+    if (error instanceof ModelQuotaError) {
+      console.error(chalk.red.bold('\n⚡ Usage Limit Exceeded'));
+      console.log(chalk.yellow('You have hit your model usage quota or rate limit.'));
+      console.log(chalk.cyan('\n📋 Solutions:'));
+      console.log(chalk.white('  1. Wait a few minutes before retrying'));
+      console.log(chalk.white('  2. Check your usage at https://console.anthropic.com'));
+      console.log(chalk.white('  3. Consider upgrading your plan if needed'));
+      console.log(chalk.white('  4. Try using "sonnet" model instead of "opus"'));
+      return true;
+    }
+
+    if (error instanceof RetryExhaustedError) {
+      console.error(chalk.red.bold('\n🔄 All Retries Exhausted'));
+      console.log(chalk.yellow('Multiple attempts failed to execute the request.'));
+      console.log(chalk.cyan('\n📋 Next Steps:'));
+      console.log(chalk.white('  1. Check the specific error details above'));
+      console.log(chalk.white('  2. Try a simpler or more specific prompt'));
+      console.log(chalk.white('  3. Ensure Claude is properly authenticated'));
+      console.log(chalk.white('  4. Check your network connection'));
+      return true;
+    }
+
+    // Generic error handling
+    console.error(chalk.red(`\n❌ Error in iteration ${iteration}:`));
+    if (error instanceof Error) {
+      console.error(chalk.red(error.message));
+      if (options.verbose && error.stack) {
+        console.error(chalk.gray(error.stack));
+      }
+    } else {
+      console.error(chalk.red(String(error)));
+    }
+
+    console.log(chalk.cyan('\n📋 General Troubleshooting:'));
+    console.log(chalk.white('  1. Try a simpler or more specific prompt'));
+    console.log(chalk.white('  2. Check that Claude is authenticated'));
+    console.log(chalk.white('  3. Verify your internet connection'));
+    console.log(chalk.white('  4. Use --verbose flag for more details'));
+
+    return true; // Allow continuation for generic errors
   }
 
   // Helper method to identify Claude's actual work output

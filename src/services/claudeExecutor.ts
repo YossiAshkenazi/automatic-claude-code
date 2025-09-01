@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { ClaudeUtils } from '../claudeUtils';
 import { Logger } from '../logger';
 import { ACCPTYManager } from './ptyController';
-import { BrowserAuthClaudeExecutor } from './browserAuthClaudeExecutor';
+import { SDKClaudeExecutor } from './sdkClaudeExecutor';
 
 /**
  * Custom error types for type-driven error handling
@@ -64,6 +64,27 @@ export class APIKeyRequiredError extends Error {
   }
 }
 
+export class SDKNotInstalledError extends Error {
+  constructor() {
+    super('Claude Code SDK not installed. Please install with: npm install -g @anthropic-ai/claude-code');
+    this.name = 'SDKNotInstalledError';
+  }
+}
+
+export class BrowserAuthRequiredError extends Error {
+  constructor() {
+    super('Browser authentication required. Please authenticate Claude in your browser first.');
+    this.name = 'BrowserAuthRequiredError';
+  }
+}
+
+export class RetryExhaustedError extends Error {
+  constructor(maxRetries: number, lastError: string) {
+    super(`Failed after ${maxRetries} attempts. Last error: ${lastError}`);
+    this.name = 'RetryExhaustedError';
+  }
+}
+
 /**
  * Execution options for Claude Code
  */
@@ -93,13 +114,15 @@ export interface ClaudeExecutionResult {
 export class ClaudeExecutor {
   private logger: Logger;
   private ptyManager: ACCPTYManager;
-  private browserAuthExecutor: BrowserAuthClaudeExecutor;
+  private sdkExecutor: SDKClaudeExecutor;
   private activePTYSessions: Map<string, string> = new Map();
+  private maxRetries: number = 3;
+  private retryDelay: number = 1000; // ms
 
   constructor(logger?: Logger) {
     this.logger = logger || new Logger();
     this.ptyManager = new ACCPTYManager(this.logger);
-    this.browserAuthExecutor = new BrowserAuthClaudeExecutor(this.logger);
+    this.sdkExecutor = new SDKClaudeExecutor(this.logger);
   }
 
   /**
@@ -112,36 +135,168 @@ export class ClaudeExecutor {
     prompt: string, 
     options: ClaudeExecutionOptions = {}
   ): Promise<ClaudeExecutionResult> {
-    // Check if we should use browser auth mode
-    // If no API key is set, use browser-authenticated Claude
-    const hasApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
-    
-    if (!hasApiKey) {
-      // Use browser-authenticated Claude (interactive but automated)
-      this.logger.debug('No API key found, using browser-authenticated Claude');
+    return this.executeWithRetry(prompt, options, 0);
+  }
+
+  /**
+   * Execute Claude with automatic retry logic and progressive fallback
+   * Priority: SDK (browser auth) -> CLI with API key -> CLI interactive
+   */
+  private async executeWithRetry(
+    prompt: string,
+    options: ClaudeExecutionOptions,
+    attempt: number
+  ): Promise<ClaudeExecutionResult> {
+    try {
+      this.logSDKFlow(`Starting execution attempt ${attempt + 1}/${this.maxRetries + 1}`, {
+        hasApiKey: !!(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY),
+        workDir: options.workDir,
+        model: options.model,
+        sdkAvailable: this.sdkExecutor.isAvailable()
+      });
+
+      // Priority 1: Try SDK execution (works with browser auth, no API key needed)
       try {
-        const result = await this.browserAuthExecutor.executeBrowserAuthClaude(prompt, {
+        this.logger.debug('Attempting SDK execution (browser auth)');
+        
+        const result = await this.sdkExecutor.executeWithSDK(prompt, {
           model: options.model as 'sonnet' | 'opus' | undefined,
           workDir: options.workDir,
           sessionId: options.sessionId,
           verbose: options.verbose,
-          timeout: options.timeout
+          timeout: options.timeout,
+          allowedTools: options.allowedTools
         });
-        return result;
-      } catch (error: any) {
-        // If it's an auth error, re-throw it
-        if (error.message && error.message.includes('Authentication required')) {
-          throw error;
+        
+        this.logSDKFlow('SDK execution successful', { outputLength: result.output.length });
+        return {
+          output: result.output,
+          exitCode: result.exitCode,
+          sessionId: options.sessionId
+        };
+      } catch (sdkError: any) {
+        this.logger.warning(`SDK execution failed: ${sdkError.message}`);
+        this.logSDKFlow('SDK execution failed, falling back to CLI', { error: sdkError.message });
+        
+        // If it's an authentication error and no API key fallback, provide clear guidance
+        const hasApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+        if (sdkError.message && sdkError.message.includes('authentication') && !hasApiKey) {
+          throw new AuthenticationError(
+            `SDK authentication required and no API key set for CLI fallback.\n` +
+            `Please either:\n` +
+            `1. Run 'claude auth' to authenticate Claude CLI\n` +
+            `2. Set ANTHROPIC_API_KEY environment variable`
+          );
         }
-        // Otherwise log and try fallback
-        this.logger.debug(`Browser auth mode failed: ${error.message}`);
-        // Don't fall back to headless - it won't work without API key
-        throw new Error(`Claude execution failed: ${error.message}. Please ensure Claude is authenticated or set ANTHROPIC_API_KEY.`);
       }
+
+      // Priority 2: CLI with API key (headless mode) 
+      const hasApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+      if (hasApiKey) {
+        this.logger.debug('API key found, using CLI headless mode');
+        return await this.executeHeadless(prompt, options);
+      }
+
+      // Priority 3: CLI interactive mode (fallback)
+      this.logger.debug('No API key found, attempting CLI interactive mode');
+      return await this.executeWithBrowserAuth(prompt, options, attempt);
+      
+    } catch (error: any) {
+      return this.handleExecutionError(error, prompt, options, attempt);
     }
+  }
+
+  /**
+   * Execute with browser authentication (no API key required)
+   */
+  private async executeWithBrowserAuth(
+    prompt: string,
+    options: ClaudeExecutionOptions,
+    attempt: number
+  ): Promise<ClaudeExecutionResult> {
+    try {
+      // First try SDK approach (preferred)
+      if (await this.isSDKAvailable()) {
+        this.logSDKFlow('Using Claude SDK for execution');
+        const result = await this.sdkExecutor.executeWithSDK(prompt, {
+          model: options.model as 'sonnet' | 'opus' | undefined,
+          workDir: options.workDir,
+          sessionId: options.sessionId,
+          verbose: options.verbose,
+          timeout: options.timeout,
+          allowedTools: options.allowedTools
+        });
+        
+        this.logSDKFlow('SDK execution successful', { outputLength: result.output.length });
+        return {
+          output: result.output,
+          exitCode: result.exitCode,
+          sessionId: options.sessionId
+        };
+      }
+      
+      // Fallback to browser auth
+      this.logAuthFlow('Starting browser-authenticated Claude session');
+      if (attempt === 0) {
+        this.logger.info('📋 Please ensure you are logged into Claude in your browser');
+        this.logger.info('⚡ The session will start automatically once authentication is detected');
+      }
+      
+      // Use CLI in interactive mode (no -p flag, no API key needed)
+      const result = await this.executeCLI(prompt, { 
+        ...options,
+        headless: false  // Force interactive mode
+      });
+      
+      this.logAuthFlow('CLI interactive execution completed successfully');
+      return result;
+      
+    } catch (error: any) {
+      this.logAuthFlow('Browser auth execution failed', { error: error.message });
+      
+      if (error.message?.includes('Authentication required') || 
+          error.message?.includes('Please log in')) {
+        throw new BrowserAuthRequiredError();
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Execute in headless mode (requires API key)
+   */
+  private async executeHeadless(
+    prompt: string,
+    options: ClaudeExecutionOptions
+  ): Promise<ClaudeExecutionResult> {
+    this.logger.debug('🗝️  Executing in headless mode with API key');
     
-    // Original headless mode with -p flag (requires API key)
-    const args = ['-p', prompt];
+    // Try CLI headless mode with -p flag
+    return this.executeCLI(prompt, { ...options, headless: true });
+  }
+
+  /**
+   * Execute using CLI method (both headless and interactive)
+   */
+  private async executeCLI(
+    prompt: string,
+    options: ClaudeExecutionOptions & { headless?: boolean } = {}
+  ): Promise<ClaudeExecutionResult> {
+    // Build command arguments
+    const args: string[] = [];
+    
+    // Use headless mode (-p flag) if API key is available and not explicitly disabled
+    const hasApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+    const useHeadless = options.headless !== false && hasApiKey;
+    
+    if (useHeadless) {
+      args.push('-p', prompt);
+      this.logger.debug('Using CLI headless mode with -p flag');
+    } else {
+      // Interactive mode - Claude will open in browser or prompt for auth
+      args.push(prompt);
+      this.logger.debug('Using CLI interactive mode');
+    }
     
     // Build arguments array
     if (options.model) {
@@ -161,7 +316,7 @@ export class ClaudeExecutor {
     }
 
     const workingDir = options.workDir || process.cwd();
-    const timeout = options.timeout || 120000; // 2 minutes default (reduced from 30 minutes)
+    const timeout = options.timeout || 120000; // 2 minutes default
 
     return new Promise((resolve, reject) => {
       let claudeProcess: ChildProcess;
@@ -528,6 +683,144 @@ export class ClaudeExecutor {
       key,
       sessionId
     }));
+  }
+
+  /**
+   * Enhanced error handling with user-friendly prompts and retry logic
+   */
+  private async handleExecutionError(
+    error: any, 
+    prompt: string, 
+    options: ClaudeExecutionOptions, 
+    attempt: number
+  ): Promise<ClaudeExecutionResult> {
+    this.logger.error(`Execution attempt ${attempt + 1} failed:`, error.message);
+
+    // Check for specific error types and provide user guidance
+    if (error instanceof AuthenticationError || error instanceof BrowserAuthRequiredError) {
+      this.logger.promptUser('Authentication Required', [
+        'Open your browser and go to claude.ai',
+        'Log in to your Claude account',
+        'Keep the browser tab open',
+        'Try running the command again'
+      ]);
+      
+      if (attempt < this.maxRetries) {
+        this.logger.logRetryAttempt(attempt + 2, this.maxRetries + 1, 'Authentication issue');
+        await this.delay(this.retryDelay);
+        return this.executeWithRetry(prompt, options, attempt + 1);
+      }
+      throw new RetryExhaustedError(this.maxRetries, error.message);
+    }
+
+    if (error instanceof SDKNotInstalledError || error instanceof ClaudeInstallationError) {
+      this.logger.error('📦 Claude Installation Issue');
+      this.logger.info('💡 Installation options:');
+      this.logger.info('   Option 1 (Recommended): npm install -g @anthropic-ai/claude-code');
+      this.logger.info('   Option 2: curl -sL https://claude.ai/install.sh | sh');
+      this.logger.info('   Option 3: Download from https://claude.ai/download');
+      
+      throw error; // Don't retry installation issues
+    }
+
+    if (error instanceof NetworkError) {
+      this.logger.error('🌐 Network Issue Detected');
+      this.logger.info('🔧 Network troubleshooting:');
+      this.logger.info('   1. Check your internet connection');
+      this.logger.info('   2. Verify firewall/proxy settings');
+      this.logger.info('   3. Try again in a few moments');
+      
+      if (attempt < this.maxRetries) {
+        const exponentialDelay = this.retryDelay * Math.pow(2, attempt);
+        this.logger.info(`⏳ Retrying in ${exponentialDelay}ms (${attempt + 2}/${this.maxRetries + 1})...`);
+        await this.delay(exponentialDelay);
+        return this.executeWithRetry(prompt, options, attempt + 1);
+      }
+    }
+
+    if (error instanceof APIKeyRequiredError) {
+      this.logger.error('🗝️  API Key Required');
+      this.logger.info('💡 API Key setup options:');
+      this.logger.info('   Option 1: export ANTHROPIC_API_KEY="your-key-here"');
+      this.logger.info('   Option 2: Set CLAUDE_API_KEY environment variable');
+      this.logger.info('   Option 3: Use browser authentication (interactive mode)');
+      
+      throw error; // Don't retry API key issues without user action
+    }
+
+    if (error instanceof ModelQuotaError) {
+      this.logger.error('⚡ Model Quota/Rate Limit Exceeded');
+      this.logger.info('🕐 Rate limit suggestions:');
+      this.logger.info('   1. Wait a few minutes before retrying');
+      this.logger.info('   2. Check your usage at https://console.anthropic.com');
+      this.logger.info('   3. Consider upgrading your plan if needed');
+      
+      if (attempt < this.maxRetries) {
+        const quotaDelay = this.retryDelay * 5; // Longer delay for quota issues
+        this.logger.info(`⏳ Waiting ${quotaDelay}ms before retry...`);
+        await this.delay(quotaDelay);
+        return this.executeWithRetry(prompt, options, attempt + 1);
+      }
+    }
+
+    // For unrecognized errors, provide generic retry logic
+    if (attempt < this.maxRetries && !this.isNonRetryableError(error)) {
+      this.logger.warning(`🔄 Retrying execution (${attempt + 2}/${this.maxRetries + 1})`);
+      await this.delay(this.retryDelay);
+      return this.executeWithRetry(prompt, options, attempt + 1);
+    }
+
+    throw new RetryExhaustedError(this.maxRetries, error.message);
+  }
+
+  /**
+   * Check if SDK is available
+   */
+  private async isSDKAvailable(): Promise<boolean> {
+    try {
+      return this.sdkExecutor.isAvailable();
+    } catch (error) {
+      this.logger.debug('SDK availability check failed', error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  }
+
+  /**
+   * Check if error should not be retried
+   */
+  private isNonRetryableError(error: any): boolean {
+    return error instanceof ClaudeInstallationError ||
+           error instanceof SDKNotInstalledError ||
+           error instanceof APIKeyRequiredError ||
+           error instanceof FileAccessError ||
+           (error instanceof AuthenticationError && error.message.includes('invalid token'));
+  }
+
+  /**
+   * Delay helper for retry logic
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Enhanced logging for SDK flow debugging
+   */
+  private logSDKFlow(step: string, details?: any): void {
+    this.logger.logSDKOperation(step, details);
+    
+    // Send to monitoring if available
+    this.notifyMonitoring('sdk_flow', `${step}: ${details ? JSON.stringify(details) : 'completed'}`);
+  }
+
+  /**
+   * Enhanced logging for authentication flow debugging  
+   */
+  private logAuthFlow(step: string, details?: any): void {
+    this.logger.logAuthStep(step, details);
+    
+    // Send to monitoring if available
+    this.notifyMonitoring('auth_flow', `${step}: ${details ? JSON.stringify(details) : 'completed'}`);
   }
 
   /**

@@ -2,7 +2,7 @@
 
 A powerful dual-agent system that revolutionizes AI-assisted development through coordinated Claude Code automation. Features a Manager-Worker architecture where specialized agents collaborate to tackle complex development tasks with unprecedented sophistication and reliability.
 
-> 🎉 **Major Update**: ACC now uses PTY-based Claude Code control with OAuth authentication! No more API key requirements for dual-agent mode. Works seamlessly with Claude Pro/Team subscriptions via interactive sessions.
+> 🎉 **Major Update v1.2.0**: ACC now uses Claude's Browser-based authentication SDK! No API keys required - works directly with your browser's Claude Pro/Team session. Interactive session control with real-time stream processing.
 
 ## Features
 
@@ -15,15 +15,15 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 - 🔄 **Adaptive Workflows**: Dynamic strategy adjustment based on progress
 
 ### 🚀 Core Capabilities
-- 🔄 **PTY-Based Control**: Interactive Claude Code sessions with real-time stream processing
-- 🔐 **OAuth Authentication**: Automatic token extraction from system credentials (Windows/macOS/Linux)
-- 🎛️ **Dual Execution Modes**: PTY mode (default, subscription-compatible) and headless fallback
-- 📊 **Advanced Session Management**: Up to 28 concurrent PTY sessions with persistence and cleanup
-- 🎯 **Smart Prompt Building**: Automatically generates contextual prompts based on previous outputs
-- 🛠️ **Enhanced Error Recovery**: Advanced JSON stream parsing with ANSI handling and buffer management
-- 📈 **Progress Tracking**: Monitors files modified, commands executed, and overall progress
-- 💾 **Session History**: Saves and allows review of all development sessions with OAuth integration
-- ⚙️ **Configurable**: Customizable iteration limits, models, and tool permissions with PTY support
+- 🌐 **Browser-Based Authentication**: Direct integration with Claude Pro/Team via browser session
+- 🔄 **Interactive Session Control**: Real-time communication with Claude Code through browser SDK
+- 🎛️ **Dual Execution Modes**: Browser mode (default, subscription-compatible) and API fallback
+- 📊 **Advanced Session Management**: Persistent browser sessions with automatic token refresh
+- 🎯 **Smart Prompt Building**: Context-aware prompts generated from session state
+- 🛠️ **Enhanced Error Recovery**: Stream parsing with browser disconnect handling
+- 📈 **Progress Tracking**: Real-time monitoring of development progress
+- 💾 **Session History**: Complete session persistence with browser authentication
+- ⚙️ **Configurable**: Customizable settings with browser-first authentication
 
 ### 🖥️ Enhanced Monitoring Dashboard (Updated Sep 1, 2025)
 - ✅ **Data Consistency**: Real-time dynamic session counts (fixed hardcoded values)
@@ -108,64 +108,66 @@ npm install -g automatic-claude-code
 
 ## Authentication Requirements
 
-### 🎉 New PTY-Based Authentication (v1.2.0)
+### 🎉 New Browser-Based Authentication (v1.2.0)
 
-ACC now supports **subscription-based authentication** through PTY mode, eliminating the need for API keys in most cases!
+ACC now supports **browser-based authentication** through Claude's SDK, eliminating API key requirements entirely!
 
 #### Execution Modes Available
 
-**1. PTY Mode (Default & Recommended)**:
+**1. Browser Mode (Default & Recommended)**:
 - ✅ Works with Claude Pro/Team subscriptions
 - ✅ No API key required
-- ✅ Automatic OAuth token extraction from system credentials
-- ✅ Interactive Claude sessions with real-time processing
-- ✅ Cross-platform support (Windows ConPTY, macOS/Linux PTY)
-- ✅ Enhanced error handling and recovery
+- ✅ Direct browser session integration
+- ✅ Interactive Claude Code sessions
+- ✅ Automatic session management and token refresh
+- ✅ Real-time stream processing
+- ✅ Cross-platform browser support
 
-**2. Headless Mode (Fallback)**:
+**2. API Mode (Fallback)**:
 - ⚠️ Requires API credits from console.anthropic.com
 - ⚠️ API key authentication only
-- ⚠️ Legacy mode for specific use cases
+- ⚠️ Fallback for headless environments
 
 #### Quick Setup (Most Users)
 
 **For Claude Subscribers** (Recommended):
 ```bash
-# 1. Ensure Claude is set up and working
+# 1. Ensure you're logged into Claude via browser
+# Visit https://claude.ai and sign in with Pro/Team account
+
+# 2. Verify Claude CLI is working
 claude --version
 
-# 2. Verify subscription authentication
-claude "hello world"  # Should work without API key
-
-# 3. Use ACC with PTY mode (default)
+# 3. Use ACC with browser mode (default)
 acc run "create a test file" --dual-agent -i 2 -v
-# ACC will automatically extract OAuth tokens from your system
+# ACC will automatically use your browser's Claude session
 ```
 
 **Advanced Setup Options**:
 ```bash
-# Force PTY mode (default behavior)
-acc run "task" --use-pty --dual-agent
+# Force browser mode (default behavior)
+acc run "task" --browser-auth --dual-agent
 
-# Force headless mode (requires API key)
-acc run "task" --no-pty -i 3
+# Force API mode (requires API key)
+acc run "task" --api-auth -i 3
 
-# Use specific session limit (PTY mode)
-acc run "task" --dual-agent --max-pty-sessions 10
+# Browser session timeout control
+acc run "task" --dual-agent --session-timeout 600
 ```
 
-#### OAuth Token Extraction
+#### Browser Session Integration
 
-ACC automatically extracts OAuth tokens from:
-- **Windows**: Windows Credential Manager
-- **macOS**: Keychain Access
-- **Linux**: Claude credential files (`~/.claude/`)
+ACC automatically connects to your browser's Claude session:
+- **Chrome/Edge**: Browser extension integration
+- **Firefox**: WebDriver connection
+- **Safari**: AppleScript automation (macOS)
+- **Fallback**: Manual session token extraction
 
 No manual configuration required for most users!
 
 #### API Key Setup (Only if needed)
 
-If you prefer API key authentication or need headless mode:
+If you need API mode for headless environments:
 ```bash
 # Get API key from console.anthropic.com
 # Set environment variable:
@@ -174,8 +176,8 @@ export ANTHROPIC_API_KEY="sk-ant-your-key-here"
 # Or Windows PowerShell:
 $env:ANTHROPIC_API_KEY = "sk-ant-your-key-here"
 
-# Use with headless mode
-acc run "task" --no-pty -i 3
+# Use with API mode
+acc run "task" --api-auth -i 3
 ```
 
 ## Monitoring Setup
@@ -745,6 +747,192 @@ vim .env
 
 # Start with custom environment
 docker-compose --env-file .env -f docker-compose.prod.yml up -d
+```
+
+## Troubleshooting Guide
+
+### Browser Authentication Issues
+
+#### Browser Session Not Found
+```bash
+# Check if you're logged into Claude
+# 1. Open https://claude.ai in your browser
+# 2. Ensure you're signed in with Pro/Team account
+# 3. Try refreshing the page
+
+# Force browser session refresh
+acc run "test task" --refresh-session -i 1
+
+# Check browser compatibility
+acc --check-browser-support
+```
+
+#### Browser Popup Blocked
+```bash
+# Enable popups for claude.ai in your browser
+# Chrome: Settings > Privacy and security > Site Settings > Pop-ups
+# Firefox: Preferences > Privacy & Security > Permissions > Block pop-up windows
+# Edge: Settings > Cookies and site permissions > Pop-ups and redirects
+
+# Alternative: Use manual token mode
+acc run "task" --manual-auth -i 3
+```
+
+#### Session Expired/Invalid
+```bash
+# Clear stored session tokens
+acc --clear-session-cache
+
+# Re-authenticate with browser
+acc run "test task" --force-reauth -i 1
+
+# Check session status
+acc --session-status
+```
+
+### Common SDK Authentication Problems
+
+#### Browser Not Launching
+```bash
+# Check default browser setting
+which google-chrome || which firefox || which safari
+
+# Specify browser explicitly
+acc run "task" --browser chrome --dual-agent -i 3
+acc run "task" --browser firefox --dual-agent -i 3
+
+# Use headless browser mode
+acc run "task" --headless-browser --dual-agent -i 3
+```
+
+#### WebDriver Connection Failed
+```bash
+# Install/update browser drivers
+npm install -g chromedriver geckodriver
+
+# Check WebDriver path
+which chromedriver
+which geckodriver
+
+# Use system WebDriver
+acc run "task" --system-webdriver --dual-agent -i 3
+```
+
+#### Cross-Platform Issues
+**Windows:**
+```powershell
+# Check Windows Defender/Antivirus blocking
+# Add ACC to Windows Defender exclusions
+# Windows Security > Virus & threat protection > Exclusions
+
+# Run as Administrator if needed
+Start-Process powershell -Verb runAs
+acc run "task" --dual-agent -i 3
+```
+
+**macOS:**
+```bash
+# Grant accessibility permissions
+# System Preferences > Security & Privacy > Privacy > Accessibility
+# Add Terminal/iTerm to allowed apps
+
+# Allow browser automation
+# System Preferences > Security & Privacy > Privacy > Automation
+# Allow Terminal to control your browser
+```
+
+**Linux:**
+```bash
+# Install browser dependencies
+sudo apt-get install -y xvfb x11-utils
+
+# Start virtual display (headless environments)
+export DISPLAY=:99
+Xvfb :99 -screen 0 1024x768x24 &
+acc run "task" --dual-agent -i 3
+```
+
+### Session Management Tips
+
+#### Long-Running Sessions
+```bash
+# Increase session timeout for complex tasks
+acc run "complex task" --session-timeout 3600 --dual-agent -i 10
+
+# Use session checkpoints
+acc run "task" --checkpoint-interval 5 --dual-agent -i 8
+
+# Resume interrupted sessions
+acc --resume-last-session
+```
+
+#### Memory Management
+```bash
+# Clear session history
+acc --clear-history
+
+# Limit concurrent sessions
+acc run "task" --max-sessions 5 --dual-agent -i 3
+
+# Monitor memory usage
+acc --memory-status
+```
+
+### Advanced Troubleshooting
+
+#### Debug Mode
+```bash
+# Enable comprehensive debug logging
+DEBUG=* acc run "task" --dual-agent -v
+
+# Browser-specific debugging
+DEBUG=browser:* acc run "task" --dual-agent -v
+
+# SDK-specific debugging
+DEBUG=sdk:* acc run "task" --dual-agent -v
+```
+
+#### Network Issues
+```bash
+# Check Claude.ai connectivity
+curl -I https://claude.ai
+
+# Use proxy if needed
+acc run "task" --proxy http://proxy:8080 --dual-agent -i 3
+
+# Bypass SSL issues (development only)
+acc run "task" --ignore-ssl-errors --dual-agent -i 3
+```
+
+#### Fallback to API Mode
+```bash
+# If browser mode fails, use API mode
+export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+acc run "task" --api-auth --dual-agent -i 3
+
+# Test API connectivity
+acc --test-api-connection
+```
+
+### Performance Troubleshooting
+
+#### Slow Browser Startup
+```bash
+# Disable browser extensions during automation
+acc run "task" --clean-browser --dual-agent -i 3
+
+# Use persistent browser session
+acc run "task" --persistent-browser --dual-agent -i 3
+```
+
+#### High Memory Usage
+```bash
+# Monitor resource usage
+acc --resource-monitor &
+acc run "task" --dual-agent -i 5
+
+# Use lightweight browser mode
+acc run "task" --lightweight-browser --dual-agent -i 3
 ```
 
 ## Disclaimer

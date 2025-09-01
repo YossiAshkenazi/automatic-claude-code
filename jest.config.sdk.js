@@ -1,0 +1,21 @@
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>'],
+  testMatch: ['**/test-sdk-integration.ts'],
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  collectCoverage: true,
+  collectCoverageFrom: [
+    'src/services/sdkClaudeExecutor.ts',
+    'src/services/claudeExecutor.ts'
+  ],
+  coverageDirectory: 'coverage/sdk',
+  coverageReporters: ['text', 'lcov', 'html'],
+  testTimeout: 30000,
+  verbose: true,
+  detectOpenHandles: true,
+  forceExit: true,
+  moduleNameMapping: {
+    '^@/(.*)$': '<rootDir>/src/$1'
+  }
+};

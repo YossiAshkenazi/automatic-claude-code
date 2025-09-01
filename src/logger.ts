@@ -330,6 +330,69 @@ export class Logger extends EventEmitter {
     this.log(LogLevel.ERROR, message, details);
   }
 
+  /**
+   * Enhanced logging for authentication flow with user-friendly messaging
+   */
+  public logAuthStep(step: string, details?: any): void {
+    const stepIcons: { [key: string]: string } = {
+      'starting': '🚀',
+      'checking': '🔍',
+      'auth_required': '🔐',
+      'auth_success': '✅',
+      'auth_failed': '❌',
+      'fallback': '🔄',
+      'completed': '🎉'
+    };
+    
+    const icon = stepIcons[step.toLowerCase().replace(/\s+/g, '_')] || '📋';
+    this.info(`${icon} [Auth] ${step}`, details);
+  }
+
+  /**
+   * Enhanced logging for SDK operations with debugging information
+   */
+  public logSDKOperation(operation: string, details?: any): void {
+    const operationIcons: { [key: string]: string } = {
+      'initializing': '⚙️',
+      'available': '✅',
+      'not_available': '❌',
+      'executing': '🚀',
+      'success': '✅',
+      'failed': '❌',
+      'fallback': '🔄'
+    };
+    
+    const icon = operationIcons[operation.toLowerCase().replace(/\s+/g, '_')] || '🔧';
+    this.debug(`${icon} [SDK] ${operation}`, details);
+  }
+
+  /**
+   * Enhanced logging for retry operations
+   */
+  public logRetryAttempt(attempt: number, maxAttempts: number, error?: string): void {
+    const icon = attempt === 1 ? '🔄' : '⏳';
+    this.warning(`${icon} Retry attempt ${attempt}/${maxAttempts}${error ? `: ${error}` : ''}`);
+  }
+
+  /**
+   * User-friendly progress messaging for authentication steps
+   */
+  public promptUser(message: string, instructions?: string[]): void {
+    console.log('\n' + boxen(chalk.cyan.bold(message), {
+      padding: 1,
+      margin: 0,
+      borderStyle: 'round',
+      borderColor: 'cyan'
+    }));
+    
+    if (instructions && instructions.length > 0) {
+      console.log(chalk.yellow('\n📋 Instructions:'));
+      instructions.forEach((instruction, index) => {
+        console.log(chalk.white(`  ${index + 1}. ${instruction}`));
+      });
+    }
+  }
+
   // Special method for logging Claude's actual work output
   public logClaudeWork(message: string, details?: Record<string, unknown> | string | number | boolean): void {
     const entry: LogEntry = {

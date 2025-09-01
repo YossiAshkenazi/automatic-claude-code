@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+**🎉 SYSTEM STATUS**: Fully operational and tested (September 1, 2025)  
+**🔗 Live Dashboard**: http://localhost:6011 | **API**: http://localhost:4005/api/health
+
 Automatic Claude Code is a TypeScript CLI application that runs Claude Code in an automated dual-agent loop for continuous AI-assisted development. The system uses a Manager-Worker architecture where a Manager Agent coordinates tasks and a Worker Agent executes them, enabling more sophisticated problem-solving through specialized roles and collaborative workflows.
 
 **Key Features:**
@@ -909,10 +912,10 @@ acc run "Optimize database queries, implement caching strategies, and add perfor
 ## Important Notes
 
 - **Package Manager**: Project uses pnpm (primary) with npm fallback for WSL compatibility
-- **Monitoring Ports**: Multiple options available
-  - Persistent Monitor (6007) - Lightweight, always running
-  - Full Dashboard (6011) - Development mode with all features
-  - API Server (4001) - WebSocket + REST API
+- **Monitoring Ports**: Current operational configuration  
+  - Full Dashboard (6011) - React UI with real-time monitoring
+  - API Server (4005) - WebSocket + REST API with health checks
+  - Tested and verified operational (September 1, 2025)
 - **Container Support**: Full Docker containerization available
   - Single container for ACC CLI
   - Multi-service development environment

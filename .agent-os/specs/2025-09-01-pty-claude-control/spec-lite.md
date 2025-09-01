@@ -1,0 +1,3 @@
+# Spec Summary (Lite)
+
+Replace API key-based Claude Code control with PTY-based interactive mode control that leverages subscription OAuth authentication, eliminating the API token requirement for Automatic Claude Code users. The system uses Windows ConPTY to control Claude Code processes programmatically, extracts OAuth tokens from Windows credentials, and manages up to 28 concurrent sessions with automatic cleanup and persistence.

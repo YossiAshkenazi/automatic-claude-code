@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useSessionStore } from '../../store/useSessionStore';
+import { useSidebarBadges } from '../../hooks/useAnalytics';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronRight,
@@ -33,63 +35,76 @@ interface SidebarProps {
   currentPath?: string;
   onNavigate?: (path: string) => void;
   className?: string;
+  sessionCount?: number; // Allow override for custom session count
 }
 
-const defaultItems: SidebarItem[] = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    icon: Monitor,
-    path: '/overview',
-  },
-  {
-    id: 'sessions',
-    label: 'Sessions',
-    icon: List,
-    path: '/sessions',
-    badge: 3,
-  },
-  {
-    id: 'agents',
-    label: 'Agents',
-    icon: Users,
-    children: [
-      { id: 'manager', label: 'Manager Agents', icon: Zap, path: '/agents/manager' },
-      { id: 'worker', label: 'Worker Agents', icon: Activity, path: '/agents/worker' },
-    ],
-  },
-  {
-    id: 'analytics',
-    label: 'Analytics',
-    icon: BarChart3,
-    children: [
-      { id: 'performance', label: 'Performance', icon: Activity, path: '/analytics/performance' },
-      { id: 'timeline', label: 'Timeline', icon: Clock, path: '/analytics/timeline' },
-    ],
-  },
-  {
-    id: 'data',
-    label: 'Data Management',
-    icon: Database,
-    children: [
-      { id: 'export', label: 'Export Data', icon: Archive, path: '/data/export' },
-      { id: 'import', label: 'Import Data', icon: Database, path: '/data/import' },
-    ],
-  },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: Settings,
-    path: '/settings',
-  },
-];
+  // Create dynamic items with badges from analytics
+  const dynamicItems: SidebarItem[] = items === defaultItems ? [
+    {
+      id: 'overview',
+      label: 'Overview',
+      icon: Monitor,
+      path: '/overview',
+    },
+    {
+      id: 'sessions',
+      label: 'Sessions',
+      icon: List,
+      path: '/sessions',
+      badge: dynamicSessionCount > 0 ? dynamicSessionCount : undefined,
+    },
+    {
+      id: 'agents',
+      label: 'Agents',
+      icon: Users,
+      badge: badges.agents,
+      children: [
+        { id: 'manager', label: 'Manager Agents', icon: Zap, path: '/agents/manager' },
+        { id: 'worker', label: 'Worker Agents', icon: Activity, path: '/agents/worker' },
+      ],
+    },
+    {
+      id: 'analytics',
+      label: 'Analytics',
+      icon: BarChart3,
+      badge: badges.analytics,
+      children: [
+        { id: 'performance', label: 'Performance', icon: Activity, path: '/analytics/performance' },
+        { id: 'timeline', label: 'Timeline', icon: Clock, path: '/analytics/timeline' },
+      ],
+    },
+    {
+      id: 'data',
+      label: 'Data Management',
+      icon: Database,
+      children: [
+        { id: 'export', label: 'Export Data', icon: Archive, path: '/data/export' },
+        { id: 'import', label: 'Import Data', icon: Database, path: '/data/import' },
+      ],
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: Settings,
+      path: '/settings',
+      badge: badges.alerts, // Show critical alerts in settings
+    },
+  ] : items;
+
+const defaultItems: SidebarItem[] = [];
 
 export function Sidebar({
   items = defaultItems,
   currentPath = '',
   onNavigate,
   className,
+  sessionCount,
 }: SidebarProps) {
+  const { sessions } = useSessionStore();
+  const badges = useSidebarBadges(sessions);
+  
+  // Use provided sessionCount or calculate from analytics
+  const dynamicSessionCount = sessionCount ?? badges.sessions;
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
@@ -229,7 +244,7 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-thin">
-        {items.map((item) => renderItem(item))}
+        {dynamicItems.map((item) => renderItem(item))}
       </nav>
 
       {/* Footer */}

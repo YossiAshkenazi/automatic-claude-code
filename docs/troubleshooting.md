@@ -2,6 +2,48 @@
 
 ## Common Issues and Solutions
 
+### Monitoring Dashboard Issues
+
+#### Symptom: "Network error - please check your connection"
+```
+Error: Network error - please check your connection
+Dashboard shows "Disconnected" status
+WebSocket connects but API calls fail
+```
+
+**Root Cause:**
+Frontend hardcoded to use wrong API port (`http://localhost:4001/api` instead of nginx proxy `/api`).
+
+**Solution:**
+This was fixed in v1.1.1. If you encounter this issue:
+
+1. **Verify services are running:**
+   ```bash
+   # Check containers
+   cd dual-agent-monitor && docker-compose ps
+   
+   # Test API directly
+   curl http://localhost:4005/api/health
+   
+   # Test through nginx proxy
+   curl http://localhost:6011/api/health
+   ```
+
+2. **Restart services if needed:**
+   ```bash
+   cd dual-agent-monitor
+   docker-compose down
+   docker-compose up -d
+   ```
+
+3. **Verify dashboard connection:**
+   - Open http://localhost:6011
+   - Status should show "Connected" 
+   - WebSocket Status should show "Connected"
+   - No "Connection Lost" error at bottom
+
+**Fixed in v1.1.1**: Frontend now always uses nginx proxy (`/api`) instead of direct port calls.
+
 ### Authentication Issues (Critical)
 
 #### Symptom: "Credit balance is too low" Error

@@ -1,7 +1,7 @@
 import { DualAgentSession, AgentMessage } from '../types';
 
-// Use Vite proxy in development, direct connection in production
-const API_BASE = import.meta.env.DEV ? '/api' : 'http://localhost:4001/api';
+// Use Vite proxy in development, nginx proxy in production
+const API_BASE = '/api';
 
 interface ApiError {
   message: string;

@@ -10,6 +10,27 @@ import { SessionReplayManager } from './replay/SessionReplayManager.js';
 import { MLService } from './ml/MLService.js';
 import { v4 as uuidv4 } from 'uuid';
 
+// Connection reliability tracking
+interface ConnectionHealth {
+  id: string;
+  connectedAt: Date;
+  lastHeartbeat: Date;
+  missedHeartbeats: number;
+  latency: number[];
+  messagesSent: number;
+  messagesReceived: number;
+  isAlive: boolean;
+}
+
+interface ServerHealthMetrics {
+  totalConnections: number;
+  activeConnections: number;
+  failedConnections: number;
+  averageConnectionUptime: number;
+  messagesThroughput: number;
+  errorRate: number;
+}
+
 const app = express();
 app.use(cors({
   origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:6012', 'http://localhost:6013', 'http://localhost:6014', 'http://localhost:6015', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4001'],
@@ -31,6 +52,21 @@ const mlService = new MLService(dbService as any, {
   anomalyDetectionSensitivity: 'medium'
 });
 const clients = new Set<WebSocket>();
+const connectionHealth = new Map<WebSocket, ConnectionHealth>();
+const serverMetrics: ServerHealthMetrics = {
+  totalConnections: 0,
+  activeConnections: 0,
+  failedConnections: 0,
+  averageConnectionUptime: 0,
+  messagesThroughput: 0,
+  errorRate: 0
+};
+
+// Connection monitoring constants
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds
+const HEARTBEAT_TIMEOUT = 10000; // 10 seconds
+const MAX_MISSED_HEARTBEATS = 3;
+const CONNECTION_CLEANUP_INTERVAL = 60000; // 1 minute
 
 // Initialize services
 analyticsService.initialize().catch(console.error);
@@ -56,10 +92,94 @@ analyticsService.subscribeToRealTime((metrics) => {
 // In-memory storage for active sessions (will be replaced by database later)
 let currentSession: DualAgentSession | null = null;
 
-// WebSocket connection handling
-wss.on('connection', (ws) => {
-  console.log('New WebSocket client connected');
+// Connection health monitoring
+const updateConnectionHealth = (ws: WebSocket, updates: Partial<ConnectionHealth>) => {
+  const health = connectionHealth.get(ws);
+  if (health) {
+    Object.assign(health, updates);
+    connectionHealth.set(ws, health);
+  }
+};
+
+// Check connection health and cleanup dead connections
+const performHealthCheck = () => {
+  const now = new Date();
+  const deadConnections: WebSocket[] = [];
+  
+  connectionHealth.forEach((health, ws) => {
+    const timeSinceLastHeartbeat = now.getTime() - health.lastHeartbeat.getTime();
+    
+    if (timeSinceLastHeartbeat > HEARTBEAT_INTERVAL + HEARTBEAT_TIMEOUT) {
+      health.missedHeartbeats++;
+      
+      if (health.missedHeartbeats >= MAX_MISSED_HEARTBEATS) {
+        console.warn(`Connection ${health.id} is dead - cleaning up`);
+        deadConnections.push(ws);
+      }
+    }
+    
+    // Update server metrics
+    serverMetrics.activeConnections = connectionHealth.size;
+  });
+  
+  // Clean up dead connections
+  deadConnections.forEach(ws => {
+    try {
+      ws.terminate();
+    } catch (error) {
+      console.error('Error terminating dead connection:', error);
+    }
+    clients.delete(ws);
+    connectionHealth.delete(ws);
+  });
+  
+  // Calculate average uptime
+  let totalUptime = 0;
+  connectionHealth.forEach(health => {
+    totalUptime += now.getTime() - health.connectedAt.getTime();
+  });
+  
+  if (connectionHealth.size > 0) {
+    serverMetrics.averageConnectionUptime = totalUptime / connectionHealth.size;
+  }
+};
+
+// Start health monitoring
+setInterval(performHealthCheck, CONNECTION_CLEANUP_INTERVAL);
+
+// WebSocket connection handling with enhanced reliability
+wss.on('connection', (ws, request) => {
+  const connectionId = uuidv4();
+  const now = new Date();
+  
+  console.log(`New WebSocket client connected: ${connectionId} from ${request.socket.remoteAddress}`);
+  
+  // Track connection health
+  const health: ConnectionHealth = {
+    id: connectionId,
+    connectedAt: now,
+    lastHeartbeat: now,
+    missedHeartbeats: 0,
+    latency: [],
+    messagesSent: 0,
+    messagesReceived: 0,
+    isAlive: true
+  };
+  
   clients.add(ws);
+  connectionHealth.set(ws, health);
+  serverMetrics.totalConnections++;
+  serverMetrics.activeConnections = clients.size;
+  
+  // Send connection acknowledgment with health info
+  ws.send(JSON.stringify({
+    type: 'connection:established',
+    data: {
+      connectionId,
+      serverTime: now.toISOString(),
+      heartbeatInterval: HEARTBEAT_INTERVAL
+    }
+  }));
 
   // Analytics subscription tracking for this connection
   let analyticsInterval: NodeJS.Timeout | null = null;
@@ -90,7 +210,23 @@ wss.on('connection', (ws) => {
 
       switch (data.type) {
         case 'ping':
-          ws.send(JSON.stringify({ type: 'pong' }));
+          const pongData: any = { type: 'pong' };
+          
+          // Include timestamp for latency calculation
+          if (data.timestamp) {
+            pongData.timestamp = data.timestamp;
+            pongData.serverTime = Date.now();
+          }
+          
+          // Update connection health
+          updateConnectionHealth(ws, {
+            lastHeartbeat: new Date(),
+            missedHeartbeats: 0,
+            messagesReceived: health.messagesReceived + 1
+          });
+          
+          ws.send(JSON.stringify(pongData));
+          health.messagesSent++;
           break;
 
         case 'analytics:subscribe':
@@ -372,9 +508,20 @@ wss.on('connection', (ws) => {
     }
   });
 
-  ws.on('close', () => {
-    console.log('WebSocket client disconnected');
+  ws.on('close', (code, reason) => {
+    const health = connectionHealth.get(ws);
+    const connectionUptime = health ? new Date().getTime() - health.connectedAt.getTime() : 0;
+    
+    console.log(`WebSocket client disconnected: ${health?.id || 'unknown'} (${code}: ${reason?.toString() || 'no reason'}) after ${Math.round(connectionUptime / 1000)}s`);
+    
+    // Update server metrics
+    if (code !== 1000 && code !== 1001) { // Not normal or going away
+      serverMetrics.failedConnections++;
+    }
+    
     clients.delete(ws);
+    connectionHealth.delete(ws);
+    serverMetrics.activeConnections = clients.size;
     
     // Clean up analytics subscriptions
     if (analyticsInterval) {
@@ -386,8 +533,16 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
+    const health = connectionHealth.get(ws);
+    console.error(`WebSocket error for connection ${health?.id || 'unknown'}:`, error);
+    
+    serverMetrics.failedConnections++;
+    serverMetrics.errorRate = serverMetrics.totalConnections > 0 ?
+      (serverMetrics.failedConnections / serverMetrics.totalConnections) * 100 : 0;
+    
     clients.delete(ws);
+    connectionHealth.delete(ws);
+    serverMetrics.activeConnections = clients.size;
     
     // Clean up analytics subscriptions on error
     if (analyticsInterval) {
@@ -397,32 +552,135 @@ wss.on('connection', (ws) => {
       analyticsUnsubscribe();
     }
   });
+  
+  // Set up connection-specific heartbeat monitoring
+  const heartbeatMonitor = setInterval(() => {
+    const health = connectionHealth.get(ws);
+    if (!health) return;
+    
+    const timeSinceLastHeartbeat = new Date().getTime() - health.lastHeartbeat.getTime();
+    
+    if (timeSinceLastHeartbeat > HEARTBEAT_INTERVAL + HEARTBEAT_TIMEOUT) {
+      console.warn(`Connection ${health.id} appears inactive - sending ping`);
+      
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ 
+            type: 'ping', 
+            timestamp: Date.now(),
+            serverInitiated: true 
+          }));
+          health.messagesSent++;
+        } catch (error) {
+          console.error(`Failed to send ping to ${health.id}:`, error);
+        }
+      }
+    }
+  }, HEARTBEAT_INTERVAL);
+  
+  // Clean up heartbeat monitor on connection close
+  ws.on('close', () => {
+    clearInterval(heartbeatMonitor);
+  });
 });
 
-// Broadcast to all connected clients
-function broadcast(message: any) {
+// Enhanced broadcast with reliability features
+function broadcast(message: any, excludeClient?: WebSocket) {
   const messageStr = JSON.stringify(message);
+  const deadClients: WebSocket[] = [];
+  let successfulSends = 0;
+  let failedSends = 0;
+  
   clients.forEach((client) => {
+    if (client === excludeClient) return;
+    
     if (client.readyState === WebSocket.OPEN) {
-      client.send(messageStr);
+      try {
+        client.send(messageStr);
+        
+        // Update connection health
+        const health = connectionHealth.get(client);
+        if (health) {
+          health.messagesSent++;
+        }
+        
+        successfulSends++;
+      } catch (error) {
+        console.error('Failed to send message to client:', error);
+        deadClients.push(client);
+        failedSends++;
+      }
+    } else {
+      // Connection is not open, mark for cleanup
+      deadClients.push(client);
+      failedSends++;
     }
   });
+  
+  // Clean up dead clients
+  deadClients.forEach(client => {
+    clients.delete(client);
+    connectionHealth.delete(client);
+  });
+  
+  // Update throughput metrics
+  serverMetrics.messagesThroughput = successfulSends;
+  
+  if (failedSends > 0) {
+    console.warn(`Broadcast: ${successfulSends} successful, ${failedSends} failed`);
+  }
+  
+  return { successfulSends, failedSends };
 }
 
-// REST API endpoints for non-WebSocket clients
+// Enhanced health endpoint with WebSocket reliability metrics
 app.get('/api/health', async (req, res) => {
   try {
     const dbHealth = dbService.getHealthCheck ? await dbService.getHealthCheck() : { healthy: true, message: 'Health check not implemented' };
     
+    // Calculate connection reliability metrics
+    const totalConnectionTime = Array.from(connectionHealth.values()).reduce((sum, health) => {
+      return sum + (new Date().getTime() - health.connectedAt.getTime());
+    }, 0);
+    
+    const averageLatency = (() => {
+      const allLatencies = Array.from(connectionHealth.values())
+        .flatMap(health => health.latency);
+      return allLatencies.length > 0 ?
+        allLatencies.reduce((sum, lat) => sum + lat, 0) / allLatencies.length : 0;
+    })();
+    
+    const connectionReliability = serverMetrics.totalConnections > 0 ?
+      ((serverMetrics.totalConnections - serverMetrics.failedConnections) / serverMetrics.totalConnections) * 100 : 100;
+    
     res.json({
       status: 'healthy',
+      timestamp: new Date().toISOString(),
       database: dbHealth,
       agents: {
         running: currentSession?.status === 'running',
         sessionId: currentSession?.id
       },
       websocket: {
-        clients: clients.size
+        clients: clients.size,
+        totalConnections: serverMetrics.totalConnections,
+        failedConnections: serverMetrics.failedConnections,
+        connectionReliability: Math.round(connectionReliability * 100) / 100,
+        averageUptime: Math.round(serverMetrics.averageConnectionUptime / 1000),
+        averageLatency: Math.round(averageLatency * 100) / 100,
+        messagesThroughput: serverMetrics.messagesThroughput,
+        errorRate: Math.round(serverMetrics.errorRate * 100) / 100,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        connectionHealthDetails: Array.from(connectionHealth.values()).map(health => ({
+          id: health.id,
+          connectedFor: Math.round((new Date().getTime() - health.connectedAt.getTime()) / 1000),
+          lastHeartbeat: Math.round((new Date().getTime() - health.lastHeartbeat.getTime()) / 1000),
+          missedHeartbeats: health.missedHeartbeats,
+          messagesSent: health.messagesSent,
+          messagesReceived: health.messagesReceived,
+          averageLatency: health.latency.length > 0 ?
+            Math.round((health.latency.reduce((sum, lat) => sum + lat, 0) / health.latency.length) * 100) / 100 : 0
+        }))
       }
     });
   } catch (error) {
@@ -435,10 +693,41 @@ app.get('/api/health', async (req, res) => {
         sessionId: null
       },
       websocket: {
-        clients: clients.size
+        clients: clients.size,
+        error: 'WebSocket health check failed'
       }
     });
   }
+});
+
+// WebSocket reliability metrics endpoint
+app.get('/api/websocket/metrics', (req, res) => {
+  const connectionDetails = Array.from(connectionHealth.entries()).map(([ws, health]) => ({
+    id: health.id,
+    state: ws.readyState,
+    connectedAt: health.connectedAt,
+    lastHeartbeat: health.lastHeartbeat,
+    uptime: new Date().getTime() - health.connectedAt.getTime(),
+    missedHeartbeats: health.missedHeartbeats,
+    messagesSent: health.messagesSent,
+    messagesReceived: health.messagesReceived,
+    latencyHistory: health.latency.slice(-5), // Last 5 measurements
+    averageLatency: health.latency.length > 0 ?
+      health.latency.reduce((sum, lat) => sum + lat, 0) / health.latency.length : 0
+  }));
+  
+  res.json({
+    serverMetrics,
+    connectionDetails,
+    summary: {
+      healthyConnections: connectionDetails.filter(c => c.missedHeartbeats < MAX_MISSED_HEARTBEATS).length,
+      unhealthyConnections: connectionDetails.filter(c => c.missedHeartbeats >= MAX_MISSED_HEARTBEATS).length,
+      averageUptime: connectionDetails.length > 0 ?
+        connectionDetails.reduce((sum, c) => sum + c.uptime, 0) / connectionDetails.length : 0,
+      overallLatency: connectionDetails.length > 0 ?
+        connectionDetails.reduce((sum, c) => sum + c.averageLatency, 0) / connectionDetails.length : 0
+    }
+  });
 });
 
 // Monitoring data endpoint for automatic-claude-code integration

@@ -341,50 +341,56 @@ export class InMemoryDatabaseService {
 
   public async getTopPerformingSessions(limit: number = 10): Promise<Array<{
     sessionId: string;
-    performanceScore: number;
     avgResponseTime: number;
-    totalCost: number;
-    errorRate: number;
-    duration: number;
+    totalMessages: number;
+    successRate: number;
   }>> {
     const sessionScores: Array<{
       sessionId: string;
-      performanceScore: number;
       avgResponseTime: number;
-      totalCost: number;
-      errorRate: number;
-      duration: number;
+      totalMessages: number;
+      successRate: number;
+      performanceScore: number;
     }> = [];
 
     for (const [sessionId, session] of this.sessions.entries()) {
       if (session.status !== 'completed') continue;
 
       const sessionMetrics = this.metrics.get(sessionId) || [];
-      if (sessionMetrics.length === 0) continue;
-
-      const avgResponseTime = sessionMetrics.reduce((sum, m) => sum + m.responseTime, 0) / sessionMetrics.length;
-      const totalCost = sessionMetrics.reduce((sum, m) => sum + (m.cost || 0), 0);
-      const errorRate = sessionMetrics.reduce((sum, m) => sum + m.errorRate, 0) / sessionMetrics.length;
+      const sessionMessages = this.messages.get(sessionId) || [];
       
-      const duration = session.endTime && session.startTime ?
-        session.endTime.getTime() - session.startTime.getTime() : 0;
+      if (sessionMessages.length === 0) continue;
 
-      const performanceScore = (1 - errorRate) * 50 + 
+      const avgResponseTime = sessionMetrics.length > 0 ? 
+        sessionMetrics.reduce((sum, m) => sum + m.responseTime, 0) / sessionMetrics.length : 0;
+      
+      const totalMessages = sessionMessages.length;
+      
+      // Calculate success rate (simple heuristic: 1 - error_rate from messages)
+      const errorMessages = sessionMessages.filter(m => m.messageType === 'error').length;
+      const successRate = totalMessages > 0 ? (totalMessages - errorMessages) / totalMessages : 1;
+
+      const performanceScore = successRate * 50 + 
         (avgResponseTime > 0 ? Math.max(0, 100 - avgResponseTime / 1000) * 0.5 : 50);
 
       sessionScores.push({
         sessionId,
-        performanceScore: Math.round(performanceScore),
         avgResponseTime,
-        totalCost,
-        errorRate,
-        duration
+        totalMessages,
+        successRate,
+        performanceScore
       });
     }
 
     return sessionScores
       .sort((a, b) => b.performanceScore - a.performanceScore)
-      .slice(0, limit);
+      .slice(0, limit)
+      .map(({sessionId, avgResponseTime, totalMessages, successRate}) => ({
+        sessionId,
+        avgResponseTime,
+        totalMessages,
+        successRate
+      }));
   }
 
   public async getCostAnalytics(
@@ -437,9 +443,8 @@ export class InMemoryDatabaseService {
 
   public async getErrorAnalytics(sessionIds?: string[]): Promise<{
     totalErrors: number;
-    errorsByType: Array<{ type: string; count: number; percentage: number }>;
-    errorsByAgent: { manager: number; worker: number };
-    errorTrend: Array<{ date: string; errors: number }>;
+    errorRate: number;
+    errorsByType: { [key: string]: number };
   }> {
     const allMessages: AgentMessage[] = [];
     const sessionsToCheck = sessionIds || Array.from(this.sessions.keys());
@@ -476,21 +481,19 @@ export class InMemoryDatabaseService {
       }
     });
 
-    const errorTrend = Array.from(errorTrendMap.entries())
-      .map(([date, errors]) => ({ date, errors }))
-      .sort((a, b) => a.date.localeCompare(b.date));
+    // Calculate error rate (errors per total messages)
+    const errorRate = allMessages.length > 0 ? totalErrors / allMessages.length : 0;
 
-    const errorTypeArray = Array.from(errorsByType.entries()).map(([type, count]) => ({
-      type,
-      count,
-      percentage: totalErrors > 0 ? (count / totalErrors) * 100 : 0
-    }));
+    // Convert Map to simple object
+    const errorsByTypeObject: { [key: string]: number } = {};
+    errorsByType.forEach((count, type) => {
+      errorsByTypeObject[type] = count;
+    });
 
     return {
       totalErrors,
-      errorsByType: errorTypeArray,
-      errorsByAgent,
-      errorTrend
+      errorRate,
+      errorsByType: errorsByTypeObject
     };
   }
 
@@ -529,6 +532,10 @@ export class InMemoryDatabaseService {
         totalMessages: Array.from(this.messages.values()).reduce((sum, msgs) => sum + msgs.length, 0)
       }
     };
+  }
+
+  public isReady(): boolean {
+    return true; // In-memory service is always ready
   }
 
   public async cleanup(): Promise<void> {

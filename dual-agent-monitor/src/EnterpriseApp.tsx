@@ -437,6 +437,7 @@ function EnterpriseAppInner() {
       <Sidebar
         currentPath={sidebarPath}
         onNavigate={handleSidebarNavigation}
+        sessionCount={sessions?.length || 0}
       />
       
       {/* Main Content Area */}

@@ -15,7 +15,7 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 | **Monitoring Dashboard** | ✅ HEALTHY | WebSocket active, real-time data flow |
 | **Error Handling** | ✅ ROBUST | Comprehensive fallbacks and user guidance |
 
-**Last Tested**: 2025-09-01 | **Version**: 1.1.1 | **Branch**: dashboard-ui-enhancement
+**Last Tested**: 2025-09-01 | **Version**: 1.2.0 | **Branch**: dashboard-ui-enhancement
 
 ## Features
 

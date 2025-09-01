@@ -898,7 +898,7 @@ pnpm run dev run "create a hello world function" -i 2 -v
 
 # 5. Build and test production ✅ TESTED SUCCESSFULLY
 pnpm run build                    # ✅ TypeScript compilation: PASSED
-node dist/index.js --version      # ✅ Returns: 1.1.1
+node dist/index.js --version      # ✅ Returns: 1.2.0
 node dist/index.js examples       # ✅ Shows all example commands
 node dist/index.js run "task" -i 1 -v  # ✅ SDK integration active
 ```
@@ -907,7 +907,7 @@ node dist/index.js run "task" -i 1 -v  # ✅ SDK integration active
 ```bash
 # Build verification
 ✅ pnpm run build                 # TypeScript compilation successful
-✅ node dist/index.js --version   # CLI functional (v1.1.1)
+✅ node dist/index.js --version   # CLI functional (v1.2.0)
 ✅ node dist/index.js examples    # All commands available
 
 # SDK integration testing

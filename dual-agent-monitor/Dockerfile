@@ -1,5 +1,5 @@
 # Multi-stage build for production optimization
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Set build arguments
 ARG VERSION=unknown
@@ -30,7 +30,7 @@ RUN echo "{\"version\":\"$VERSION\",\"buildTime\":\"$BUILD_TIME\"}" > build-info
 RUN pnpm run build
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:24-alpine AS production
 
 # Create app user for security
 RUN addgroup -g 1001 -S nodejs && \

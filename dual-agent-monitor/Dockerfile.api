@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for dual-agent monitoring API server
 # Stage 1: Build stage
-FROM node:18-alpine as builder
+FROM node:24-alpine as builder
 
 # Set working directory
 WORKDIR /app
@@ -27,7 +27,7 @@ COPY server/types.ts ./server/
 RUN npx tsc server/websocket-server-minimal.ts --outDir dist --target es2020 --module commonjs --moduleResolution node --esModuleInterop --allowSyntheticDefaultImports --resolveJsonModule --skipLibCheck
 
 # Stage 2: Production stage
-FROM node:18-alpine as production
+FROM node:24-alpine as production
 
 # Install security updates
 RUN apk update && apk upgrade

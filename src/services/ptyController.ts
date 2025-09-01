@@ -60,6 +60,7 @@ export class ClaudeCodePTYController extends EventEmitter {
   private lastProcessedIndex: number = 0;
   private malformedJsonAttempts: number = 0;
   private maxMalformedAttempts: number = 3;
+  private healthCheckInterval?: NodeJS.Timeout;
 
   constructor(options: any = {}) {
     super();
@@ -69,6 +70,26 @@ export class ClaudeCodePTYController extends EventEmitter {
     
     // Initialize enhanced buffer management
     this.resetBuffers();
+  }
+
+  /**
+   * Start periodic buffer health monitoring
+   */
+  private startBufferHealthMonitoring(): void {
+    // Perform health check every 30 seconds
+    this.healthCheckInterval = setInterval(() => {
+      this.performBufferHealthCheck();
+    }, 30000);
+  }
+
+  /**
+   * Stop buffer health monitoring
+   */
+  private stopBufferHealthMonitoring(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = undefined;
+    }
   }
 
   /**
@@ -146,6 +167,9 @@ export class ClaudeCodePTYController extends EventEmitter {
       // Wait for initial ready state
       await this.waitForReady();
       
+      // Start periodic buffer health checks
+      this.startBufferHealthMonitoring();
+      
     } catch (error) {
       this.logger.error(`Failed to initialize PTY: ${error}`);
       throw error;
@@ -212,7 +236,7 @@ export class ClaudeCodePTYController extends EventEmitter {
       // If no JSON found, try to extract text line
       const lineResult = this.tryExtractTextLine(startIndex);
       
-      if (lineResult.found) {
+      if (lineResult.found && lineResult.line) {
         this.handleTextLine(lineResult.line);
         startIndex = lineResult.endIndex;
         continue;
@@ -235,16 +259,16 @@ export class ClaudeCodePTYController extends EventEmitter {
   /**
    * Try to extract a JSON message starting from the given index
    */
-  private tryExtractJsonMessage(startIndex: number): { found: boolean; message?: any; endIndex: number } {
+  private tryExtractJsonMessage(startIndex: number): BufferExtractionResult {
     const remaining = this.jsonBuffer.substring(startIndex);
     
     // Look for JSON object start
     const jsonStartMatch = remaining.match(/^\s*\{/);
-    if (!jsonStartMatch) {
+    if (!jsonStartMatch || jsonStartMatch.index === undefined) {
       return { found: false, endIndex: startIndex };
     }
     
-    const jsonStart = startIndex + jsonStartMatch.index!;
+    const jsonStart = startIndex + jsonStartMatch.index;
     let braceCount = 0;
     let inString = false;
     let escapeNext = false;
@@ -296,7 +320,7 @@ export class ClaudeCodePTYController extends EventEmitter {
       return { found: true, message, endIndex: jsonEnd };
     } catch (error) {
       this.malformedJsonAttempts++;
-      this.logger.warn(`Malformed JSON detected (attempt ${this.malformedJsonAttempts}/${this.maxMalformedAttempts}): ${jsonText.substring(0, 100)}...`);
+      this.logger.warning(`Malformed JSON detected (attempt ${this.malformedJsonAttempts}/${this.maxMalformedAttempts}): ${jsonText.substring(0, 100)}...`);
       
       if (this.malformedJsonAttempts >= this.maxMalformedAttempts) {
         // Skip this malformed JSON and continue processing
@@ -315,7 +339,7 @@ export class ClaudeCodePTYController extends EventEmitter {
   /**
    * Try to extract a text line starting from the given index
    */
-  private tryExtractTextLine(startIndex: number): { found: boolean; line?: string; endIndex: number } {
+  private tryExtractTextLine(startIndex: number): BufferExtractionResult {
     const remaining = this.jsonBuffer.substring(startIndex);
     const newlineIndex = remaining.indexOf('\n');
     
@@ -332,7 +356,7 @@ export class ClaudeCodePTYController extends EventEmitter {
     }
     
     // Empty line, skip it
-    return { found: false, endIndex };
+    return { found: false, endIndex: endIndex };
   }
 
   /**
@@ -342,7 +366,7 @@ export class ClaudeCodePTYController extends EventEmitter {
     const maxBufferSize = 1024 * 1024; // 1MB max buffer size
     
     if (this.jsonBuffer.length > maxBufferSize) {
-      this.logger.warn(`Buffer overflow detected. Buffer size: ${this.jsonBuffer.length}. Truncating...`);
+      this.logger.warning(`Buffer overflow detected. Buffer size: ${this.jsonBuffer.length}. Truncating...`);
       
       // Keep only the last portion of the buffer
       const keepSize = Math.floor(maxBufferSize / 2);
@@ -358,7 +382,7 @@ export class ClaudeCodePTYController extends EventEmitter {
   private handleJsonMessage(message: any): void {
     // Validate message before processing
     if (!this.validateJsonMessage(message)) {
-      this.logger.warn('Discarding invalid JSON message');
+      this.logger.warning('Discarding invalid JSON message');
       return;
     }
 
@@ -607,7 +631,7 @@ export class ClaudeCodePTYController extends EventEmitter {
    * Handle buffer recovery from malformed data
    */
   private recoverFromMalformedBuffer(): void {
-    this.logger.warn('Attempting buffer recovery from malformed data');
+    this.logger.warning('Attempting buffer recovery from malformed data');
     
     // Try to find the last valid position
     let lastValidPos = 0;
@@ -625,7 +649,7 @@ export class ClaudeCodePTYController extends EventEmitter {
       this.logger.info(`Recovered buffer from position ${lastValidPos}`);
       this.jsonBuffer = cleanBuffer.substring(lastValidPos);
     } else {
-      this.logger.warn('Full buffer reset required');
+      this.logger.warning('Full buffer reset required');
       this.resetBuffers();
     }
   }
@@ -633,13 +657,7 @@ export class ClaudeCodePTYController extends EventEmitter {
   /**
    * Get buffer statistics for debugging
    */
-  getBufferStats(): {
-    bufferSize: number;
-    jsonBufferSize: number;
-    responseBufferSize: number;
-    pendingMessages: number;
-    malformedAttempts: number;
-  } {
+  getBufferStats(): BufferStats {
     return {
       bufferSize: this.buffer.length,
       jsonBufferSize: this.jsonBuffer.length,
@@ -705,8 +723,8 @@ export class ClaudeCodePTYController extends EventEmitter {
   /**
    * Handle streaming JSON data that may be split across multiple buffers
    */
-  private handleStreamingJson(jsonText: string): { complete: boolean; messages: any[] } {
-    const messages: any[] = [];
+  private handleStreamingJson(jsonText: string): StreamingJsonResult {
+    const messages: ClaudeMessage[] = [];
     let remaining = jsonText;
     
     while (remaining.length > 0) {
@@ -764,10 +782,10 @@ export class ClaudeCodePTYController extends EventEmitter {
         if (this.validateJsonMessage(message)) {
           messages.push(message);
         } else {
-          this.logger.warn(`Invalid message structure: ${messageText.substring(0, 100)}...`);
+          this.logger.warning(`Invalid message structure: ${messageText.substring(0, 100)}...`);
         }
       } catch (error) {
-        this.logger.warn(`Failed to parse streaming JSON: ${error}`);
+        this.logger.warning(`Failed to parse streaming JSON: ${error}`);
         break;
       }
       
@@ -778,9 +796,48 @@ export class ClaudeCodePTYController extends EventEmitter {
   }
 
   /**
+   * Perform comprehensive buffer health check and cleanup
+   */
+  performBufferHealthCheck(): void {
+    const stats = this.getBufferStats();
+    
+    this.logger.debug('Buffer health check: ' + JSON.stringify(stats));
+    
+    // Check for excessive buffer sizes
+    const warningThreshold = 512 * 1024; // 512KB warning
+    const errorThreshold = 1024 * 1024;  // 1MB error
+    
+    if (stats.jsonBufferSize > errorThreshold) {
+      this.logger.error(`JSON buffer size critical: ${stats.jsonBufferSize} bytes. Performing emergency cleanup.`);
+      this.recoverFromMalformedBuffer();
+    } else if (stats.jsonBufferSize > warningThreshold) {
+      this.logger.warning(`JSON buffer size high: ${stats.jsonBufferSize} bytes. Consider flushing.`);
+    }
+    
+    // Check for excessive malformed attempts
+    if (stats.malformedAttempts >= this.maxMalformedAttempts - 1) {
+      this.logger.warning(`Malformed JSON attempts high: ${stats.malformedAttempts}/${this.maxMalformedAttempts}`);
+    }
+    
+    // Check for stuck pending messages
+    if (stats.pendingMessages > 10) {
+      this.logger.warning(`High number of pending messages: ${stats.pendingMessages}. Consider flushing.`);
+    }
+    
+    // Force cleanup if necessary
+    if (stats.jsonBufferSize > errorThreshold || stats.pendingMessages > 50) {
+      this.logger.info('Performing automatic buffer cleanup');
+      this.flushBuffers();
+    }
+  }
+
+  /**
    * Close the PTY process
    */
   close(): void {
+    // Stop health monitoring
+    this.stopBufferHealthMonitoring();
+    
     // Flush buffers before closing
     this.flushBuffers();
     

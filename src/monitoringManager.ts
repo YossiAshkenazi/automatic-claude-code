@@ -138,25 +138,62 @@ export class MonitoringManager {
 
   // Send data to monitoring server
   async sendMonitoringData(data: any): Promise<boolean> {
+    console.log(chalk.blue('🔍 Attempting to send monitoring data:', data.messageType));
+    
     if (!config.isMonitoringEnabled()) {
+      console.log(chalk.yellow('⚠️  Monitoring disabled'));
       return false;
     }
 
-    try {
-      const { server } = config.getMonitoringUrls();
-      const response = await fetch(`${server}/api/monitoring`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
+    return new Promise((resolve) => {
+      try {
+        const { server } = config.getMonitoringUrls();
+        const url = new URL(`${server}/api/monitoring`);
+        const postData = JSON.stringify(data);
 
-      return response.ok;
-    } catch (error) {
-      console.warn(chalk.yellow('Failed to send monitoring data:'), error);
-      return false;
-    }
+        const request = require('http').request({
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+          },
+          timeout: 5000
+        }, (res: any) => {
+          let responseData = '';
+          res.on('data', (chunk: any) => {
+            responseData += chunk;
+          });
+          res.on('end', () => {
+            const success = res.statusCode >= 200 && res.statusCode < 300;
+            if (success) {
+              console.log(chalk.green('✅ Monitoring data sent successfully'));
+            } else {
+              console.warn(chalk.yellow('⚠️  Monitoring data sent but got status:'), res.statusCode);
+            }
+            resolve(success);
+          });
+        });
+
+        request.on('error', (error: any) => {
+          console.warn(chalk.red('❌ Failed to send monitoring data:'), error.message);
+          resolve(false);
+        });
+
+        request.on('timeout', () => {
+          request.destroy();
+          resolve(false);
+        });
+
+        request.write(postData);
+        request.end();
+      } catch (error) {
+        console.warn(chalk.yellow('Failed to send monitoring data:'), error);
+        resolve(false);
+      }
+    });
   }
 
   // WebSocket functionality placeholder (implement when needed)

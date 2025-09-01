@@ -620,25 +620,41 @@ Provide a clear summary of what was improved and how it addresses the feedback.
     args.push('--dangerously-skip-permissions');
 
     return new Promise((resolve, reject) => {
-      const { command, baseArgs } = ClaudeUtils.getClaudeCommand();
-      const allArgs = [...baseArgs, ...args];
+      let claudeProcess: any;
       
-      this.logger.debug('Executing Claude command', { 
-        command, 
-        args: allArgs.slice(0, 3) // Log first few args for debugging
-      });
+      try {
+        const { command, baseArgs } = ClaudeUtils.getClaudeCommand();
+        const allArgs = [...baseArgs, ...args];
+        
+        // Determine if shell should be used more reliably
+        const useShell = process.platform === 'win32' || command.includes('npx') || command.includes('npm');
+        
+        this.logger.debug('Executing Claude command', { 
+          command, 
+          args: allArgs.slice(0, 3), // Log first few args for debugging
+          useShell,
+          workDir: this.agentConfig?.workDir || process.cwd()
+        });
 
-      const claudeProcess = spawn(command, allArgs, {
-        shell: command === 'npx' || command.includes('npx'),
-        env: { ...process.env, PATH: process.env.PATH },
-        cwd: this.agentConfig?.workDir || process.cwd(),
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+        claudeProcess = spawn(command, allArgs, {
+          shell: useShell,
+          env: { ...process.env, PATH: process.env.PATH },
+          cwd: this.agentConfig?.workDir || process.cwd(),
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true
+        });
+      } catch (spawnError) {
+        this.logger.error('Failed to spawn Claude process', { 
+          error: spawnError instanceof Error ? spawnError.message : spawnError 
+        });
+        reject(new Error(`spawn EINVAL`));
+        return;
+      }
 
       let output = '';
       let errorOutput = '';
 
-      claudeProcess.stdout.on('data', (data) => {
+      claudeProcess.stdout.on('data', (data: any) => {
         const chunk = data.toString();
         output += chunk;
         
@@ -646,11 +662,18 @@ Provide a clear summary of what was improved and how it addresses the feedback.
         this.emit('execution_progress', { chunk });
       });
 
-      claudeProcess.stderr.on('data', (data) => {
+      claudeProcess.stderr.on('data', (data: any) => {
         errorOutput += data.toString();
       });
 
-      claudeProcess.on('close', (code) => {
+      claudeProcess.on('close', (code: number | null) => {
+        this.logger.debug('Claude process completed', {
+          exitCode: code,
+          outputLength: output.length,
+          errorOutputLength: errorOutput.length,
+          errorOutput: errorOutput.substring(0, 500) // First 500 chars of error
+        });
+        
         if (code !== 0) {
           this.logger.warning('Claude execution completed with errors', {
             exitCode: code,
@@ -661,7 +684,7 @@ Provide a clear summary of what was improved and how it addresses the feedback.
         resolve({ output, exitCode: code || 0 });
       });
 
-      claudeProcess.on('error', (err) => {
+      claudeProcess.on('error', (err: Error) => {
         this.logger.error('Claude process error', { error: err.message });
         reject(err);
       });

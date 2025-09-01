@@ -566,28 +566,56 @@ Provide actionable insights that will help coordinate the next phase of work.
     }
 
     return new Promise((resolve, reject) => {
-      const { command, baseArgs } = ClaudeUtils.getClaudeCommand();
-      const allArgs = [...baseArgs, ...args];
+      let claudeProcess: any;
       
-      const claudeProcess = spawn(command, allArgs, {
-        shell: command === 'npx' || command.includes('npx'),
-        env: { ...process.env, PATH: process.env.PATH },
-        cwd: this.agentConfig?.workDir || process.cwd(),
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+      try {
+        const { command, baseArgs } = ClaudeUtils.getClaudeCommand();
+        const allArgs = [...baseArgs, ...args];
+        
+        // Determine if shell should be used more reliably
+        const useShell = process.platform === 'win32' || command.includes('npx') || command.includes('npm');
+        
+        this.logger.debug('Spawning Claude process', {
+          command,
+          args: allArgs,
+          useShell,
+          workDir: this.agentConfig?.workDir || process.cwd()
+        });
+        
+        claudeProcess = spawn(command, allArgs, {
+          shell: useShell,
+          env: { ...process.env, PATH: process.env.PATH },
+          cwd: this.agentConfig?.workDir || process.cwd(),
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true
+        });
+      } catch (spawnError) {
+        this.logger.error('Failed to spawn Claude process', { 
+          error: spawnError instanceof Error ? spawnError.message : spawnError 
+        });
+        reject(new Error(`spawn EINVAL`));
+        return;
+      }
 
       let output = '';
       let errorOutput = '';
 
-      claudeProcess.stdout.on('data', (data) => {
+      claudeProcess.stdout.on('data', (data: any) => {
         output += data.toString();
       });
 
-      claudeProcess.stderr.on('data', (data) => {
+      claudeProcess.stderr.on('data', (data: any) => {
         errorOutput += data.toString();
       });
 
-      claudeProcess.on('close', (code) => {
+      claudeProcess.on('close', (code: number | null) => {
+        this.logger.debug('Claude process completed', {
+          exitCode: code,
+          outputLength: output.length,
+          errorOutputLength: errorOutput.length,
+          errorOutput: errorOutput.substring(0, 500) // First 500 chars of error
+        });
+        
         if (code !== 0) {
           reject(new Error(`Manager agent Claude execution failed with code ${code}: ${errorOutput}`));
         } else {
@@ -595,7 +623,7 @@ Provide actionable insights that will help coordinate the next phase of work.
         }
       });
 
-      claudeProcess.on('error', (err) => {
+      claudeProcess.on('error', (err: Error) => {
         reject(err);
       });
 

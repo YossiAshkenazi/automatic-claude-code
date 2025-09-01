@@ -3,6 +3,7 @@ import { SessionManager } from './sessionManager';
 import { OutputParser, ParsedOutput } from './outputParser';
 import { Logger } from './logger';
 import { ClaudeUtils } from './claudeUtils';
+import { ClaudeExecutor, ClaudeExecutionOptions } from './services/claudeExecutor';
 import chalk from 'chalk';
 
 export interface AgentConfig {
@@ -66,6 +67,7 @@ export class AgentOrchestrator {
   private sessionManager: SessionManager;
   private outputParser: OutputParser;
   private logger: Logger;
+  private claudeExecutor: ClaudeExecutor;
   private agents: Map<string, AgentSession> = new Map();
   private handoffHistory: AgentHandoff[] = [];
   private messageHistory: AgentMessage[] = [];
@@ -80,6 +82,7 @@ export class AgentOrchestrator {
     this.sessionManager = new SessionManager();
     this.outputParser = new OutputParser();
     this.logger = new Logger();
+    this.claudeExecutor = new ClaudeExecutor(this.logger);
   }
 
   async startDualAgentSession(
@@ -799,71 +802,19 @@ export class AgentOrchestrator {
     prompt: string,
     options: any
   ): Promise<{ output: string; exitCode: number }> {
-    // This reuses the existing Claude Code execution logic from index.ts
-    // We need to extract this into a shared utility or extend the main class
-    const args = ['-p', prompt];
-    
-    if (options.model) {
-      args.push('--model', options.model);
-    }
-    
-    if (options.allowedTools) {
-      args.push('--allowedTools', options.allowedTools);
-    }
-    
-    if (options.sessionId) {
-      args.push('--resume', options.sessionId);
-    }
-    
-    if (options.verbose) {
-      args.push('--verbose');
-    }
+    // Convert options to ClaudeExecutionOptions
+    const claudeOptions: ClaudeExecutionOptions = {
+      model: options.model,
+      workDir: options.workDir,
+      allowedTools: options.allowedTools,
+      sessionId: options.sessionId,
+      verbose: options.verbose,
+      continueOnError: options.continueOnError,
+      timeout: options.timeout
+    };
 
-    return new Promise((resolve, reject) => {
-      // This is a simplified version - should use the full implementation from index.ts
-      const { command, baseArgs } = this.getClaudeCommand();
-      const allArgs = [...baseArgs, ...args];
-      
-      const claudeProcess = spawn(command, allArgs, {
-        shell: true, // Always use shell on Windows for compatibility
-        env: { ...process.env, PATH: process.env.PATH },
-        cwd: options.workDir || process.cwd(),
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-
-      let output = '';
-      let errorOutput = '';
-
-      claudeProcess.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-
-      claudeProcess.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
-      claudeProcess.on('close', (code) => {
-        if (code !== 0 && !options.continueOnError) {
-          reject(new Error(`Claude Code exited with code ${code}: ${errorOutput}`));
-        } else {
-          resolve({ output, exitCode: code || 0 });
-        }
-      });
-
-      claudeProcess.on('error', (err) => {
-        reject(err);
-      });
-
-      // Timeout handling
-      const timeout = setTimeout(() => {
-        claudeProcess.kill('SIGTERM');
-        reject(new Error(`Claude process timed out`));
-      }, options.timeout || 1800000);
-
-      claudeProcess.on('close', () => {
-        clearTimeout(timeout);
-      });
-    });
+    // Use the centralized ClaudeExecutor service
+    return await this.claudeExecutor.executeClaudeCode(prompt, claudeOptions);
   }
 
   private getClaudeCommand(): { command: string; baseArgs: string[] } {

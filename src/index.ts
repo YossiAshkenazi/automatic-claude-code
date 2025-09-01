@@ -16,6 +16,7 @@ import { AgentCoordinator } from './agents/agentCoordinator';
 import { ClaudeUtils } from './claudeUtils';
 import { monitoringManager } from './monitoringManager';
 import { config } from './config';
+import { ClaudeExecutor, ClaudeExecutionOptions } from './services/claudeExecutor';
 import Table from 'cli-table3';
 
 interface LoopOptions {
@@ -41,6 +42,7 @@ class AutomaticClaudeCode {
   private outputParser: OutputParser;
   private promptBuilder: PromptBuilder;
   private logger: Logger;
+  private claudeExecutor: ClaudeExecutor;
   private iteration: number = 0;
   private sessionHistory: string[] = [];
 
@@ -49,6 +51,7 @@ class AutomaticClaudeCode {
     this.outputParser = new OutputParser();
     this.promptBuilder = new PromptBuilder();
     this.logger = new Logger();
+    this.claudeExecutor = new ClaudeExecutor(this.logger);
   }
 
   private getClaudeCommand(): { command: string; baseArgs: string[] } {
@@ -117,118 +120,19 @@ class AutomaticClaudeCode {
   }
 
   async runClaudeCode(prompt: string, options: LoopOptions): Promise<{ output: string; exitCode: number }> {
-    const args = ['-p', prompt];
-    
-    if (options.model) {
-      args.push('--model', options.model);
-    }
-    
-    // Always add working directory (use current directory if not specified)
-    const workingDir = options.workDir || process.cwd();
-    // Temporarily remove --add-dir to test if it's causing the hang
-    // args.push('--add-dir', workingDir);
-    
-    if (options.allowedTools) {
-      args.push('--allowedTools', options.allowedTools);
-    }
-    
-    if (options.sessionId) {
-      args.push('--resume', options.sessionId);
-    }
-    
-    // Temporarily remove problematic arguments that may cause hanging
-    // args.push('--output-format', 'json');
-    // args.push('--permission-mode', 'acceptEdits'); 
-    // args.push('--max-turns', '10');
-    
-    if (options.verbose) {
-      args.push('--verbose');
-    }
+    // Convert LoopOptions to ClaudeExecutionOptions
+    const claudeOptions: ClaudeExecutionOptions = {
+      model: options.model,
+      workDir: options.workDir,
+      allowedTools: options.allowedTools,
+      sessionId: options.sessionId,
+      verbose: options.verbose,
+      continueOnError: options.continueOnError,
+      timeout: options.timeout
+    };
 
-    return new Promise((resolve, reject) => {
-      const { command, baseArgs } = this.getClaudeCommand();
-      const allArgs = [...baseArgs, ...args];
-      
-      // Only log debug info if verbose mode is enabled
-      if (options.verbose) {
-        this.logger.debug(`Using Claude command: ${command} ${allArgs.join(' ')}`);
-      }
-      
-      // Use shell mode for npx commands and Windows .CMD files to ensure proper PATH resolution
-      const useShell = command === 'npx' || command.includes('npx') || command.endsWith('.CMD') || command.endsWith('.cmd');
-      
-      const claudeProcess = spawn(command, allArgs, {
-        shell: useShell,
-        env: { ...process.env, PATH: process.env.PATH },
-        cwd: workingDir,
-        stdio: ['ignore', 'pipe', 'pipe'] // Ignore stdin to prevent hanging
-      });
-
-      let output = '';
-      let errorOutput = '';
-
-      claudeProcess.stdout.on('data', (data) => {
-        const chunk = data.toString();
-        output += chunk;
-        
-        // Separate Claude's work output from system logs
-        const lines = chunk.split('\n').filter((line: string) => line.trim());
-        lines.forEach((line: string) => {
-          // Check if this is Claude's actual work or system message
-          if (this.isClaudeWork(line)) {
-            // Log to work file
-            this.logger.logClaudeWork(line);
-          } else if (this.isSystemMessage(line)) {
-            // Log to session file only
-            this.logger.debug(`System: ${line.substring(0, 200)}`);
-          } else if (line.trim()) {
-            // Default to work output for non-empty lines
-            this.logger.logClaudeWork(line);
-          }
-        });
-        
-        if (options.verbose) {
-          process.stdout.write(chalk.gray(chunk));
-        }
-      });
-
-      claudeProcess.stderr.on('data', (data) => {
-        const chunk = data.toString();
-        errorOutput += chunk;
-        
-        // Log errors in real-time
-        this.logger.error(`Claude error: ${chunk}`);
-        
-        if (options.verbose) {
-          process.stderr.write(chalk.red(chunk));
-        }
-      });
-
-      claudeProcess.on('close', (code) => {
-        if (code !== 0 && !options.continueOnError) {
-          reject(new Error(`Claude Code exited with code ${code}: ${errorOutput}`));
-        } else {
-          resolve({ output, exitCode: code || 0 });
-        }
-      });
-
-      claudeProcess.on('error', (err) => {
-        reject(err);
-      });
-
-      // Add timeout to prevent hanging (default 30 minutes, configurable)
-      const timeoutMs = options.timeout || 1800000; // Default 30 minutes
-      const timeoutMinutes = Math.round(timeoutMs / 60000);
-      const timeout = setTimeout(() => {
-        this.logger.error(`Claude process timed out after ${timeoutMinutes} minutes`);
-        claudeProcess.kill('SIGTERM');
-        reject(new Error(`Claude process timed out after ${timeoutMinutes} minutes`));
-      }, timeoutMs);
-
-      claudeProcess.on('close', () => {
-        clearTimeout(timeout);
-      });
-    });
+    // Use the centralized ClaudeExecutor service
+    return await this.claudeExecutor.executeClaudeCode(prompt, claudeOptions);
   }
 
   async runLoop(initialPrompt: string, options: LoopOptions): Promise<void> {
@@ -404,61 +308,6 @@ class AutomaticClaudeCode {
   }
 
   // Helper method to identify Claude's actual work output
-  private isClaudeWork(line: string): boolean {
-    const workIndicators = [
-      'Creating',
-      'Writing',
-      'Reading',
-      'Editing',
-      'Updating',
-      'Installing',
-      'Building',
-      'Testing',
-      'Implementing',
-      'Adding',
-      'Removing',
-      'Fixing',
-      'I\'ll',
-      'I will',
-      'I\'m',
-      'Let me',
-      'Here\'s',
-      'This',
-      '```',  // Code blocks
-      'File created',
-      'File updated',
-      'Successfully'
-    ];
-    
-    return workIndicators.some(indicator => 
-      line.toLowerCase().includes(indicator.toLowerCase())
-    );
-  }
-
-  // Helper method to identify system/debug messages
-  private isSystemMessage(line: string): boolean {
-    const systemIndicators = [
-      '[DEBUG]',
-      '[INFO]',
-      '[PROGRESS]',
-      '[WARNING]',
-      '[ERROR]',
-      'Using Claude command',
-      'Working directory',
-      'Session ID:',
-      'Iteration',
-      'Exit Code:',
-      'npm WARN',
-      'npm notice',
-      'pnpm:',
-      'node_modules',
-      'package.json'
-    ];
-    
-    return systemIndicators.some(indicator => 
-      line.includes(indicator)
-    );
-  }
 }
 
 async function main() {

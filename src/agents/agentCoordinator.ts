@@ -114,6 +114,14 @@ export class AgentCoordinator extends EventEmitter {
       this.executionContext.userRequest = userRequest;
       this.updateWorkflowPhase('analysis');
 
+      // Send initial monitoring event
+      this.emitCoordinationEvent('AGENT_COORDINATION', 'manager', {
+        phase: 'initialization',
+        sessionId,
+        userRequest,
+        workDir: options.workDir || process.cwd()
+      });
+
       // Initialize agents with context
       await this.initializeAgents(options);
 
@@ -252,6 +260,13 @@ export class AgentCoordinator extends EventEmitter {
         }
       }
     } catch (error) {
+      // Send error monitoring event
+      this.emitCoordinationEvent('AGENT_COORDINATION', 'manager', {
+        phase: 'analysis_error',
+        error: error instanceof Error ? error.message : String(error),
+        errorType: 'manager_analysis_failed'
+      });
+      
       await this.handleAgentError('manager', 'tool_failure', error instanceof Error ? error.message : String(error));
     } finally {
       this.updateAgentStatus('manager', 'idle');

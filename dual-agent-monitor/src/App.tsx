@@ -6,6 +6,10 @@ import { useMobile } from './hooks/useMobile';
 import { usePWA } from './hooks/usePWA';
 import { apiClient } from './utils/api';
 import { formatDate } from './utils/formatters';
+import { ErrorBoundaryWrapper } from './components/ui/ErrorBoundaryWrapper';
+import { LoadingState } from './components/ui/LoadingSpinner';
+import { initializeErrorReporting, reportError } from './utils/errorReporting';
+import { EnhancedError, NetworkError, ApiError } from './types/errors';
 
 // Mobile-optimized components
 import MobileApp from './MobileApp';
@@ -34,15 +38,39 @@ function App() {
   const mobile = useMobile();
   const pwa = usePWA();
   
+  // Initialize error reporting on first render
+  useEffect(() => {
+    initializeErrorReporting({
+      enableConsoleLogging: process.env.NODE_ENV === 'development',
+      enableToastNotifications: true,
+      enableRemoteReporting: false, // Enable when backend supports it
+      maxReportsPerSession: 50,
+      excludeLevels: ['info']
+    });
+  }, []);
+  
   // If mobile device, use mobile-optimized app
   if (mobile.isMobile) {
-    return <MobileApp />;
+    return (
+      <ErrorBoundary 
+        onError={(error) => reportError(error)}
+        showDetails={process.env.NODE_ENV === 'development'}
+      >
+        <MobileApp />
+      </ErrorBoundary>
+    );
   }
+  
   const [sessions, setSessions] = useState<DualAgentSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<DualAgentSession | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('cross-project');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Enhanced loading states
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [crossProjectLoading, setCrossProjectLoading] = useState(true);
+  const [websocketConnecting, setWebsocketConnecting] = useState(true);
   
   // Cross-project state
   const [allEvents, setAllEvents] = useState<any[]>([]);
@@ -548,9 +576,11 @@ function App() {
             </div>
           </div>
         )}
-      </main>
-    </div>
-    </ResponsiveLayout>
+        </main>
+        </div>
+        </ResponsiveLayout>
+      </WebSocketErrorBoundary>
+    </ErrorBoundary>
   );
 }
 

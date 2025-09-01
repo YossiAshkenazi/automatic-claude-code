@@ -7,6 +7,38 @@ import { EventEmitter } from 'events';
 import { Logger } from '../logger';
 import { ClaudeUtils } from '../claudeUtils';
 
+// Type definitions for enhanced buffer management
+interface ClaudeMessage {
+  type: string;
+  content?: string;
+  data?: any;
+  error?: string;
+  message?: string;
+  tool?: string;
+  parameters?: any;
+  [key: string]: any;
+}
+
+interface BufferExtractionResult {
+  found: boolean;
+  message?: ClaudeMessage;
+  line?: string;
+  endIndex: number;
+}
+
+interface BufferStats {
+  bufferSize: number;
+  jsonBufferSize: number;
+  responseBufferSize: number;
+  pendingMessages: number;
+  malformedAttempts: number;
+}
+
+interface StreamingJsonResult {
+  complete: boolean;
+  messages: ClaudeMessage[];
+}
+
 /**
  * PTY Controller for interactive Claude Code control
  * Alternative to headless mode that uses subscription authentication
@@ -21,12 +53,34 @@ export class ClaudeCodePTYController extends EventEmitter {
   private currentPromptResolve?: (value: string) => void;
   private currentPromptReject?: (reason: any) => void;
   private oauthToken?: string;
+  
+  // Enhanced buffer management properties
+  private jsonBuffer: string = '';
+  private pendingMessages: ClaudeMessage[] = [];
+  private lastProcessedIndex: number = 0;
+  private malformedJsonAttempts: number = 0;
+  private maxMalformedAttempts: number = 3;
 
   constructor(options: any = {}) {
     super();
     this.logger = options.logger || new Logger();
     this.sessionId = options.sessionId;
     this.oauthToken = options.oauthToken;
+    
+    // Initialize enhanced buffer management
+    this.resetBuffers();
+  }
+
+  /**
+   * Reset all buffer states
+   */
+  private resetBuffers(): void {
+    this.buffer = '';
+    this.jsonBuffer = '';
+    this.responseBuffer = '';
+    this.pendingMessages = [];
+    this.lastProcessedIndex = 0;
+    this.malformedJsonAttempts = 0;
   }
 
   /**
@@ -120,36 +174,194 @@ export class ClaudeCodePTYController extends EventEmitter {
   }
 
   /**
-   * Process the buffer to extract messages
+   * Process the buffer to extract messages with enhanced buffer management
    */
   private processBuffer(): void {
-    const lines = this.buffer.split('\n');
+    // Strip ANSI escape sequences from the entire buffer
+    const cleanBuffer = stripAnsi(this.buffer);
     
-    for (let i = 0; i < lines.length - 1; i++) {
-      const line = lines[i];
-      const cleanLine = stripAnsi(line).trim();
-      
-      if (cleanLine.startsWith('{')) {
-        try {
-          const message = JSON.parse(cleanLine);
-          this.handleJsonMessage(message);
-        } catch (e) {
-          // Not JSON, process as text
-          this.handleTextLine(cleanLine);
-        }
-      } else {
-        this.handleTextLine(cleanLine);
-      }
-    }
+    // Accumulate clean data to JSON buffer
+    this.jsonBuffer += cleanBuffer;
     
-    // Keep the last incomplete line in buffer
-    this.buffer = lines[lines.length - 1];
+    // Process complete JSON messages and text lines
+    this.extractCompleteMessages();
+    
+    // Clear the raw buffer after processing
+    this.buffer = '';
   }
 
   /**
-   * Handle JSON messages from Claude
+   * Extract complete messages from the JSON buffer
+   */
+  private extractCompleteMessages(): void {
+    let startIndex = 0;
+    const bufferLength = this.jsonBuffer.length;
+    
+    while (startIndex < bufferLength) {
+      // Try to find JSON message boundaries
+      const jsonResult = this.tryExtractJsonMessage(startIndex);
+      
+      if (jsonResult.found) {
+        // Successfully parsed JSON message
+        this.handleJsonMessage(jsonResult.message);
+        startIndex = jsonResult.endIndex;
+        this.malformedJsonAttempts = 0; // Reset malformed counter
+        continue;
+      }
+      
+      // If no JSON found, try to extract text line
+      const lineResult = this.tryExtractTextLine(startIndex);
+      
+      if (lineResult.found) {
+        this.handleTextLine(lineResult.line);
+        startIndex = lineResult.endIndex;
+        continue;
+      }
+      
+      // No complete message found, break to preserve partial data
+      break;
+    }
+    
+    // Keep unprocessed portion in buffer
+    if (startIndex > 0) {
+      this.jsonBuffer = this.jsonBuffer.substring(startIndex);
+      this.lastProcessedIndex = 0;
+    }
+    
+    // Handle buffer overflow protection
+    this.handleBufferOverflow();
+  }
+
+  /**
+   * Try to extract a JSON message starting from the given index
+   */
+  private tryExtractJsonMessage(startIndex: number): { found: boolean; message?: any; endIndex: number } {
+    const remaining = this.jsonBuffer.substring(startIndex);
+    
+    // Look for JSON object start
+    const jsonStartMatch = remaining.match(/^\s*\{/);
+    if (!jsonStartMatch) {
+      return { found: false, endIndex: startIndex };
+    }
+    
+    const jsonStart = startIndex + jsonStartMatch.index!;
+    let braceCount = 0;
+    let inString = false;
+    let escapeNext = false;
+    let jsonEnd = -1;
+    
+    // Find the end of the JSON object by counting braces
+    for (let i = jsonStart; i < this.jsonBuffer.length; i++) {
+      const char = this.jsonBuffer[i];
+      
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+      
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      
+      if (inString) {
+        continue;
+      }
+      
+      if (char === '{') {
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          jsonEnd = i + 1;
+          break;
+        }
+      }
+    }
+    
+    if (jsonEnd === -1) {
+      // Incomplete JSON, wait for more data
+      return { found: false, endIndex: startIndex };
+    }
+    
+    const jsonText = this.jsonBuffer.substring(jsonStart, jsonEnd);
+    
+    try {
+      const message = JSON.parse(jsonText);
+      return { found: true, message, endIndex: jsonEnd };
+    } catch (error) {
+      this.malformedJsonAttempts++;
+      this.logger.warn(`Malformed JSON detected (attempt ${this.malformedJsonAttempts}/${this.maxMalformedAttempts}): ${jsonText.substring(0, 100)}...`);
+      
+      if (this.malformedJsonAttempts >= this.maxMalformedAttempts) {
+        // Skip this malformed JSON and continue processing
+        this.logger.error(`Skipping malformed JSON after ${this.maxMalformedAttempts} attempts`);
+        this.malformedJsonAttempts = 0;
+        
+        // Attempt buffer recovery
+        this.recoverFromMalformedBuffer();
+        return { found: false, endIndex: jsonEnd };
+      }
+      
+      return { found: false, endIndex: startIndex };
+    }
+  }
+
+  /**
+   * Try to extract a text line starting from the given index
+   */
+  private tryExtractTextLine(startIndex: number): { found: boolean; line?: string; endIndex: number } {
+    const remaining = this.jsonBuffer.substring(startIndex);
+    const newlineIndex = remaining.indexOf('\n');
+    
+    if (newlineIndex === -1) {
+      // No complete line found
+      return { found: false, endIndex: startIndex };
+    }
+    
+    const line = remaining.substring(0, newlineIndex).trim();
+    const endIndex = startIndex + newlineIndex + 1;
+    
+    if (line.length > 0) {
+      return { found: true, line, endIndex };
+    }
+    
+    // Empty line, skip it
+    return { found: false, endIndex };
+  }
+
+  /**
+   * Handle buffer overflow protection
+   */
+  private handleBufferOverflow(): void {
+    const maxBufferSize = 1024 * 1024; // 1MB max buffer size
+    
+    if (this.jsonBuffer.length > maxBufferSize) {
+      this.logger.warn(`Buffer overflow detected. Buffer size: ${this.jsonBuffer.length}. Truncating...`);
+      
+      // Keep only the last portion of the buffer
+      const keepSize = Math.floor(maxBufferSize / 2);
+      this.jsonBuffer = this.jsonBuffer.substring(this.jsonBuffer.length - keepSize);
+      this.lastProcessedIndex = 0;
+      this.malformedJsonAttempts = 0;
+    }
+  }
+
+  /**
+   * Handle JSON messages from Claude with enhanced validation
    */
   private handleJsonMessage(message: any): void {
+    // Validate message before processing
+    if (!this.validateJsonMessage(message)) {
+      this.logger.warn('Discarding invalid JSON message');
+      return;
+    }
+
     this.emit('message', message);
     
     switch (message.type) {
@@ -166,8 +378,15 @@ export class ClaudeCodePTYController extends EventEmitter {
       case 'tool_use':
         this.emit('tool_use', message);
         break;
+      case 'stream':
+      case 'progress':
+      case 'status':
+        // Handle streaming and progress messages
+        this.emit(message.type, message);
+        break;
       default:
         this.logger.debug(`Received message type: ${message.type}`);
+        this.emit('unknown_message', message);
     }
   }
 
@@ -194,14 +413,44 @@ export class ClaudeCodePTYController extends EventEmitter {
   }
 
   /**
-   * Check if response is complete
+   * Check if response is complete with enhanced pattern detection
    */
   private isResponseComplete(line: string): boolean {
-    // Look for common completion patterns
-    return line.endsWith('>>>') ||
-           line.endsWith('Claude>') ||
-           line.includes('Ready for next prompt') ||
-           (this.responseBuffer.length > 0 && line === '');
+    const trimmedLine = line.trim();
+    
+    // Enhanced completion patterns
+    const completionPatterns = [
+      />>>$/,                                  // Standard prompt ending
+      /Claude>\s*$/,                          // Claude prompt
+      /Ready for next prompt/i,               // Ready message
+      /Finished\.|Complete\.|Done\./,         // Explicit completion words
+      /\[DONE\]|\[COMPLETE\]|\[FINISHED\]/i, // Bracketed completion indicators
+      /^---\s*$/,                            // Separator line
+      /^\*\*\* End of response \*\*\*$/,     // Explicit end marker
+    ];
+    
+    // Check against all regex patterns
+    for (const pattern of completionPatterns) {
+      if (pattern.test(trimmedLine)) {
+        return true;
+      }
+    }
+    
+    // Check for empty line after substantial content
+    if (trimmedLine === '' && this.responseBuffer.length > 100) {
+      return true;
+    }
+    
+    // Check for response timeout completion
+    if (this.responseBuffer.length > 10000) { // Large response threshold
+      const lastLines = this.responseBuffer.split('\n').slice(-3);
+      const hasRepeatedEmptyLines = lastLines.every(l => l.trim() === '');
+      if (hasRepeatedEmptyLines) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   /**
@@ -355,12 +604,196 @@ export class ClaudeCodePTYController extends EventEmitter {
   }
 
   /**
+   * Handle buffer recovery from malformed data
+   */
+  private recoverFromMalformedBuffer(): void {
+    this.logger.warn('Attempting buffer recovery from malformed data');
+    
+    // Try to find the last valid position
+    let lastValidPos = 0;
+    const cleanBuffer = this.jsonBuffer;
+    
+    for (let i = cleanBuffer.length - 1; i >= 0; i--) {
+      const char = cleanBuffer[i];
+      if (char === '}' || char === '\n') {
+        lastValidPos = i + 1;
+        break;
+      }
+    }
+    
+    if (lastValidPos > 0) {
+      this.logger.info(`Recovered buffer from position ${lastValidPos}`);
+      this.jsonBuffer = cleanBuffer.substring(lastValidPos);
+    } else {
+      this.logger.warn('Full buffer reset required');
+      this.resetBuffers();
+    }
+  }
+
+  /**
+   * Get buffer statistics for debugging
+   */
+  getBufferStats(): {
+    bufferSize: number;
+    jsonBufferSize: number;
+    responseBufferSize: number;
+    pendingMessages: number;
+    malformedAttempts: number;
+  } {
+    return {
+      bufferSize: this.buffer.length,
+      jsonBufferSize: this.jsonBuffer.length,
+      responseBufferSize: this.responseBuffer.length,
+      pendingMessages: this.pendingMessages.length,
+      malformedAttempts: this.malformedJsonAttempts,
+    };
+  }
+
+  /**
+   * Force flush all buffers and emit pending messages
+   */
+  flushBuffers(): void {
+    this.logger.debug('Force flushing all buffers');
+    
+    // Process any remaining data in buffers
+    if (this.jsonBuffer.trim().length > 0) {
+      this.extractCompleteMessages();
+    }
+    
+    // Complete any pending response if it exists
+    if (this.responseBuffer.trim().length > 0 && this.currentPromptResolve) {
+      this.completeCurrentPrompt(this.responseBuffer);
+      this.responseBuffer = '';
+    }
+    
+    // Emit any pending messages
+    for (const message of this.pendingMessages) {
+      this.emit('message', message);
+    }
+    this.pendingMessages = [];
+  }
+
+  /**
+   * Validate JSON structure and content
+   */
+  private validateJsonMessage(message: any): boolean {
+    // Basic structure validation
+    if (typeof message !== 'object' || message === null) {
+      return false;
+    }
+
+    // Required fields validation (adjust based on Claude's actual output format)
+    const validTypes = ['result', 'error', 'ready', 'tool_use', 'stream', 'progress', 'status'];
+    if (!message.type || !validTypes.includes(message.type)) {
+      this.logger.debug(`Invalid message type: ${message.type}`);
+      return false;
+    }
+
+    // Additional validation based on message type
+    switch (message.type) {
+      case 'result':
+        return message.hasOwnProperty('content') || message.hasOwnProperty('data');
+      case 'error':
+        return message.hasOwnProperty('error') || message.hasOwnProperty('message');
+      case 'tool_use':
+        return message.hasOwnProperty('tool') && message.hasOwnProperty('parameters');
+      default:
+        return true; // Allow other types to pass through
+    }
+  }
+
+  /**
+   * Handle streaming JSON data that may be split across multiple buffers
+   */
+  private handleStreamingJson(jsonText: string): { complete: boolean; messages: any[] } {
+    const messages: any[] = [];
+    let remaining = jsonText;
+    
+    while (remaining.length > 0) {
+      const trimmed = remaining.trim();
+      if (!trimmed.startsWith('{')) {
+        break;
+      }
+      
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+      let messageEnd = -1;
+      
+      for (let i = 0; i < trimmed.length; i++) {
+        const char = trimmed[i];
+        
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        
+        if (char === '\\') {
+          escaped = true;
+          continue;
+        }
+        
+        if (char === '"') {
+          inString = !inString;
+          continue;
+        }
+        
+        if (inString) {
+          continue;
+        }
+        
+        if (char === '{') {
+          depth++;
+        } else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            messageEnd = i + 1;
+            break;
+          }
+        }
+      }
+      
+      if (messageEnd === -1) {
+        // Incomplete message, return what we have
+        break;
+      }
+      
+      const messageText = trimmed.substring(0, messageEnd);
+      try {
+        const message = JSON.parse(messageText);
+        if (this.validateJsonMessage(message)) {
+          messages.push(message);
+        } else {
+          this.logger.warn(`Invalid message structure: ${messageText.substring(0, 100)}...`);
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to parse streaming JSON: ${error}`);
+        break;
+      }
+      
+      remaining = trimmed.substring(messageEnd);
+    }
+    
+    return { complete: remaining.trim().length === 0, messages };
+  }
+
+  /**
    * Close the PTY process
    */
   close(): void {
+    // Flush buffers before closing
+    this.flushBuffers();
+    
     if (this.ptyProcess) {
       this.ptyProcess.kill();
       this.ptyProcess = undefined;
+    }
+    
+    // Clean up any pending promises
+    if (this.currentPromptReject) {
+      this.currentPromptReject(new Error('PTY process closed'));
+      this.currentPromptResolve = undefined;
+      this.currentPromptReject = undefined;
     }
   }
 

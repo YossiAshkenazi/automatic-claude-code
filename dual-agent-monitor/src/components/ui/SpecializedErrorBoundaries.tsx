@@ -46,13 +46,6 @@ export function WebSocketErrorBoundary({ children, onError, showDetails }: Speci
   return (
     <ErrorBoundary
       fallback={fallback}
-      name="WebSocket Connection"
-      category="websocket"
-      level="warning"
-      retryable={true}
-      autoRecover={true}
-      maxRetries={5}
-      retryDelay={3000}
       onError={onError}
       showDetails={showDetails}
     >
@@ -78,12 +71,6 @@ export function SessionListErrorBoundary({ children, onError, showDetails }: Spe
   return (
     <ErrorBoundary
       fallback={fallback}
-      name="Session List"
-      category="data"
-      level="error"
-      retryable={true}
-      autoRecover={true}
-      maxRetries={3}
       onError={onError}
       showDetails={showDetails}
     >
@@ -124,10 +111,6 @@ export function AnalyticsErrorBoundary({ children, onError, showDetails }: Speci
   return (
     <ErrorBoundary
       fallback={fallback}
-      name="Analytics Dashboard"
-      category="rendering"
-      level="warning"
-      retryable={true}
       onError={onError}
       showDetails={showDetails}
     >
@@ -174,11 +157,6 @@ export function DataErrorBoundary({ children, onError, showDetails }: Specialize
   return (
     <ErrorBoundary
       fallback={fallback}
-      name="Data Layer"
-      category="api"
-      level="error"
-      retryable={true}
-      autoRecover={false} // Don't auto-recover database errors
       onError={onError}
       showDetails={showDetails}
     >
@@ -211,12 +189,6 @@ export function SidebarErrorBoundary({ children, onError, showDetails }: Special
   return (
     <ErrorBoundary
       fallback={fallback}
-      name="Sidebar Navigation"
-      category="rendering"
-      level="warning"
-      retryable={true}
-      autoRecover={true}
-      maxRetries={2}
       onError={onError}
       showDetails={showDetails}
     >
@@ -259,10 +231,6 @@ export function SettingsErrorBoundary({ children, onError, showDetails }: Specia
   return (
     <ErrorBoundary
       fallback={fallback}
-      name="Settings Panel"
-      category="rendering"
-      level="warning"
-      retryable={true}
       onError={onError}
       showDetails={showDetails}
     >
@@ -335,11 +303,6 @@ export function ComponentErrorBoundary({
   return (
     <ErrorBoundary
       fallback={fallback}
-      name={componentName}
-      category="rendering"
-      level="error"
-      retryable={true}
-      autoRecover={true}
       onError={onError}
       showDetails={showDetails}
     >

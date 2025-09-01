@@ -115,7 +115,7 @@ export class BrowserAuthDetector {
         }
       }
     } catch (error) {
-      this.logger.debug('Error checking .env files:', error);
+      this.logger.debug('Error checking .env files:', error instanceof Error ? error.message : String(error));
     }
 
     return false;
@@ -148,14 +148,14 @@ export class BrowserAuthDetector {
           this.logger.debug(`Claude CLI test result: ${testResult.substring(0, 100)}...`);
           return isAuthenticated;
         } catch (testError) {
-          this.logger.debug('Claude CLI test command failed:', testError);
+          this.logger.debug('Claude CLI test command failed:', testError instanceof Error ? testError.message : String(testError));
           return false;
         }
       }
       
       return false;
     } catch (error) {
-      this.logger.debug('Claude CLI version check failed:', error);
+      this.logger.debug('Claude CLI version check failed:', error instanceof Error ? error.message : String(error));
       return false;
     }
   }
@@ -248,7 +248,7 @@ export class BrowserAuthDetector {
 
       return false;
     } catch (error) {
-      this.logger.debug('Claude connection test failed:', error);
+      this.logger.debug(`Claude connection test failed: ${error instanceof Error ? error.message : String(error)}`);
       return false;
     }
   }

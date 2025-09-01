@@ -1487,6 +1487,39 @@ async function main() {
       }
     });
 
+  // Browser session management command
+  program
+    .command('browser')
+    .description('Manage browser sessions and authentication')
+    .option('--check', 'Check browser session status')
+    .option('--status', 'Show detailed browser status')
+    .option('--clear-cache', 'Clear browser cache')
+    .option('--reset', 'Reset browser sessions')
+    .option('--monitor', 'Monitor browser sessions')
+    .action(async (options) => {
+      const app = new AutomaticClaudeCode();
+      
+      try {
+        if (options.check) {
+          await app['handleBrowserSessionCheck']();
+        } else if (options.status) {
+          await app['handleBrowserStatus']();
+        } else if (options.clearCache) {
+          await app['handleClearBrowserCache']();
+        } else if (options.reset) {
+          await app['handleResetBrowserSessions']();
+        } else if (options.monitor) {
+          await app['handleMonitorBrowserSessions']();
+        } else {
+          // Default to showing status
+          await app['handleBrowserStatus']();
+        }
+      } catch (error) {
+        console.error(chalk.red('Browser command failed:'), error);
+        process.exit(1);
+      }
+    });
+
   program.parse();
 }
 

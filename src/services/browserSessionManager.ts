@@ -109,7 +109,7 @@ export class BrowserSessionManager {
       };
 
     } catch (error) {
-      this.logger.error('Error checking browser sessions:', error);
+      this.logger.error('Error checking browser sessions:', error instanceof Error ? error.message : String(error));
       return {
         hasActiveSessions: false,
         sessionsFound: [],
@@ -151,14 +151,14 @@ export class BrowserSessionManager {
             } : undefined
           };
         } catch (error) {
-          this.logger.debug(`Chrome check failed for ${browser}:`, error);
+          this.logger.debug(`Chrome check failed for ${browser}:`, error instanceof Error ? error.message : String(error));
           continue;
         }
       }
 
       return null;
     } catch (error) {
-      this.logger.debug('Chrome session check failed:', error);
+      this.logger.debug('Chrome session check failed:', error instanceof Error ? error.message : String(error));
       return null;
     }
   }
@@ -187,7 +187,7 @@ export class BrowserSessionManager {
         } : undefined
       };
     } catch (error) {
-      this.logger.debug('Firefox session check failed:', error);
+      this.logger.debug('Firefox session check failed:', error instanceof Error ? error.message : String(error));
       return null;
     }
   }
@@ -216,7 +216,7 @@ export class BrowserSessionManager {
         } : undefined
       };
     } catch (error) {
-      this.logger.debug('Edge session check failed:', error);
+      this.logger.debug('Edge session check failed:', error instanceof Error ? error.message : String(error));
       return null;
     }
   }
@@ -245,7 +245,7 @@ export class BrowserSessionManager {
         } : undefined
       };
     } catch (error) {
-      this.logger.debug('Safari session check failed:', error);
+      this.logger.debug('Safari session check failed:', error instanceof Error ? error.message : String(error));
       return null;
     }
   }
@@ -298,7 +298,7 @@ export class BrowserSessionManager {
 
       return processes;
     } catch (error) {
-      this.logger.debug(`Error finding processes for ${browserName}:`, error);
+      this.logger.debug(`Error finding processes for ${browserName}:`, error instanceof Error ? error.message : String(error));
       return [];
     }
   }
@@ -321,7 +321,7 @@ export class BrowserSessionManager {
         p.command.toLowerCase().includes('anthropic')
       );
     } catch (error) {
-      this.logger.debug(`Error checking Chrome Claude tabs for ${browser}:`, error);
+      this.logger.debug(`Error checking Chrome Claude tabs for ${browser}:`, error instanceof Error ? error.message : String(error));
       return false;
     }
   }
@@ -339,7 +339,7 @@ export class BrowserSessionManager {
       // For now, we'll assume if Claude tabs are open, there's potential for authentication
       return await this.checkChromeClaudeTabs(browser);
     } catch (error) {
-      this.logger.debug(`Error checking Chrome authentication for ${browser}:`, error);
+      this.logger.debug(`Error checking Chrome authentication for ${browser}:`, error instanceof Error ? error.message : String(error));
       return false;
     }
   }
@@ -358,7 +358,7 @@ export class BrowserSessionManager {
         p.command.toLowerCase().includes('anthropic')
       );
     } catch (error) {
-      this.logger.debug('Error checking Firefox Claude tabs:', error);
+      this.logger.debug('Error checking Firefox Claude tabs:', error instanceof Error ? error.message : String(error));
       return false;
     }
   }
@@ -371,7 +371,7 @@ export class BrowserSessionManager {
       // Similar to Chrome, would need to check session storage/cookies
       return await this.checkFirefoxClaudeTabs();
     } catch (error) {
-      this.logger.debug('Error checking Firefox authentication:', error);
+      this.logger.debug('Error checking Firefox authentication:', error instanceof Error ? error.message : String(error));
       return false;
     }
   }
@@ -402,7 +402,7 @@ export class BrowserSessionManager {
       const tabCount = parseInt(stdout.trim());
       return tabCount > 0;
     } catch (error) {
-      this.logger.debug('Error checking Safari Claude tabs:', error);
+      this.logger.debug('Error checking Safari Claude tabs:', error instanceof Error ? error.message : String(error));
       return false;
     }
   }

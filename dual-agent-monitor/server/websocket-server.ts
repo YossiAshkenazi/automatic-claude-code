@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
-import { PostgresDatabaseService } from './database/PostgresDatabaseService.js';
+import { InMemoryDatabaseService } from './database/InMemoryDatabaseService.js';
 import { DatabaseInterface } from './database/DatabaseInterface.js';
 import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from './types.js';
 import { AnalyticsService } from './analytics/AnalyticsService.js';
@@ -20,16 +20,9 @@ app.use(express.json());
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Initialize database service and analytics with PostgreSQL connection
-const dbService: DatabaseInterface = new PostgresDatabaseService({
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.POSTGRES_PORT || '5434'),
-  database: process.env.POSTGRES_DB || 'dual_agent_monitor',
-  username: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'password123',
-  ssl: process.env.POSTGRES_SSL === 'true',
-  maxConnections: parseInt(process.env.POSTGRES_MAX_CONNECTIONS || '20')
-});
+// Initialize in-memory database service for testing
+console.log('Using in-memory database for development/testing');
+const dbService = new InMemoryDatabaseService() as DatabaseInterface;
 const analyticsService = new AnalyticsService(dbService as any);
 const replayManager = new SessionReplayManager(dbService as any);
 const mlService = new MLService(dbService as any, {
@@ -1619,7 +1612,7 @@ app.get('/api/replay/status', async (req, res) => {
 
 
 // Enhanced port configuration with proper environment variable handling
-const DEFAULT_PORT = 4005;
+const DEFAULT_PORT = 4001;
 const PORT = parseInt(process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT.toString(), 10);
 
 server.listen(PORT, async () => {

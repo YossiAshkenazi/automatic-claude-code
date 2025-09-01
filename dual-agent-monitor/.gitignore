@@ -53,5 +53,8 @@ data/backups/
 *.sqlite
 *.sqlite3
 
+# PostgreSQL data files
+data/postgres/pgdata/
+
 # Database connection files
 database.url

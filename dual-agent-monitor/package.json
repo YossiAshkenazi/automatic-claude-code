@@ -1,5 +1,6 @@
 {
   "name": "dual-agent-monitor",
+  "type": "module",
   "version": "1.0.0",
   "description": "Web UI for monitoring dual-agent Claude Code system",
   "main": "server/websocket-server.js",

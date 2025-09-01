@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { ClaudeUtils } from '../claudeUtils';
 import { Logger } from '../logger';
 import { ACCPTYManager } from './ptyController';
+import { InteractiveClaudeExecutor } from './interactiveClaudeExecutor';
 
 /**
  * Custom error types for type-driven error handling
@@ -92,11 +93,13 @@ export interface ClaudeExecutionResult {
 export class ClaudeExecutor {
   private logger: Logger;
   private ptyManager: ACCPTYManager;
+  private interactiveExecutor: InteractiveClaudeExecutor;
   private activePTYSessions: Map<string, string> = new Map();
 
   constructor(logger?: Logger) {
     this.logger = logger || new Logger();
     this.ptyManager = new ACCPTYManager(this.logger);
+    this.interactiveExecutor = new InteractiveClaudeExecutor(this.logger);
   }
 
   /**
@@ -109,6 +112,28 @@ export class ClaudeExecutor {
     prompt: string, 
     options: ClaudeExecutionOptions = {}
   ): Promise<ClaudeExecutionResult> {
+    // Check if we should use interactive mode (browser auth)
+    // If no API key is set, use interactive mode
+    const hasApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+    
+    if (!hasApiKey) {
+      // Use interactive mode (browser authenticated)
+      try {
+        const result = await this.interactiveExecutor.executeClaudeInteractive(prompt, {
+          model: options.model as 'sonnet' | 'opus' | undefined,
+          workDir: options.workDir,
+          sessionId: options.sessionId,
+          verbose: options.verbose,
+          timeout: options.timeout
+        });
+        return result;
+      } catch (error) {
+        // If interactive mode fails, fall back to regular mode
+        this.logger.debug('Interactive mode failed, falling back to headless mode');
+      }
+    }
+    
+    // Original headless mode with -p flag (requires API key)
     const args = ['-p', prompt];
     
     // Build arguments array

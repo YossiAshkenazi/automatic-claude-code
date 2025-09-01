@@ -10,13 +10,20 @@ export interface ClaudeCommandInfo {
 
 export class ClaudeUtils {
   static getClaudeCommand(): ClaudeCommandInfo {
-    // FORCE NPX USAGE - most reliable, always gets latest version
-    // This bypasses .CMD files and shell scripts that may have issues
+    // First try the authenticated 'claude' command (browser-based auth)
+    try {
+      execSync('claude --version', { stdio: 'ignore', timeout: 5000 });
+      return { command: 'claude', baseArgs: [] };
+    } catch {
+      // Fall back to npx if direct claude command doesn't work
+    }
+    
+    // Try NPX as fallback - for users who prefer API key authentication
     try {
       execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 10000 });
       return { command: 'npx', baseArgs: ['@anthropic-ai/claude-code'] };
     } catch {
-      // Only fall back if npx completely fails
+      // Continue to other fallback methods
     }
     
     // First check if a specific claude path is configured
@@ -74,7 +81,7 @@ export class ClaudeUtils {
       // Continue to other methods
     }
 
-    // Last resort: try basic claude command (could be shell script or .CMD)
+    // Try basic claude command again as last resort
     try {
       execSync('claude --version', { stdio: 'ignore', timeout: 5000 });
       return { command: 'claude', baseArgs: [] };

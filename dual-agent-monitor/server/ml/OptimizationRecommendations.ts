@@ -560,13 +560,13 @@ export class OptimizationRecommendations {
     }
 
     // Underperformer improvement
-    if (clusters.underperformers.sessions.length > 0) {
+    if (clusters.underPerformers.sessions.length > 0) {
       recommendations.push({
         id: `quality-underperform-${Date.now()}`,
         category: 'quality',
         priority: 'high',
         title: 'Improve Underperforming Sessions',
-        description: `Target ${clusters.underperformers.improvementAreas.join(', ')} to lift ${clusters.underperformers.sessions.length} underperforming sessions`,
+        description: `Target ${clusters.underPerformers.improvementAreas.join(', ')} to lift ${clusters.underPerformers.sessions.length} underperforming sessions`,
         expectedImpact: {
           performance: 45,
           errorReduction: 35
@@ -589,12 +589,12 @@ export class OptimizationRecommendations {
         },
         evidence: {
           dataPoints: [
-            { metric: 'underperformer_count', value: clusters.underperformers.sessions.length },
-            { metric: 'avg_score', value: clusters.underperformers.avgScore },
-            { metric: 'improvement_areas', value: clusters.underperformers.improvementAreas }
+            { metric: 'underperformer_count', value: clusters.underPerformers.sessions.length },
+            { metric: 'avg_score', value: clusters.underPerformers.avgScore },
+            { metric: 'improvement_areas', value: clusters.underPerformers.improvementAreas }
           ],
           confidence: 0.85,
-          affectedSessions: clusters.underperformers.sessions
+          affectedSessions: clusters.underPerformers.sessions
         },
         monitoring: {
           metrics: ['underperformer_ratio', 'quality_distribution', 'improvement_rate'],

@@ -52,7 +52,7 @@ interface PerformanceClusters {
     characteristics: Record<string, any>;
     avgScore: number;
   };
-  underperformers: {
+  underPerformers: {
     sessions: string[];
     characteristics: Record<string, any>;
     avgScore: number;
@@ -260,14 +260,14 @@ export const InsightsDashboard: React.FC<InsightsDashboardProps> = ({
             </div>
             <div className="p-4 bg-red-50 rounded-lg border border-red-200">
               <h4 className="font-medium text-red-800">Underperformers</h4>
-              <p className="text-2xl font-bold text-red-900">{clusters.underperformers.sessions.length}</p>
-              <p className="text-sm text-red-700">Avg Score: {clusters.underperformers.avgScore.toFixed(1)}</p>
-              {clusters.underperformers.improvementAreas.length > 0 && (
+              <p className="text-2xl font-bold text-red-900">{clusters.underPerformers.sessions.length}</p>
+              <p className="text-sm text-red-700">Avg Score: {clusters.underPerformers.avgScore.toFixed(1)}</p>
+              {clusters.underPerformers.improvementAreas.length > 0 && (
                 <div className="mt-2">
                   <p className="text-xs font-medium text-red-800">Improvement Areas:</p>
                   <p className="text-xs text-red-700">
-                    {clusters.underperformers.improvementAreas.slice(0, 2).join(', ')}
-                    {clusters.underperformers.improvementAreas.length > 2 && '...'}
+                    {clusters.underPerformers.improvementAreas.slice(0, 2).join(', ')}
+                    {clusters.underPerformers.improvementAreas.length > 2 && '...'}
                   </p>
                 </div>
               )}

@@ -10,12 +10,15 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
+# Install pnpm globally
+RUN npm install -g pnpm
+
 # Copy package files first for better layer caching
 COPY package*.json ./
 COPY pnpm-lock.yaml* ./
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci --include=dev
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
@@ -24,7 +27,7 @@ COPY . .
 RUN echo "{\"version\":\"$VERSION\",\"buildTime\":\"$BUILD_TIME\"}" > build-info.json
 
 # Build the application
-RUN npm run build:validate
+RUN pnpm run build:validate
 
 # Production stage
 FROM node:18-alpine AS production
@@ -43,9 +46,12 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+# Install pnpm globally in production stage
+RUN npm install -g pnpm
+
 # Install only production dependencies
-RUN npm ci --only=production --no-optional && \
-    npm cache clean --force
+RUN pnpm install --prod --frozen-lockfile && \
+    pnpm store prune
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
@@ -66,12 +72,13 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Security: don't run as root
 USER nextjs
 
-# Expose port
-EXPOSE 8080
+# Expose port (align with config)
+EXPOSE 4005
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=8080
+ENV PORT=4005
+ENV WEBSOCKET_SERVER_PORT=4005
 
 # Use tini for proper signal handling
 ENTRYPOINT ["/sbin/tini", "--"]

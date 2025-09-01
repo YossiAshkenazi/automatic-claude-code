@@ -4,8 +4,8 @@ const http = require('http');
 
 const options = {
   host: 'localhost',
-  port: process.env.PORT || 8080,
-  path: '/health',
+  port: process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || 4005,
+  path: '/api/health',
   timeout: 2000,
   method: 'GET'
 };

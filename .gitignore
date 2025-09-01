@@ -10,3 +10,9 @@ output/
 package-lock.json
 pnpm-lock.yaml
 ComeunityOS/
+
+# Test files
+nul
+send-test-session.ps1
+test-websocket.js
+MONITORING-TEST-REPORT.md

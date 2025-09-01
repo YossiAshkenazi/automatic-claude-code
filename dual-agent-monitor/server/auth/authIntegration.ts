@@ -22,8 +22,15 @@ export class AuthIntegration {
   constructor(private db: DatabaseService) {
     this.authManager = new AuthManager(db);
     this.userManager = new UserManager(db);
+    
+    // Ensure JWT_SECRET is set - no fallback allowed for security
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret || jwtSecret === 'your-secret-key') {
+      throw new Error('JWT_SECRET environment variable must be set to a secure value');
+    }
+    
     this.sessionManager = new SessionManager(db, {
-      jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+      jwtSecret: jwtSecret,
       jwtExpiresIn: '15m',
       refreshTokenExpiresIn: '7d'
     });
@@ -67,8 +74,13 @@ export class AuthIntegration {
     app.use(cookieParser());
 
     // Session management
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (!sessionSecret || sessionSecret === 'your-session-secret') {
+      throw new Error('SESSION_SECRET environment variable must be set to a secure value');
+    }
+    
     app.use(session({
-      secret: process.env.SESSION_SECRET || 'your-session-secret',
+      secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
       cookie: {

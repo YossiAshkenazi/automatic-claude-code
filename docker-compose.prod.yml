@@ -39,7 +39,7 @@ services:
     environment:
       - POSTGRES_DB=dual_agent_monitor
       - POSTGRES_USER=acc_user
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-acc_secure_password_123}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
       - POSTGRES_INITDB_ARGS=--auth-local=trust --auth-host=md5
     volumes:
       - postgres_data:/var/lib/postgresql/data

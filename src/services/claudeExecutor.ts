@@ -6,6 +6,92 @@ import { ACCPTYManager } from './ptyController';
 import { SDKClaudeExecutor } from './sdkClaudeExecutor';
 
 /**
+ * Circuit breaker pattern for preventing cascading failures
+ */
+export class CircuitBreaker {
+  private failureCount: number = 0;
+  private lastFailureTime: number = 0;
+  private state: 'CLOSED' | 'OPEN' | 'HALF_OPEN' = 'CLOSED';
+  private readonly failureThreshold: number = 5;
+  private readonly recoveryTimeoutMs: number = 60000; // 1 minute
+  private readonly halfOpenMaxAttempts: number = 1;
+  private halfOpenAttempts: number = 0;
+
+  canExecute(): boolean {
+    const now = Date.now();
+    
+    switch (this.state) {
+      case 'CLOSED':
+        return true;
+      case 'OPEN':
+        if (now - this.lastFailureTime >= this.recoveryTimeoutMs) {
+          this.state = 'HALF_OPEN';
+          this.halfOpenAttempts = 0;
+          return true;
+        }
+        return false;
+      case 'HALF_OPEN':
+        return this.halfOpenAttempts < this.halfOpenMaxAttempts;
+    }
+  }
+
+  recordSuccess(): void {
+    this.failureCount = 0;
+    this.state = 'CLOSED';
+    this.halfOpenAttempts = 0;
+  }
+
+  recordFailure(): void {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+    
+    if (this.state === 'HALF_OPEN') {
+      this.state = 'OPEN';
+    } else if (this.failureCount >= this.failureThreshold) {
+      this.state = 'OPEN';
+    }
+    
+    if (this.state !== 'OPEN') {
+      // This was just changed to OPEN above, don't increment attempts
+    }
+  }
+
+  getState(): string {
+    return this.state;
+  }
+}
+
+/**
+ * Execution attempt tracking
+ */
+interface ExecutionAttempt {
+  timestamp: number;
+  success: boolean;
+  error?: string;
+  duration: number;
+}
+
+/**
+ * Enhanced timeout error with more context
+ */
+export class ExecutionTimeoutError extends Error {
+  constructor(timeout: number, phase: string) {
+    super(`Execution timed out after ${timeout}ms during ${phase} phase`);
+    this.name = 'ExecutionTimeoutError';
+  }
+}
+
+/**
+ * Circuit breaker open error
+ */
+export class CircuitBreakerOpenError extends Error {
+  constructor(failureCount: number) {
+    super(`Circuit breaker is OPEN after ${failureCount} consecutive failures. Execution blocked to prevent cascading failures.`);
+    this.name = 'CircuitBreakerOpenError';
+  }
+}
+
+/**
  * Custom error types for type-driven error handling
  */
 export class ProcessTimeoutError extends Error {
@@ -118,6 +204,8 @@ export class ClaudeExecutor {
   private activePTYSessions: Map<string, string> = new Map();
   private maxRetries: number = 3;
   private retryDelay: number = 1000; // ms
+  private circuitBreaker: CircuitBreaker = new CircuitBreaker();
+  private executionHistory: ExecutionAttempt[] = [];
 
   constructor(logger?: Logger) {
     this.logger = logger || new Logger();
@@ -147,12 +235,30 @@ export class ClaudeExecutor {
     options: ClaudeExecutionOptions,
     attempt: number
   ): Promise<ClaudeExecutionResult> {
+    const startTime = Date.now();
+    
+    // Check circuit breaker before attempting execution
+    if (!this.circuitBreaker.canExecute()) {
+      const error = new CircuitBreakerOpenError(this.circuitBreaker['failureCount']);
+      this.recordExecutionAttempt(startTime, false, error.message);
+      throw error;
+    }
+    
+    // Enforce absolute maximum timeout
+    const absoluteTimeout = options.timeout || 300000; // 5 minutes max
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new ExecutionTimeoutError(absoluteTimeout, `attempt ${attempt + 1}`));
+      }, absoluteTimeout);
+    });
+    
     try {
       this.logSDKFlow(`Starting execution attempt ${attempt + 1}/${this.maxRetries + 1}`, {
         hasApiKey: !!(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY),
         workDir: options.workDir,
         model: options.model,
-        sdkAvailable: this.sdkExecutor.isAvailable()
+        sdkAvailable: this.sdkExecutor.isAvailable(),
+        circuitBreakerState: this.circuitBreaker.getState()
       });
 
       // Priority 1: Try SDK execution (works with browser auth, no API key needed)
@@ -194,14 +300,28 @@ export class ClaudeExecutor {
       const hasApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
       if (hasApiKey) {
         this.logger.debug('API key found, using CLI headless mode');
-        return await this.executeHeadless(prompt, options);
+        const result = await Promise.race([
+          this.executeHeadless(prompt, options),
+          timeoutPromise
+        ]);
+        this.recordExecutionAttempt(startTime, true);
+        this.circuitBreaker.recordSuccess();
+        return result;
       }
 
       // Priority 3: CLI interactive mode (fallback)
       this.logger.debug('No API key found, attempting CLI interactive mode');
-      return await this.executeWithBrowserAuth(prompt, options, attempt);
+      const result = await Promise.race([
+        this.executeWithBrowserAuth(prompt, options, attempt),
+        timeoutPromise
+      ]);
+      this.recordExecutionAttempt(startTime, true);
+      this.circuitBreaker.recordSuccess();
+      return result;
       
     } catch (error: any) {
+      this.recordExecutionAttempt(startTime, false, error.message);
+      this.circuitBreaker.recordFailure();
       return this.handleExecutionError(error, prompt, options, attempt);
     }
   }
@@ -321,6 +441,39 @@ export class ClaudeExecutor {
     return new Promise((resolve, reject) => {
       let claudeProcess: ChildProcess;
       let timeoutHandle: NodeJS.Timeout | undefined = undefined;
+      let resolved = false; // Prevent multiple resolutions
+      
+      const cleanup = () => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = undefined;
+        }
+        if (claudeProcess && !claudeProcess.killed) {
+          claudeProcess.kill('SIGTERM');
+          // Force kill after 5 seconds if process doesn't respond
+          setTimeout(() => {
+            if (!claudeProcess.killed) {
+              claudeProcess.kill('SIGKILL');
+            }
+          }, 5000);
+        }
+      };
+      
+      const safeResolve = (result: any) => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          resolve(result);
+        }
+      };
+      
+      const safeReject = (error: any) => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          reject(error);
+        }
+      };
 
       try {
         const { command, baseArgs } = ClaudeUtils.getClaudeCommand();
@@ -346,9 +499,11 @@ export class ClaudeExecutor {
 
         let output = '';
         let errorOutput = '';
+        let lastOutputTime = Date.now();
 
-        // Handle stdout with intelligent logging (from index.ts implementation)
+        // Handle stdout with intelligent logging and stall detection
         claudeProcess.stdout?.on('data', (data) => {
+          lastOutputTime = Date.now();
           const chunk = data.toString();
           output += chunk;
           
@@ -375,6 +530,7 @@ export class ClaudeExecutor {
 
         // Handle stderr with error categorization
         claudeProcess.stderr?.on('data', (data) => {
+          lastOutputTime = Date.now();
           const chunk = data.toString();
           errorOutput += chunk;
           
@@ -394,41 +550,46 @@ export class ClaudeExecutor {
 
         // Handle process completion
         claudeProcess.on('close', (code) => {
-          if (timeoutHandle) {
-            clearTimeout(timeoutHandle);
-          }
-          
           if (code !== 0 && !options.continueOnError) {
             const error = this.categorizeError(errorOutput, code || 0);
-            reject(error);
+            safeReject(error);
           } else {
-            resolve({ output, exitCode: code || 0 });
+            safeResolve({ output, exitCode: code || 0 });
           }
         });
 
         // Handle process errors
         claudeProcess.on('error', (err) => {
-          if (timeoutHandle) {
-            clearTimeout(timeoutHandle);
-          }
-          
           const categorizedError = this.categorizeProcessError(err);
-          reject(categorizedError);
+          safeReject(categorizedError);
         });
 
-        // Setup timeout handling
+        // Setup dual timeout handling: absolute timeout + stall detection
         timeoutHandle = setTimeout(() => {
-          claudeProcess.kill('SIGTERM');
-          reject(new ProcessTimeoutError(timeout));
+          this.logger.warning(`Process timed out after ${timeout}ms`);
+          safeReject(new ProcessTimeoutError(timeout));
         }, timeout);
+        
+        // Stall detection - if no output for extended period, consider it stalled
+        const stallCheckInterval = Math.min(30000, timeout / 4); // Check every 30s or 1/4 of timeout
+        const stallTimeout = Math.min(120000, timeout / 2); // Stall after 2min or 1/2 of timeout
+        
+        const stallChecker = setInterval(() => {
+          const timeSinceLastOutput = Date.now() - lastOutputTime;
+          if (timeSinceLastOutput > stallTimeout) {
+            clearInterval(stallChecker);
+            this.logger.warning(`Process appears stalled (no output for ${timeSinceLastOutput}ms)`);
+            safeReject(new ProcessTimeoutError(timeSinceLastOutput));
+          }
+        }, stallCheckInterval);
+        
+        // Clean up stall checker when process completes
+        claudeProcess.on('close', () => clearInterval(stallChecker));
+        claudeProcess.on('error', () => clearInterval(stallChecker));
 
       } catch (err) {
-        if (timeoutHandle !== undefined) {
-          clearTimeout(timeoutHandle);
-        }
-        
         const categorizedError = this.categorizeProcessError(err as Error);
-        reject(categorizedError);
+        safeReject(categorizedError);
       }
     });
   }
@@ -686,7 +847,24 @@ export class ClaudeExecutor {
   }
 
   /**
-   * Enhanced error handling with user-friendly prompts and retry logic
+   * Record execution attempt for analytics and circuit breaker
+   */
+  private recordExecutionAttempt(startTime: number, success: boolean, error?: string): void {
+    this.executionHistory.push({
+      timestamp: startTime,
+      success,
+      error,
+      duration: Date.now() - startTime
+    });
+    
+    // Keep only last 100 attempts
+    if (this.executionHistory.length > 100) {
+      this.executionHistory.shift();
+    }
+  }
+
+  /**
+   * Enhanced error handling with user-friendly prompts and circuit breaker logic
    */
   private async handleExecutionError(
     error: any, 
@@ -695,6 +873,36 @@ export class ClaudeExecutor {
     attempt: number
   ): Promise<ClaudeExecutionResult> {
     this.logger.error(`Execution attempt ${attempt + 1} failed:`, error.message);
+    
+    // Handle circuit breaker errors with clear user guidance
+    if (error instanceof CircuitBreakerOpenError) {
+      this.logger.error('🔴 Circuit Breaker Protection Activated');
+      this.logger.info('💡 The system has temporarily stopped execution to prevent cascading failures.');
+      this.logger.info('   This happens after multiple consecutive failures.');
+      this.logger.info('   Wait 1 minute and try again, or check system health.');
+      throw error; // Don't retry when circuit breaker is open
+    }
+    
+    // Handle timeout errors with actionable guidance
+    if (error instanceof ExecutionTimeoutError || error instanceof ProcessTimeoutError) {
+      this.logger.error('⏰ Execution Timeout');
+      this.logger.info('💡 Timeout troubleshooting:');
+      this.logger.info('   1. Try a simpler task first');
+      this.logger.info('   2. Increase timeout with --timeout <minutes>');
+      this.logger.info('   3. Check if Claude is responsive in browser');
+      this.logger.info('   4. Verify network connectivity');
+      
+      // Don't retry timeouts immediately - they indicate deeper issues
+      if (attempt >= this.maxRetries) {
+        throw new RetryExhaustedError(this.maxRetries, error.message);
+      }
+      
+      // Exponential backoff for timeouts
+      const timeoutDelay = this.retryDelay * Math.pow(2, attempt) * 2; // Double delay for timeouts
+      this.logger.info(`⏳ Waiting ${timeoutDelay}ms before retry due to timeout...`);
+      await this.delay(timeoutDelay);
+      return this.executeWithRetry(prompt, options, attempt + 1);
+    }
 
     // Check for specific error types and provide user guidance
     if (error instanceof AuthenticationError || error instanceof BrowserAuthRequiredError) {
@@ -705,12 +913,13 @@ export class ClaudeExecutor {
         'Try running the command again'
       ]);
       
-      if (attempt < this.maxRetries) {
+      // Authentication errors should not exhaust retries quickly
+      if (attempt < Math.min(this.maxRetries, 2)) { // Limit auth retries to 2
         this.logger.logRetryAttempt(attempt + 2, this.maxRetries + 1, 'Authentication issue');
-        await this.delay(this.retryDelay);
+        await this.delay(this.retryDelay * 3); // Longer delay for auth issues
         return this.executeWithRetry(prompt, options, attempt + 1);
       }
-      throw new RetryExhaustedError(this.maxRetries, error.message);
+      throw new RetryExhaustedError(attempt + 1, `Authentication failed after ${attempt + 1} attempts. Please ensure you are logged into Claude in your browser.`);
     }
 
     if (error instanceof SDKNotInstalledError || error instanceof ClaudeInstallationError) {
@@ -729,13 +938,15 @@ export class ClaudeExecutor {
       this.logger.info('   1. Check your internet connection');
       this.logger.info('   2. Verify firewall/proxy settings');
       this.logger.info('   3. Try again in a few moments');
+      this.logger.info('   4. Check https://status.anthropic.com for service status');
       
       if (attempt < this.maxRetries) {
-        const exponentialDelay = this.retryDelay * Math.pow(2, attempt);
+        const exponentialDelay = Math.min(this.retryDelay * Math.pow(2, attempt), 30000); // Cap at 30s
         this.logger.info(`⏳ Retrying in ${exponentialDelay}ms (${attempt + 2}/${this.maxRetries + 1})...`);
         await this.delay(exponentialDelay);
         return this.executeWithRetry(prompt, options, attempt + 1);
       }
+      throw new RetryExhaustedError(this.maxRetries, `Network issues persisted after ${this.maxRetries} attempts. Please check your connection and try again later.`);
     }
 
     if (error instanceof APIKeyRequiredError) {
@@ -754,23 +965,34 @@ export class ClaudeExecutor {
       this.logger.info('   1. Wait a few minutes before retrying');
       this.logger.info('   2. Check your usage at https://console.anthropic.com');
       this.logger.info('   3. Consider upgrading your plan if needed');
+      this.logger.info('   4. Try using "sonnet" model instead of "opus"');
       
       if (attempt < this.maxRetries) {
-        const quotaDelay = this.retryDelay * 5; // Longer delay for quota issues
-        this.logger.info(`⏳ Waiting ${quotaDelay}ms before retry...`);
+        const quotaDelay = Math.min(this.retryDelay * 10 * (attempt + 1), 300000); // Progressive delay, cap at 5 minutes
+        this.logger.info(`⏳ Waiting ${quotaDelay}ms before retry due to quota limits...`);
         await this.delay(quotaDelay);
         return this.executeWithRetry(prompt, options, attempt + 1);
       }
+      throw new RetryExhaustedError(this.maxRetries, `Rate limits persisted after ${this.maxRetries} attempts. Please wait longer or check your quota at console.anthropic.com`);
     }
 
-    // For unrecognized errors, provide generic retry logic
+    // For unrecognized errors, provide generic retry logic with improved guidance
     if (attempt < this.maxRetries && !this.isNonRetryableError(error)) {
       this.logger.warning(`🔄 Retrying execution (${attempt + 2}/${this.maxRetries + 1})`);
-      await this.delay(this.retryDelay);
+      this.logger.info('💡 Generic retry troubleshooting:');
+      this.logger.info('   1. Try a simpler or more specific prompt');
+      this.logger.info('   2. Check that Claude is responding in your browser');
+      this.logger.info('   3. Verify system resources (CPU, memory)');
+      this.logger.info('   4. Consider restarting the process');
+      
+      const adaptiveDelay = this.retryDelay + (attempt * 1000); // Gentle progressive delay
+      await this.delay(adaptiveDelay);
       return this.executeWithRetry(prompt, options, attempt + 1);
     }
 
-    throw new RetryExhaustedError(this.maxRetries, error.message);
+    // Final failure with comprehensive error message
+    const errorSummary = this.generateErrorSummary(error, attempt + 1);
+    throw new RetryExhaustedError(this.maxRetries, errorSummary);
   }
 
   /**
@@ -793,7 +1015,36 @@ export class ClaudeExecutor {
            error instanceof SDKNotInstalledError ||
            error instanceof APIKeyRequiredError ||
            error instanceof FileAccessError ||
+           error instanceof CircuitBreakerOpenError ||
            (error instanceof AuthenticationError && error.message.includes('invalid token'));
+  }
+  
+  /**
+   * Generate comprehensive error summary for final failure
+   */
+  private generateErrorSummary(error: any, totalAttempts: number): string {
+    const recentFailures = this.executionHistory
+      .filter(attempt => !attempt.success && (Date.now() - attempt.timestamp) < 300000) // Last 5 minutes
+      .slice(-5); // Last 5 failures
+    
+    let summary = `Execution failed after ${totalAttempts} attempts. Last error: ${error.message}`;
+    
+    if (recentFailures.length > 1) {
+      summary += `\n\nRecent failure pattern (last ${recentFailures.length} failures):`;
+      recentFailures.forEach((failure, index) => {
+        const timeAgo = Math.round((Date.now() - failure.timestamp) / 1000);
+        summary += `\n  ${index + 1}. ${timeAgo}s ago: ${failure.error?.substring(0, 100) || 'Unknown error'}`;
+      });
+    }
+    
+    summary += `\n\nCircuit breaker state: ${this.circuitBreaker.getState()}`;
+    summary += `\n\nNext steps:`;
+    summary += `\n  1. Wait a few minutes before retrying`;
+    summary += `\n  2. Check system health and Claude browser session`;
+    summary += `\n  3. Try a simpler task to verify basic functionality`;
+    summary += `\n  4. Use --verbose flag for detailed debugging`;
+    
+    return summary;
   }
 
   /**
@@ -824,10 +1075,51 @@ export class ClaudeExecutor {
   }
 
   /**
+   * Get execution statistics for monitoring
+   */
+  public getExecutionStats(): {
+    totalAttempts: number;
+    successRate: number;
+    averageDuration: number;
+    circuitBreakerState: string;
+    recentFailures: number;
+  } {
+    const total = this.executionHistory.length;
+    const successful = this.executionHistory.filter(a => a.success).length;
+    const averageDuration = total > 0 
+      ? Math.round(this.executionHistory.reduce((sum, a) => sum + a.duration, 0) / total)
+      : 0;
+    const recentFailures = this.executionHistory
+      .filter(a => !a.success && (Date.now() - a.timestamp) < 300000) // Last 5 minutes
+      .length;
+    
+    return {
+      totalAttempts: total,
+      successRate: total > 0 ? Math.round((successful / total) * 100) : 0,
+      averageDuration,
+      circuitBreakerState: this.circuitBreaker.getState(),
+      recentFailures
+    };
+  }
+  
+  /**
+   * Reset circuit breaker (for administrative use)
+   */
+  public resetCircuitBreaker(): void {
+    this.circuitBreaker = new CircuitBreaker();
+    this.logger.info('Circuit breaker manually reset');
+  }
+
+  /**
    * Cleanup resources on shutdown
    */
   async shutdown(): Promise<void> {
     this.closeAllPTYSessions();
-    this.logger.info('ClaudeExecutor shutdown completed');
+    
+    const stats = this.getExecutionStats();
+    this.logger.info('ClaudeExecutor shutdown completed', {
+      finalStats: stats,
+      totalExecutions: this.executionHistory.length
+    });
   }
 }

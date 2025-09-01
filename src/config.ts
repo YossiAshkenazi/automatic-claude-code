@@ -63,9 +63,9 @@ class ConfigManager {
     
     monitoring: {
       enabled: true,
-      serverUrl: 'http://localhost:4001',
-      webSocketUrl: 'ws://localhost:4001',
-      uiUrl: 'http://localhost:8091',
+      serverUrl: 'http://localhost:4005',
+      webSocketUrl: 'ws://localhost:4005',
+      uiUrl: 'http://localhost:6011',
       autoStartServer: true,
     },
     

@@ -55,7 +55,7 @@ function MobileApp() {
   const [selectedProject, setSelectedProject] = useState<string>('all');
 
   const mobile = useMobile();
-  const { isConnected, lastMessage } = useWebSocket('ws://localhost:4001');
+  const { isConnected, lastMessage } = useWebSocket('ws://localhost:4005');
 
   // Load initial data
   useEffect(() => {

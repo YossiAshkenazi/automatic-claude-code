@@ -16,6 +16,7 @@ import { AgentCoordinator } from './agents/agentCoordinator';
 import { ClaudeUtils } from './claudeUtils';
 import { monitoringManager } from './monitoringManager';
 import { config } from './config';
+import packageInfo from '../package.json';
 import { 
   ClaudeExecutor, 
   ClaudeExecutionOptions,
@@ -28,6 +29,7 @@ import {
   ModelQuotaError,
   RetryExhaustedError
 } from './services/claudeExecutor';
+import { BrowserSessionManager, BrowserSessionStatus } from './services/browserSessionManager';
 import Table from 'cli-table3';
 
 interface LoopOptions {
@@ -54,6 +56,7 @@ class AutomaticClaudeCode {
   private promptBuilder: PromptBuilder;
   private logger: Logger;
   private claudeExecutor: ClaudeExecutor;
+  private browserSessionManager: BrowserSessionManager;
   private iteration: number = 0;
   private sessionHistory: string[] = [];
 
@@ -63,6 +66,7 @@ class AutomaticClaudeCode {
     this.promptBuilder = new PromptBuilder();
     this.logger = new Logger();
     this.claudeExecutor = new ClaudeExecutor(this.logger);
+    this.browserSessionManager = new BrowserSessionManager(this.logger);
   }
 
   private getClaudeCommand(): { command: string; baseArgs: string[] } {
@@ -147,13 +151,16 @@ class AutomaticClaudeCode {
   }
 
   async runLoop(initialPrompt: string, options: LoopOptions): Promise<void> {
-    const maxIterations = options.maxIterations || 10;
+    const maxIterations = Math.min(options.maxIterations || 10, 20); // Hard cap at 20 iterations
     let currentPrompt = initialPrompt;
     let sessionId: string | undefined;
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
+    let lastError: Error | null = null;
     
     console.log(chalk.blue.bold('\n🚀 Starting Automatic Claude Code Loop\n'));
     console.log(chalk.cyan(`Initial Task: ${initialPrompt}`));
-    console.log(chalk.cyan(`Max Iterations: ${maxIterations}`));
+    console.log(chalk.cyan(`Max Iterations: ${maxIterations} (hard-capped at 20)`));
     console.log(chalk.cyan(`Working Directory: ${options.workDir || process.cwd()}`));
     console.log(chalk.cyan(`Session Log: ${this.logger.getLogFilePath()}`));
     console.log(chalk.cyan(`Work Output: ${this.logger.getWorkLogFilePath()}\n`));
@@ -257,6 +264,10 @@ class AutomaticClaudeCode {
           break;
         }
 
+        // Reset consecutive error counter on success
+        consecutiveErrors = 0;
+        lastError = null;
+        
         currentPrompt = this.promptBuilder.buildNextPrompt(
           parsedOutput,
           this.sessionHistory,
@@ -269,6 +280,23 @@ class AutomaticClaudeCode {
         }
 
       } catch (error) {
+        consecutiveErrors++;
+        lastError = error as Error;
+        this.logger.error(`Error in iteration ${this.iteration}/${maxIterations}`, { error: lastError.message });
+        
+        // Check for consecutive error limit
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          console.log(chalk.red.bold(`\n🛑 Stopping after ${maxConsecutiveErrors} consecutive errors`));
+          console.log(chalk.yellow('This prevents infinite error loops and system instability.'));
+          console.log(chalk.cyan('\n📋 Error Recovery Suggestions:'));
+          console.log(chalk.white('  1. Check the specific error details above'));
+          console.log(chalk.white('  2. Try a simpler or more specific task'));
+          console.log(chalk.white('  3. Verify Claude authentication and system health'));
+          console.log(chalk.white('  4. Use --verbose flag for detailed debugging'));
+          this.logger.close();
+          throw new Error(`Execution stopped after ${maxConsecutiveErrors} consecutive errors. Last error: ${lastError.message}`);
+        }
+        
         const handled = this.handleIterationError(error, this.iteration, options);
         
         if (!handled && !options.continueOnError) {
@@ -277,13 +305,39 @@ class AutomaticClaudeCode {
         }
         
         if (handled && options.continueOnError) {
-          currentPrompt = `Previous attempt failed with error: ${(error as Error).message}. Please try a different approach.`;
+          // Add context about consecutive errors to help Claude understand the pattern
+          const errorContext = consecutiveErrors > 1 
+            ? ` (consecutive error ${consecutiveErrors}/${maxConsecutiveErrors})`
+            : '';
+          currentPrompt = `Previous attempt failed with error${errorContext}: ${lastError.message}. Please try a different approach and avoid repeating the same actions.`;
+          
+          // Add additional delay for consecutive errors
+          if (consecutiveErrors > 1) {
+            const errorDelay = 3000 * consecutiveErrors; // Progressive delay
+            console.log(chalk.yellow(`⏳ Waiting ${errorDelay}ms before retry due to consecutive errors...`));
+            await this.delay(errorDelay);
+          }
         }
       }
     }
 
     if (this.iteration >= maxIterations) {
       console.log(chalk.yellow.bold('\n⚠️ Maximum iterations reached.'));
+      console.log(chalk.cyan('\n📊 Loop Statistics:'));
+      console.log(chalk.white(`  • Total iterations: ${this.iteration}/${maxIterations}`));
+      console.log(chalk.white(`  • Consecutive errors at end: ${consecutiveErrors}`));
+      if (lastError) {
+        console.log(chalk.white(`  • Last error: ${lastError.message.substring(0, 100)}...`));
+      }
+      
+      // Get execution stats from claudeExecutor if available
+      const executorStats = (this.claudeExecutor as any).getExecutionStats?.();
+      if (executorStats) {
+        console.log(chalk.cyan('\n📊 Execution Statistics:'));
+        console.log(chalk.white(`  • Success rate: ${executorStats.successRate}%`));
+        console.log(chalk.white(`  • Average duration: ${executorStats.averageDuration}ms`));
+        console.log(chalk.white(`  • Circuit breaker: ${executorStats.circuitBreakerState}`));
+      }
     }
 
     await this.sessionManager.saveSession();
@@ -356,14 +410,14 @@ class AutomaticClaudeCode {
 
     // Handle specific error types with user guidance
     if (error instanceof AuthenticationError || error instanceof BrowserAuthRequiredError) {
-      console.error(chalk.red.bold('\n🔐 Authentication Issue'));
-      console.log(chalk.yellow('This error indicates Claude needs authentication.'));
-      console.log(chalk.cyan('\n📋 To fix this:'));
-      console.log(chalk.white('  1. Open your browser and go to claude.ai'));
+      console.error(chalk.red.bold('\n🔐 Authentication Required'));
+      console.log(chalk.yellow('Claude needs authentication to continue.'));
+      console.log(chalk.cyan('\n🆘 Quick Fix:'));
+      console.log(chalk.white('  1. Open https://claude.ai in your browser'));
       console.log(chalk.white('  2. Log in to your Claude account'));
-      console.log(chalk.white('  3. Keep the browser tab open'));
-      console.log(chalk.white('  4. Run the command again'));
-      console.log(chalk.yellow('\n💡 Alternative: Set ANTHROPIC_API_KEY for headless mode'));
+      console.log(chalk.white('  3. Keep the tab open and try again'));
+      console.log(chalk.cyan('\n💡 Pro Tip: For unattended execution, set ANTHROPIC_API_KEY'));
+      console.log(chalk.gray('     export ANTHROPIC_API_KEY="your-key-from-console.anthropic.com"'));
       return true;
     }
 
@@ -379,13 +433,16 @@ class AutomaticClaudeCode {
     }
 
     if (error instanceof NetworkError) {
-      console.error(chalk.red.bold('\n🌐 Network Issue'));
-      console.log(chalk.yellow('Unable to connect to Claude services.'));
-      console.log(chalk.cyan('\n📋 Troubleshooting:'));
+      console.error(chalk.red.bold('\n🌐 Network Connection Problem'));
+      console.log(chalk.yellow('Cannot reach Claude services. This usually resolves quickly.'));
+      console.log(chalk.cyan('\n🆘 Quick Fix:'));
       console.log(chalk.white('  1. Check your internet connection'));
-      console.log(chalk.white('  2. Verify firewall/proxy settings'));
-      console.log(chalk.white('  3. Try again in a few moments'));
-      console.log(chalk.white('  4. Check https://status.anthropic.com for service status'));
+      console.log(chalk.white('  2. Wait 30 seconds and try again'));
+      console.log(chalk.white('  3. Check https://status.anthropic.com for outages'));
+      console.log(chalk.cyan('\n🔧 If problem persists:'));
+      console.log(chalk.gray('     • Check firewall/proxy settings'));
+      console.log(chalk.gray('     • Try a different network'));
+      console.log(chalk.gray('     • Restart your router/modem'));
       return true;
     }
 
@@ -412,34 +469,190 @@ class AutomaticClaudeCode {
     }
 
     if (error instanceof RetryExhaustedError) {
-      console.error(chalk.red.bold('\n🔄 All Retries Exhausted'));
-      console.log(chalk.yellow('Multiple attempts failed to execute the request.'));
-      console.log(chalk.cyan('\n📋 Next Steps:'));
-      console.log(chalk.white('  1. Check the specific error details above'));
-      console.log(chalk.white('  2. Try a simpler or more specific prompt'));
-      console.log(chalk.white('  3. Ensure Claude is properly authenticated'));
-      console.log(chalk.white('  4. Check your network connection'));
+      console.error(chalk.red.bold('\n🛑 System Unable to Proceed'));
+      console.log(chalk.yellow('All automatic retry attempts have been exhausted.'));
+      console.log(chalk.cyan('\n🆘 Recovery Plan:'));
+      console.log(chalk.white('  1. Wait 2-3 minutes for systems to stabilize'));
+      console.log(chalk.white('  2. Try a simpler task to verify basic functionality'));
+      console.log(chalk.white('  3. Use --verbose flag to see detailed error info'));
+      console.log(chalk.cyan('\n💡 Prevention Tips:'));
+      console.log(chalk.gray('     • Start with smaller, specific tasks'));
+      console.log(chalk.gray('     • Ensure stable internet connection'));
+      console.log(chalk.gray('     • Keep Claude browser session active'));
+      console.log(chalk.gray('     • Check system resources (CPU, memory)'));
       return true;
     }
 
-    // Generic error handling
-    console.error(chalk.red(`\n❌ Error in iteration ${iteration}:`));
+    // Generic error handling with enhanced guidance
+    console.error(chalk.red(`\n❌ Unexpected Error in Iteration ${iteration}:`));
     if (error instanceof Error) {
       console.error(chalk.red(error.message));
       if (options.verbose && error.stack) {
+        console.error(chalk.gray('\nStack trace:'));
         console.error(chalk.gray(error.stack));
       }
     } else {
       console.error(chalk.red(String(error)));
     }
 
-    console.log(chalk.cyan('\n📋 General Troubleshooting:'));
-    console.log(chalk.white('  1. Try a simpler or more specific prompt'));
-    console.log(chalk.white('  2. Check that Claude is authenticated'));
-    console.log(chalk.white('  3. Verify your internet connection'));
-    console.log(chalk.white('  4. Use --verbose flag for more details'));
+    console.log(chalk.cyan('\n🆘 Immediate Actions:'));
+    console.log(chalk.white('  1. Try a simpler, more specific prompt'));
+    console.log(chalk.white('  2. Verify Claude browser session is active'));
+    console.log(chalk.white('  3. Check system resources (Task Manager/Activity Monitor)'));
+    
+    console.log(chalk.cyan('\n🔍 Debugging Tools:'));
+    console.log(chalk.gray('     acc run "your-task" --verbose    # See detailed logs'));
+    console.log(chalk.gray('     acc logs --work                  # View Claude output'));
+    console.log(chalk.gray('     acc monitor --status             # Check system health'));
+    
+    console.log(chalk.cyan('\n🎯 Get Help:'));
+    console.log(chalk.gray('     • Check documentation: README.md'));
+    console.log(chalk.gray('     • Report persistent issues with --verbose output'));
+    console.log(chalk.gray('     • Try acc examples for working command patterns'));
 
     return true; // Allow continuation for generic errors
+  }
+
+  // Browser session management methods
+  async handleBrowserSessionCheck(): Promise<void> {
+    console.log(chalk.blue.bold('\n🔍 Checking Browser Session Status\n'));
+    
+    try {
+      const status = await this.browserSessionManager.checkBrowserSessions();
+      
+      if (status.hasActiveSessions) {
+        console.log(chalk.green('✅ Active Claude browser sessions found!'));
+        console.log(chalk.cyan(`📊 ${status.authenticatedSessions} authenticated session(s) with ${status.claudeTabsOpen} Claude tab(s) open`));
+        
+        if (status.recommendedBrowser) {
+          console.log(chalk.blue(`💡 Best browser: ${status.recommendedBrowser.toUpperCase()}`));
+        }
+        
+        // Show session details
+        console.log(chalk.yellow.bold('\n🌐 Browser Details:'));
+        status.sessionsFound.forEach(session => {
+          const statusIcon = session.isActive ? '🟢' : '🔴';
+          const claudeIcon = session.claudeTabOpen ? '🌟' : '⭕';
+          console.log(`  ${statusIcon} ${session.browser.toUpperCase()} - ${claudeIcon} ${session.claudeTabOpen ? 'Claude tab active' : 'No Claude tab'}`);
+          if (session.authenticatedAt) {
+            console.log(chalk.gray(`     Authenticated: ${session.authenticatedAt.toLocaleString()}`));
+          }
+          if (session.process) {
+            console.log(chalk.gray(`     Process: PID ${session.process.pid}`));
+          }
+        });
+      } else {
+        console.log(chalk.red('❌ No active Claude browser sessions detected'));
+        
+        if (status.issues.length > 0) {
+          console.log(chalk.yellow.bold('\n⚠️  Issues Found:'));
+          status.issues.forEach(issue => {
+            console.log(chalk.red(`  • ${issue}`));
+          });
+        }
+        
+        console.log(chalk.cyan.bold('\n📋 To fix this:'));
+        console.log(chalk.white('  1. Open your browser and go to https://claude.ai'));
+        console.log(chalk.white('  2. Sign in to your Claude account'));
+        console.log(chalk.white('  3. Keep the Claude tab open'));
+        console.log(chalk.white('  4. Run this command again to verify'));
+        
+        if (status.recommendedBrowser) {
+          console.log(chalk.blue(`\n💡 Recommended browser: ${status.recommendedBrowser.toUpperCase()}`));
+        }
+      }
+      
+      process.exit(status.hasActiveSessions ? 0 : 1);
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Error checking browser sessions:'), error);
+      console.log(chalk.yellow('\n💡 Try running with --verbose for more details'));
+      process.exit(1);
+    }
+  }
+
+  async handleBrowserStatus(): Promise<void> {
+    console.log(chalk.blue.bold('\n📊 Browser Session Status\n'));
+    
+    try {
+      const status = await this.browserSessionManager.checkBrowserSessions();
+      
+      // Create status table
+      const table = new Table({
+        head: ['Browser', 'Status', 'Claude Tab', 'Authenticated', 'PID'],
+        colWidths: [12, 10, 12, 15, 10],
+        style: {
+          head: ['cyan'],
+          border: ['gray']
+        }
+      });
+      
+      if (status.sessionsFound.length > 0) {
+        status.sessionsFound.forEach(session => {
+          table.push([
+            session.browser.toUpperCase(),
+            session.isActive ? chalk.green('Active') : chalk.red('Inactive'),
+            session.claudeTabOpen ? chalk.green('Yes') : chalk.red('No'),
+            session.authenticatedAt ? chalk.green('Yes') : chalk.yellow('Unknown'),
+            session.process?.pid?.toString() || 'N/A'
+          ]);
+        });
+      } else {
+        table.push(['No browsers found', '', '', '', '']);
+      }
+      
+      console.log(table.toString());
+      
+      // Summary
+      console.log(chalk.cyan.bold('\n📈 Summary:'));
+      console.log(chalk.white(`• Total browsers: ${status.sessionsFound.length}`));
+      console.log(chalk.white(`• Active sessions: ${status.sessionsFound.filter(s => s.isActive).length}`));
+      console.log(chalk.white(`• Claude tabs: ${status.claudeTabsOpen}`));
+      console.log(chalk.white(`• Authenticated: ${status.authenticatedSessions}`));
+      
+      if (status.recommendedBrowser) {
+        console.log(chalk.blue(`• Recommended: ${status.recommendedBrowser.toUpperCase()}`));
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Error getting browser status:'), error);
+      process.exit(1);
+    }
+  }
+
+  async handleClearBrowserCache(): Promise<void> {
+    console.log(chalk.yellow.bold('\n🧹 Clearing Browser Cache\n'));
+    
+    try {
+      await this.browserSessionManager.clearBrowserCache();
+      console.log(chalk.green('✅ Browser cache cleared successfully'));
+      console.log(chalk.cyan('💡 You may need to re-authenticate with Claude'));
+    } catch (error) {
+      console.error(chalk.red('❌ Error clearing browser cache:'), error);
+      process.exit(1);
+    }
+  }
+
+  async handleResetBrowserSessions(): Promise<void> {
+    console.log(chalk.yellow.bold('\n🔄 Resetting Browser Sessions\n'));
+    
+    try {
+      await this.browserSessionManager.resetBrowserSessions();
+      console.log(chalk.green('✅ Browser sessions reset successfully'));
+      console.log(chalk.cyan('💡 Please re-authenticate with Claude before running tasks'));
+    } catch (error) {
+      console.error(chalk.red('❌ Error resetting browser sessions:'), error);
+      process.exit(1);
+    }
+  }
+
+  async handleMonitorBrowserSessions(): Promise<void> {
+    try {
+      await this.browserSessionManager.monitorBrowserSessions();
+    } catch (error) {
+      console.error(chalk.red('❌ Error monitoring browser sessions:'), error);
+      process.exit(1);
+    }
   }
 
   // Helper method to identify Claude's actual work output
@@ -451,7 +664,7 @@ async function main() {
   program
     .name('automatic-claude-code')
     .description('Run Claude Code in an automated loop for continuous development')
-    .version('1.1.1');
+    .version(packageInfo.version);
 
   program
     .command('run <prompt>')
@@ -470,7 +683,28 @@ async function main() {
     .option('--no-monitoring', 'Disable monitoring server')
     .option('--timeout <minutes>', 'Timeout for each Claude execution in minutes (default: 30)', '30')
     .option('--resume <sessionId>', 'Resume an existing session instead of creating a new one')
+    .option('--browser <browser>', 'Specify browser for authentication (chrome, firefox, safari, edge)')
+    .option('--refresh-browser-session', 'Force browser session refresh before execution')
+    .option('--browser-auth', 'Force browser authentication mode')
+    .option('--api-mode', 'Force API key mode (requires ANTHROPIC_API_KEY)')
+    .option('--check-browser-session', 'Check browser session status and exit')
+    .option('--browser-status', 'Show all browser session status and exit')
+    .option('--clear-browser-cache', 'Clear browser session cache')
+    .option('--reset-browser-sessions', 'Reset all browser sessions')
+    .option('--monitor-browser-sessions', 'Monitor browser session health')
+    .option('--headless-browser', 'Use headless browser mode')
+    .option('--persistent-browser', 'Use persistent browser sessions')
+    .option('--clean-browser', 'Start with clean browser profile')
     .action(async (prompt, options) => {
+      // Handle browser session management commands first
+      if (options.checkBrowserSession || options.browserStatus || 
+          options.clearBrowserCache || options.resetBrowserSessions ||
+          options.monitorBrowserSessions) {
+        console.log(chalk.yellow('Browser session management commands are not yet implemented.'));
+        console.log(chalk.cyan('Available commands: run, dual, examples, monitor, logs, sessions'));
+        return;
+      }
+
       // Start monitoring server if enabled and not disabled
       if (!options.noMonitoring && config.isMonitoringEnabled()) {
         await monitoringManager.startServer();

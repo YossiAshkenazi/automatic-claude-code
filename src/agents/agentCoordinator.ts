@@ -302,10 +302,16 @@ export class AgentCoordinator extends EventEmitter {
    * Execute the main coordination workflow
    */
   private async executeCoordinationWorkflow(options: AgentCoordinatorOptions): Promise<void> {
-    const maxIterations = options.maxIterations || 10;
+    const maxIterations = Math.min(options.maxIterations || 10, 25); // Hard cap at 25
     let currentIteration = 0;
+    let idleIterations = 0;
+    let consecutiveErrors = 0;
+    const maxIdleIterations = 5; // Stop if no progress for 5 iterations
+    const maxConsecutiveErrors = 3;
+    let lastWorkflowState = { ...this.executionContext.workflowState };
 
     this.updateWorkflowPhase('execution');
+    this.logger.info(`Starting coordination workflow (max ${maxIterations} iterations)`);
 
     while (currentIteration < maxIterations && this.isActive) {
       currentIteration++;
@@ -322,34 +328,90 @@ export class AgentCoordinator extends EventEmitter {
         // Validate agents are ready
         if (!this.validateAgentsReady()) {
           this.logger.warning('Agents not ready, waiting...');
-          await this.delay(1000);
+          await this.delay(2000); // Longer wait for agent readiness
           continue;
         }
+        
+        // Check for workflow progress (prevent endless loops)
+        const currentWorkflowState = { ...this.executionContext.workflowState };
+        const hasProgress = this.hasWorkflowProgressed(lastWorkflowState, currentWorkflowState);
+        
+        if (!hasProgress) {
+          idleIterations++;
+          this.logger.warning(`No workflow progress detected (idle iteration ${idleIterations}/${maxIdleIterations})`);
+          
+          if (idleIterations >= maxIdleIterations) {
+            this.logger.error('Workflow appears stuck - no progress after multiple iterations');
+            this.logger.info('Workflow State Analysis:', {
+              totalWorkItems: currentWorkflowState.totalWorkItems,
+              completedWorkItems: currentWorkflowState.completedWorkItems,
+              pendingHandoffs: this.handoffQueue.length,
+              activeWorkItems: currentWorkflowState.activeWorkItems.length,
+              phase: currentWorkflowState.phase
+            });
+            
+            // Try to force progress by triggering analysis again
+            if (currentWorkflowState.totalWorkItems === 0) {
+              this.logger.info('Attempting to restart manager analysis due to lack of work items');
+              await this.initiateManagerAnalysis(this.executionContext.userRequest);
+            } else {
+              break; // Exit the loop to prevent infinite cycling
+            }
+          }
+        } else {
+          idleIterations = 0; // Reset idle counter on progress
+          consecutiveErrors = 0; // Reset error counter on progress
+        }
+        
+        lastWorkflowState = currentWorkflowState;
 
         // Coordinate next steps between agents
         await this.coordinateAgentWork();
 
-        // Brief pause between iterations
-        await this.delay(1500);
+        // Progressive delay - longer delays for later iterations
+        const iterationDelay = Math.min(1500 + (currentIteration * 200), 5000);
+        await this.delay(iterationDelay);
 
       } catch (error) {
-        this.logger.error(`Coordination iteration ${currentIteration} failed`, { error });
+        consecutiveErrors++;
+        this.logger.error(`Coordination iteration ${currentIteration} failed (consecutive error ${consecutiveErrors}/${maxConsecutiveErrors})`, { error });
+        
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          this.logger.error('Too many consecutive coordination errors - stopping workflow');
+          throw new Error(`Coordination failed after ${maxConsecutiveErrors} consecutive errors. Last error: ${error instanceof Error ? error.message : String(error)}`);
+        }
         
         if (!options.continueOnError) {
           throw error;
         }
+        
+        // Add delay for error recovery
+        await this.delay(3000 * consecutiveErrors);
       }
     }
 
     if (currentIteration >= maxIterations) {
       this.logger.warning('Maximum coordination iterations reached');
-      this.logger.info('Final workflow state', {
+      this.emitCoordinationEvent('WORKFLOW_TRANSITION', 'manager', {
+        reason: 'max_iterations_reached',
+        currentIteration,
+        maxIterations
+      });
+    }
+    
+    // Final workflow analysis
+    this.logger.info('Coordination workflow completed', {
+      totalIterations: currentIteration,
+      finalState: {
         totalWorkItems: this.executionContext.workflowState.totalWorkItems,
         completedWorkItems: this.executionContext.workflowState.completedWorkItems,
         pendingHandoffs: this.handoffQueue.length,
-        pendingWorkItems: this.pendingWorkItems.size
-      });
-    }
+        pendingWorkItems: this.pendingWorkItems.size,
+        idleIterations,
+        consecutiveErrors
+      },
+      workflowPhase: this.executionContext.workflowState.phase
+    });
   }
 
   /**
@@ -1458,6 +1520,42 @@ QUALITY REQUIREMENTS:
 
   private generateErrorId(): string {
     return `err-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  }
+
+  /**
+   * Check if workflow has progressed between iterations
+   */
+  private hasWorkflowProgressed(
+    previousState: WorkflowState, 
+    currentState: WorkflowState
+  ): boolean {
+    // Check for progress indicators
+    const progressIndicators = [
+      currentState.completedWorkItems > previousState.completedWorkItems,
+      currentState.totalWorkItems > previousState.totalWorkItems,
+      currentState.activeWorkItems.length !== previousState.activeWorkItems.length,
+      currentState.phase !== previousState.phase,
+      currentState.overallProgress > previousState.overallProgress
+    ];
+    
+    const hasProgress = progressIndicators.some(indicator => indicator);
+    
+    if (!hasProgress) {
+      this.logger.debug('No workflow progress detected', {
+        previous: {
+          totalWorkItems: previousState.totalWorkItems,
+          completedWorkItems: previousState.completedWorkItems,
+          phase: previousState.phase
+        },
+        current: {
+          totalWorkItems: currentState.totalWorkItems,
+          completedWorkItems: currentState.completedWorkItems,
+          phase: currentState.phase
+        }
+      });
+    }
+    
+    return hasProgress;
   }
 
   private delay(ms: number): Promise<void> {

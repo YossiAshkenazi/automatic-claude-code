@@ -1,0 +1,3 @@
+# Spec Summary (Lite)
+
+Implement comprehensive Docker container monitoring integrated with the existing dual-agent monitoring dashboard to provide real-time visibility into containerized deployments. The system will track container health, resource usage (CPU, memory, disk, network), and aggregate logs with search capabilities. This enables developers to quickly identify issues, optimize resource allocation, and debug problems across the distributed container environment through a unified interface with 7-day data retention.

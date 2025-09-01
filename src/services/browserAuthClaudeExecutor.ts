@@ -134,7 +134,9 @@ export class BrowserAuthClaudeExecutor {
                 if (options.verbose) {
                   this.logger.debug('Sending prompt to Claude...');
                 }
+                // Send prompt with extra newline to ensure it's submitted
                 this.claudeProcess.stdin.write(prompt + '\n');
+                // Don't send extra newlines or end stdin yet
                 responseStarted = false;
                 responseBuffer = '';
               }
@@ -159,6 +161,8 @@ export class BrowserAuthClaudeExecutor {
                   !line.includes('Human:') &&
                   !line.includes('You:')) {
                 responseBuffer += line + '\n';
+                // Reset response timer when we get new content
+                waitForResponse();
               }
             }
           }
@@ -182,9 +186,29 @@ export class BrowserAuthClaudeExecutor {
           }
         });
 
+        // Add a response completion timer
+        let responseTimer: NodeJS.Timeout | undefined;
+        const waitForResponse = () => {
+          if (responseTimer) clearTimeout(responseTimer);
+          responseTimer = setTimeout(() => {
+            // After no new output for 3 seconds, consider response complete
+            if (promptSent && responseBuffer.trim()) {
+              if (timeoutHandle) clearTimeout(timeoutHandle);
+              if (this.claudeProcess) {
+                this.claudeProcess.kill('SIGTERM');
+              }
+              resolve({
+                output: responseBuffer.trim(),
+                exitCode: 0
+              });
+            }
+          }, 3000);
+        };
+
         // Handle process exit
         this.claudeProcess.on('exit', (code, signal) => {
           if (timeoutHandle) clearTimeout(timeoutHandle);
+          if (responseTimer) clearTimeout(responseTimer);
           
           // If we got a response, use it
           const finalOutput = responseBuffer.trim() || this.extractResponse(output) || output;
@@ -228,6 +252,7 @@ export class BrowserAuthClaudeExecutor {
             if (options.verbose) {
               this.logger.debug('Sending prompt immediately (resumed session)...');
             }
+            // Send prompt
             this.claudeProcess.stdin.write(prompt + '\n');
           }
         }, 2000);

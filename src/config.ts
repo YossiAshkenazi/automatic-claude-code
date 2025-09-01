@@ -33,6 +33,7 @@ export interface Config {
     qualityGateThreshold: number;
     maxConcurrentTasks: number;
     enableCrossValidation: boolean;
+    usePTY: boolean; // Enable PTY-based execution by default
   };
 }
 
@@ -76,6 +77,7 @@ class ConfigManager {
       qualityGateThreshold: 0.8,
       maxConcurrentTasks: 2,
       enableCrossValidation: true,
+      usePTY: true, // Default to PTY-based execution for better authentication
     },
   };
 

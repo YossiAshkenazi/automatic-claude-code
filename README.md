@@ -2,7 +2,7 @@
 
 A powerful dual-agent system that revolutionizes AI-assisted development through coordinated Claude Code automation. Features a Manager-Worker architecture where specialized agents collaborate to tackle complex development tasks with unprecedented sophistication and reliability.
 
-> ⚠️ **Important**: ACC requires Claude API credits to function. Subscription authentication is not currently supported for automated/headless operation. See [Authentication Requirements](#authentication-requirements) below.
+> ⚠️ **Authentication Note**: ACC supports both subscription-based authentication (via dual-agent PTY mode) and API key authentication (legacy single-agent mode). Dual-agent mode is recommended for Claude Pro/Team subscribers. See [Authentication Requirements](#authentication-requirements) below.
 
 ## Features
 
@@ -15,7 +15,7 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 - 🔄 **Adaptive Workflows**: Dynamic strategy adjustment based on progress
 
 ### 🚀 Core Capabilities
-- 🔄 **Automated Loop Execution**: Runs Claude Code in headless mode continuously
+- 🔄 **Automated Loop Execution**: Runs Claude Code via PTY (dual-agent) or headless mode (single-agent)
 - 📊 **Session Management**: Tracks all iterations, outputs, and progress
 - 🎯 **Smart Prompt Building**: Automatically generates contextual prompts based on previous outputs
 - 🛠️ **Error Recovery**: Detects and attempts to fix errors automatically
@@ -108,41 +108,54 @@ npm install -g automatic-claude-code
 
 ### ⚠️ Critical: API Credits Required
 
-ACC uses Claude Code's headless mode (`-p` flag) for automation, which **requires API credits**. Subscription authentication does not work with headless mode.
+ACC supports two execution modes:
+
+- **Dual-Agent PTY Mode** (Recommended): Uses interactive Claude sessions with subscription authentication
+- **Single-Agent Headless Mode** (Legacy): Uses Claude Code's headless mode (`-p` flag) which requires API credits
 
 #### Setting Up API Authentication
 
-1. **Get API Credits**:
+1. **Authentication Setup**:
+   
+   **For Dual-Agent Mode (Recommended)**: Uses subscription authentication via PTY
+   - Requires an active Claude subscription (Pro or Team)
+   - No API key configuration needed
+   - Automatically uses your subscription credentials
+   
+   **For Single-Agent Mode (Legacy)**: Uses API key authentication
    - Visit [console.anthropic.com](https://console.anthropic.com)
-   - Add credits to your account
+   - Add credits to your account  
    - Generate an API key (starts with `sk-ant-`)
+   - Configure environment variable:
+     ```bash
+     # Linux/macOS
+     export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+     
+     # Windows PowerShell
+     $env:ANTHROPIC_API_KEY = "sk-ant-your-key-here"
+     ```
 
-2. **Configure API Key**:
+2. **Verify Setup**:
    ```bash
-   # Linux/macOS
-   export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+   # Test dual-agent mode (recommended)
+   acc run "create a test file" --dual-agent -i 2 -v
    
-   # Windows PowerShell
-   $env:ANTHROPIC_API_KEY = "sk-ant-your-key-here"
-   
-   # Make it permanent (Windows)
-   [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-your-key-here", "User")
-   ```
-
-3. **Verify Setup**:
-   ```bash
-   # Test Claude CLI with API key
-   claude "hello" -p
-   
-   # Test ACC
+   # Test single-agent mode with API key
    acc run "create a test file" -i 1 -v
    ```
 
-#### Why Subscription Auth Doesn't Work
+#### Authentication Modes Explained
 
-- **Interactive vs Headless**: Subscriptions work only in interactive mode
-- **ACC Requirements**: Automation needs headless mode (`-p` flag)
-- **Current Limitation**: No subscription support for headless operation
+**Dual-Agent PTY Mode**:
+- Uses interactive Claude sessions (not headless)
+- Works with Claude Pro/Team subscriptions
+- Provides better context and collaboration
+- Default and recommended approach
+
+**Single-Agent Headless Mode**:
+- Uses headless mode (`-p` flag) for automation  
+- Requires API credits (subscriptions don't work)
+- Legacy mode maintained for backward compatibility
 
 For research into potential workarounds, see `CLAUDE_DESKTOP_RESEARCH_PROMPT.md`.
 

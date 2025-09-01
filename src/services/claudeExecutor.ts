@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import chalk from 'chalk';
 import { ClaudeUtils } from '../claudeUtils';
 import { Logger } from '../logger';
+import { ACCPTYManager } from './ptyController';
 
 /**
  * Custom error types for type-driven error handling
@@ -90,9 +91,12 @@ export interface ClaudeExecutionResult {
  */
 export class ClaudeExecutor {
   private logger: Logger;
+  private ptyManager: ACCPTYManager;
+  private activePTYSessions: Map<string, string> = new Map();
 
   constructor(logger?: Logger) {
     this.logger = logger || new Logger();
+    this.ptyManager = new ACCPTYManager(this.logger);
   }
 
   /**
@@ -405,5 +409,100 @@ export class ClaudeExecutor {
     }).catch(() => {
       // Silently fail if monitoring is not available
     });
+  }
+
+  /**
+   * Get or create PTY session for agent role
+   */
+  async getOrCreatePTYSession(
+    agentRole: 'manager' | 'worker',
+    workDir?: string,
+    sessionId?: string
+  ): Promise<string> {
+    const sessionKey = `${agentRole}-${workDir || process.cwd()}`;
+    let ptySessionId = this.activePTYSessions.get(sessionKey);
+    
+    if (!ptySessionId) {
+      const finalSessionId = sessionId || `${agentRole}-${Date.now()}`;
+      ptySessionId = await this.ptyManager.createSession(
+        workDir || process.cwd(),
+        finalSessionId
+      );
+      this.activePTYSessions.set(sessionKey, ptySessionId);
+      
+      this.logger.info('Created PTY session for agent', {
+        agentRole,
+        sessionId: ptySessionId,
+        workDir: workDir || process.cwd()
+      });
+    }
+    
+    return ptySessionId;
+  }
+
+  /**
+   * Send prompt to specific PTY session
+   */
+  async sendToPTYSession(sessionId: string, prompt: string): Promise<string> {
+    try {
+      const response = await this.ptyManager.sendPrompt(sessionId, prompt);
+      
+      // Log the interaction for monitoring
+      this.logger.debug('PTY interaction', {
+        sessionId,
+        promptLength: prompt.length,
+        responseLength: response.length
+      });
+      
+      return response;
+      
+    } catch (error) {
+      this.logger.error('PTY session interaction failed', { sessionId, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Close PTY session
+   */
+  closePTYSession(sessionId: string): void {
+    this.ptyManager.closeSession(sessionId);
+    
+    // Remove from active sessions
+    for (const [key, value] of this.activePTYSessions.entries()) {
+      if (value === sessionId) {
+        this.activePTYSessions.delete(key);
+        break;
+      }
+    }
+    
+    this.logger.debug('Closed PTY session', { sessionId });
+  }
+
+  /**
+   * Close all PTY sessions
+   */
+  closeAllPTYSessions(): void {
+    this.ptyManager.closeAllSessions();
+    this.activePTYSessions.clear();
+    this.logger.info('Closed all PTY sessions');
+  }
+
+  /**
+   * Get active PTY sessions
+   */
+  getActivePTYSessions(): Array<{ key: string; sessionId: string }> {
+    return Array.from(this.activePTYSessions.entries()).map(([key, sessionId]) => ({
+      key,
+      sessionId
+    }));
+  }
+
+  /**
+   * Cleanup resources on shutdown
+   */
+  async shutdown(): Promise<void> {
+    this.closeAllPTYSessions();
+    this.logger.info('ClaudeExecutor shutdown completed');
   }
 }

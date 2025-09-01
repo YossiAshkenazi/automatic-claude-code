@@ -3,6 +3,7 @@ import { Logger } from '../logger';
 import { SessionManager } from '../sessionManager';
 import { monitoringManager } from '../monitoringManager';
 import { OutputParser, ParsedOutput } from '../outputParser';
+import { ClaudeExecutor } from '../services/claudeExecutor';
 import {
   AgentRole,
   AgentMessage,
@@ -36,6 +37,7 @@ export interface AgentCoordinatorOptions {
   timeout?: number;
   continueOnError?: boolean;
   allowedTools?: string;
+  usePTY?: boolean; // Enable PTY-based execution
 }
 
 /**
@@ -49,6 +51,7 @@ export class AgentCoordinator extends EventEmitter {
   private outputParser: OutputParser;
   private managerAgent: ManagerAgent;
   private workerAgent: WorkerAgent;
+  private claudeExecutor: ClaudeExecutor;
 
   private executionContext: ExecutionContext;
   private messageQueue: AgentMessage[] = [];
@@ -64,6 +67,7 @@ export class AgentCoordinator extends EventEmitter {
     this.logger = new Logger();
     this.sessionManager = new SessionManager();
     this.outputParser = new OutputParser();
+    this.claudeExecutor = new ClaudeExecutor(this.logger);
     
     // Initialize execution context with default values
     this.executionContext = {
@@ -148,7 +152,24 @@ export class AgentCoordinator extends EventEmitter {
    * Initialize both agents with execution context
    */
   private async initializeAgents(options: AgentCoordinatorOptions): Promise<void> {
-    this.logger.info('Initializing agents');
+    this.logger.info('Initializing agents with PTY support', { usePTY: options.usePTY });
+
+    // Create PTY sessions for agents if enabled
+    if (options.usePTY) {
+      await this.claudeExecutor.getOrCreatePTYSession(
+        'manager',
+        options.workDir,
+        `manager-${this.executionContext.sessionId}`
+      );
+      
+      await this.claudeExecutor.getOrCreatePTYSession(
+        'worker',
+        options.workDir,
+        `worker-${this.executionContext.sessionId}`
+      );
+      
+      this.logger.info('PTY sessions created for both agents');
+    }
 
     // Initialize manager agent
     await this.managerAgent.initialize({
@@ -156,7 +177,9 @@ export class AgentCoordinator extends EventEmitter {
       workDir: options.workDir,
       timeout: options.timeout || 1800000,
       verbose: options.verbose,
-      allowedTools: options.allowedTools
+      allowedTools: options.allowedTools,
+      usePTY: options.usePTY,
+      claudeExecutor: this.claudeExecutor
     });
 
     // Initialize worker agent
@@ -165,7 +188,9 @@ export class AgentCoordinator extends EventEmitter {
       workDir: options.workDir,
       timeout: options.timeout || 1800000,
       verbose: options.verbose,
-      allowedTools: options.allowedTools
+      allowedTools: options.allowedTools,
+      usePTY: options.usePTY,
+      claudeExecutor: this.claudeExecutor
     });
 
     // Update agent states
@@ -1463,6 +1488,11 @@ QUALITY REQUIREMENTS:
       await this.workerAgent.shutdown();
     }
 
+    // Shutdown Claude executor and PTY sessions
+    if (this.claudeExecutor) {
+      await this.claudeExecutor.shutdown();
+    }
+
     // Save session
     await this.sessionManager.saveSession();
 
@@ -1479,7 +1509,8 @@ QUALITY REQUIREMENTS:
         handoffsTriggered: validation.handoffsTriggered,
         workerExecutions: validation.workerExecutions,
         issues: validation.issues
-      }
+      },
+      pTYSessions: this.claudeExecutor ? this.claudeExecutor.getActivePTYSessions().length : 0
     });
 
     if (validation.issues.length > 0) {

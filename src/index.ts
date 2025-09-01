@@ -357,6 +357,8 @@ async function main() {
     .option('--dual-agent', 'Enable dual-agent mode (Manager + Worker)')
     .option('--manager-model <model>', 'Manager agent model (sonnet or opus)', 'opus')
     .option('--worker-model <model>', 'Worker agent model (sonnet or opus)', 'sonnet')
+    .option('--use-pty', 'Enable PTY-based execution (default for dual-agent)')
+    .option('--no-pty', 'Disable PTY-based execution and use spawn')
     .option('--no-monitoring', 'Disable monitoring server')
     .option('--timeout <minutes>', 'Timeout for each Claude execution in minutes (default: 30)', '30')
     .option('--resume <sessionId>', 'Resume an existing session instead of creating a new one')
@@ -368,6 +370,10 @@ async function main() {
 
       // Handle dual-agent mode
       if (options.dualAgent) {
+        // Determine PTY usage - use config default, command line options override
+        const configDefaultPTY = config.get('dualAgent').usePTY;
+        const usePTY = options.noPty ? false : (options.usePty !== undefined ? options.usePty : configDefaultPTY);
+        
         const coordinator = new AgentCoordinator({
           coordinationInterval: 3,
           qualityGateThreshold: 0.8,
@@ -376,6 +382,8 @@ async function main() {
           timeoutMs: 300000,
           retryAttempts: 3
         });
+        
+        console.log(chalk.cyan(`🚀 Starting dual-agent coordination${usePTY ? ' with PTY execution' : ' with spawn execution'}`));
         
         try {
           await coordinator.startCoordination(prompt, {
@@ -387,10 +395,33 @@ async function main() {
             continueOnError: options.continueOnError,
             verbose: options.verbose,
             timeout: parseInt(options.timeout) * 60000,
+            usePTY: usePTY
           });
         } catch (error) {
           console.error(chalk.red('Fatal error in dual-agent mode:'), error);
-          process.exit(1);
+          
+          // If PTY failed and it wasn't explicitly requested, try falling back to spawn
+          if (usePTY && !options.usePty) {
+            console.log(chalk.yellow('🔄 PTY execution failed, retrying with spawn execution...'));
+            try {
+              await coordinator.startCoordination(prompt, {
+                maxIterations: parseInt(options.iterations),
+                managerModel: options.managerModel,
+                workerModel: options.workerModel,
+                workDir: options.dir,
+                allowedTools: options.tools,
+                continueOnError: options.continueOnError,
+                verbose: options.verbose,
+                timeout: parseInt(options.timeout) * 60000,
+                usePTY: false
+              });
+            } catch (fallbackError) {
+              console.error(chalk.red('Fatal error after fallback:'), fallbackError);
+              process.exit(1);
+            }
+          } else {
+            process.exit(1);
+          }
         }
       } else {
         // Single-agent mode

@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import { EventEmitter } from 'events';
 import { Logger } from '../logger';
 import { ClaudeUtils } from '../claudeUtils';
+import { spawn } from 'child_process';
 
 /**
  * PTY Controller for interactive Claude Code control
@@ -174,7 +175,24 @@ export class ClaudeCodePTYController extends EventEmitter {
         this.emit('ready');
         break;
       case 'tool_use':
+        // Execute pre-tool-use hook
+        this.executeHook('pre-tool-use-hook', {
+          tool: message.tool || message.name,
+          parameters: message.parameters || message.input,
+          message
+        }).catch(() => {}); // Don't break execution on hook failure
+        
         this.emit('tool_use', message);
+        break;
+      case 'tool_result':
+        // Execute post-tool-use hook
+        this.executeHook('post-tool-use-hook', {
+          tool: message.tool || message.name,
+          result: message.result || message.output,
+          message
+        }).catch(() => {}); // Don't break execution on hook failure
+        
+        this.emit('tool_result', message);
         break;
       default:
         this.logger.debug(`Received message type: ${message.type}`);
@@ -283,13 +301,24 @@ export class ClaudeCodePTYController extends EventEmitter {
       await this.waitForReady();
     }
     
+    // Execute pre-prompt hooks
+    await this.executeHook('user-prompt-submit-hook', { prompt });
+    
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Prompt timeout'));
       }, 30000);
       
-      this.currentPromptResolve = (value: string) => {
+      this.currentPromptResolve = async (value: string) => {
         clearTimeout(timeout);
+        
+        // Execute post-response hooks if needed
+        await this.executeHook('notification-hook', {
+          type: 'response_received',
+          prompt,
+          response: value
+        });
+        
         resolve(value);
       };
       
@@ -330,6 +359,12 @@ export class ClaudeCodePTYController extends EventEmitter {
    */
   close(): void {
     if (this.ptyProcess) {
+      // Execute stop hook before closing
+      this.executeHook('stop-hook', {
+        sessionId: this.sessionId,
+        reason: 'session_closed'
+      }).catch(() => {}); // Don't break closure on hook failure
+      
       this.ptyProcess.kill();
       this.ptyProcess = undefined;
     }
@@ -349,6 +384,79 @@ export class ClaudeCodePTYController extends EventEmitter {
     if (this.ptyProcess) {
       this.ptyProcess.resize(cols, rows);
     }
+  }
+
+  /**
+   * Execute Claude Code hooks to maintain compatibility with existing hook system
+   */
+  private async executeHook(hookName: string, data: any): Promise<void> {
+    try {
+      const claudeDir = this.findClaudeDirectory();
+      if (!claudeDir) {
+        return; // No .claude directory found, skip hooks
+      }
+
+      const hookPath = path.join(claudeDir, 'hooks', `${hookName}.js`);
+      
+      if (!fs.existsSync(hookPath)) {
+        return; // Hook doesn't exist, skip silently
+      }
+
+      // Execute the hook as a subprocess
+      const hookProcess = spawn('node', [hookPath, JSON.stringify(data)], {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 5000 // 5 second timeout for hooks
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      hookProcess.stdout?.on('data', (chunk) => {
+        stdout += chunk.toString();
+      });
+
+      hookProcess.stderr?.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      await new Promise((resolve, reject) => {
+        hookProcess.on('close', (code) => {
+          if (code !== 0) {
+            this.logger.debug(`Hook ${hookName} failed`, { code, stderr });
+          } else {
+            this.logger.debug(`Hook ${hookName} executed successfully`, { stdout });
+          }
+          resolve(void 0);
+        });
+
+        hookProcess.on('error', (error) => {
+          this.logger.debug(`Hook ${hookName} execution error`, { error });
+          resolve(void 0); // Don't fail PTY execution due to hook errors
+        });
+      });
+
+    } catch (error) {
+      this.logger.debug(`Failed to execute hook ${hookName}`, { error });
+      // Don't throw - hooks should not break PTY execution
+    }
+  }
+
+  /**
+   * Find .claude directory by traversing up the directory tree
+   */
+  private findClaudeDirectory(): string | null {
+    let currentDir = process.cwd();
+    
+    while (currentDir !== path.dirname(currentDir)) {
+      const claudeDir = path.join(currentDir, '.claude');
+      if (fs.existsSync(claudeDir) && fs.statSync(claudeDir).isDirectory()) {
+        return claudeDir;
+      }
+      currentDir = path.dirname(currentDir);
+    }
+    
+    return null;
   }
 }
 

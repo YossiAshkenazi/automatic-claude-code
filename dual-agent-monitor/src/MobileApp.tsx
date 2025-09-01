@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DualAgentSession, AgentMessage, WebSocketMessage } from './types';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useMobile } from './hooks/useMobile';
+import { useSessionStore } from './store/useSessionStore';
+import { useMobileBadges } from './hooks/useAnalytics';
 import { apiClient } from './utils/api';
 import { formatDate } from './utils/formatters';
 
@@ -49,6 +51,9 @@ function MobileApp() {
   const [timeRange, setTimeRange] = useState<'1h' | '6h' | '24h' | '7d' | '30d'>('24h');
   const [refreshing, setRefreshing] = useState(false);
   
+  // Use session store for centralized state management
+  const sessionStore = useSessionStore();
+  
   // Cross-project state
   const [allEvents, setAllEvents] = useState<any[]>([]);
   const [activeProjects, setActiveProjects] = useState<string[]>([]);
@@ -56,6 +61,16 @@ function MobileApp() {
 
   const mobile = useMobile();
   const { isConnected, lastMessage } = useWebSocket('ws://localhost:4001');
+  
+  // Sync with session store for real-time updates
+  useEffect(() => {
+    if (sessionStore.sessions.length > 0) {
+      setSessions(sessionStore.sessions);
+    }
+    if (sessionStore.selectedSession && !selectedSession) {
+      setSelectedSession(sessionStore.selectedSession);
+    }
+  }, [sessionStore.sessions, sessionStore.selectedSession, selectedSession]);
 
   // Load initial data
   useEffect(() => {
@@ -257,37 +272,40 @@ function MobileApp() {
     }
   };
 
-  // Bottom navigation items for mobile
+  // Get dynamic badge values using analytics hook
+  const badges = useMobileBadges(sessions, allEvents, activeProjects);
+  
+  // Bottom navigation items for mobile with dynamic badges
   const bottomNavItems = [
     {
       id: 'dashboard',
       label: 'Dashboard',
       icon: <Home size={20} />,
-      badge: 0
+      badge: badges.dashboard
     },
     {
       id: 'sessions',
       label: 'Sessions',
       icon: <List size={20} />,
-      badge: sessions.filter(s => s.status === 'running').length
+      badge: badges.sessions
     },
     {
       id: 'metrics',
       label: 'Metrics',
       icon: <BarChart3 size={20} />,
-      badge: 0
+      badge: badges.metrics
     },
     {
       id: 'analytics',
       label: 'Analytics',
       icon: <Activity size={20} />,
-      badge: 0
+      badge: badges.analytics
     },
     {
       id: 'cross-project',
       label: 'Projects',
       icon: <Globe size={20} />,
-      badge: activeProjects.length
+      badge: badges.projects
     }
   ];
 

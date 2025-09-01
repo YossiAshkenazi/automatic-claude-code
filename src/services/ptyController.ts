@@ -1,5 +1,5 @@
-import * as pty from 'node-pty';
-import * as stripAnsi from 'strip-ansi';
+import pty from 'node-pty';
+import stripAnsi from 'strip-ansi';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';

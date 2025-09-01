@@ -1,7 +1,7 @@
 import { DualAgentSession, AgentMessage } from '../types';
 
-// Connect directly to observability server for cross-project event streaming
-const API_BASE = 'http://localhost:4001/api';
+// Use Vite proxy in development, direct connection in production
+const API_BASE = import.meta.env.DEV ? '/api' : 'http://localhost:4001/api';
 
 interface ApiError {
   message: string;

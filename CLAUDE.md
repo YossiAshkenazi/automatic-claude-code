@@ -32,6 +32,20 @@ acc examples
 ```
 
 #### Option 2: Docker Installation (Containerized)
+
+**Using Pre-built Image from GitHub Container Registry:**
+```bash
+# Pull latest image
+docker pull ghcr.io/yossiashkenazi/automatic-claude-code:latest
+
+# Verify installation
+docker run --rm ghcr.io/yossiashkenazi/automatic-claude-code:latest
+
+# Use with Docker
+docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" ghcr.io/yossiashkenazi/automatic-claude-code:latest run "your task" -i 3
+```
+
+**Building Locally:**
 ```bash
 # Build Docker image
 cd automatic-claude-code
@@ -72,8 +86,19 @@ node "../automatic-claude-code/dist/index.js" run "task" --dual-agent -i 5 -v
 ```
 
 #### Docker Commands
+
+**Using Pre-built Images (Recommended):**
 ```bash
 # Single container usage
+docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" ghcr.io/yossiashkenazi/automatic-claude-code:latest run "task" --dual-agent -i 5 -v
+
+# With specific version tag
+docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" ghcr.io/yossiashkenazi/automatic-claude-code:v1.0.0 run "task" -i 3
+```
+
+**Local Development:**
+```bash
+# Single container usage (locally built)
 docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" automatic-claude-code run "task" --dual-agent -i 5 -v
 
 # Development environment
@@ -634,9 +659,22 @@ The system includes comprehensive test suites:
 - **CI/CD Pipeline**: Automated testing on GitHub Actions
 - **Security Testing**: Dependency scanning and vulnerability assessment
 
-## Recent Updates (Updated: 2024-08-31)
+## Recent Updates (Updated: 2024-09-01)
 
-### Latest Major Changes (2024-08-31)
+### Latest Major Changes (2024-09-01)
+- **Automated CI/CD Pipelines**: Robust GitHub Actions workflows for continuous integration
+  - Fixed failing workflows with proper pnpm integration
+  - Multiple workflow options (simple-ci.yml, main.yml, ci.yml) with resilient error handling  
+  - Automated Docker image building and publishing to GitHub Container Registry
+  - Multi-architecture support (linux/amd64, linux/arm64) with automated testing
+  - Dependabot configuration for automated dependency updates
+- **GitHub Container Registry Integration**: Pre-built Docker images available
+  - `ghcr.io/yossiashkenazi/automatic-claude-code:latest` for latest builds
+  - Semantic versioning with `v*` tags automatically published
+  - Multi-platform support and automated testing in CI/CD
+  - Pull request validation with container builds
+
+### Previous Changes (2024-08-31)
 - **Complete Docker Containerization**: Full Docker support with multi-stage builds
   - Dockerfile with development and production targets
   - docker-compose.yml for development environment

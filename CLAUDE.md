@@ -556,6 +556,17 @@ fetch('http://localhost:4001/api/monitoring', {
 
 ## Production Deployment
 
+### Infrastructure Decision Matrix
+
+Choose your deployment strategy based on requirements:
+
+| Use Case | Team Size | Recommended Option | Complexity | Cost |
+|----------|-----------|-------------------|------------|------|
+| Development/Testing | 1-3 developers | Local + Docker | Low | Free |
+| Small Team Production | 3-10 users | Docker Compose | Medium | Low |
+| Enterprise/Scale | 10+ users | Kubernetes + Cloud | High | Medium-High |
+| Multi-Region | Global teams | Terraform + CDN | Very High | High |
+
 ### Quick Production Setup
 The system includes comprehensive deployment infrastructure:
 
@@ -588,6 +599,44 @@ terraform init && terraform apply
 - **Monitoring**: Comprehensive metrics, logging, and alerting
 - **Security**: Firewall rules, security headers, authentication
 - **Scaling**: Auto-scaling based on CPU, memory, and request metrics
+
+### Security Best Practices
+
+#### SSL/TLS Configuration
+```bash
+# Automatic certificate renewal with Let's Encrypt
+certbot certonly --webroot -w /var/www/html -d your-domain.com
+
+# Configure nginx with SSL
+server {
+    listen 443 ssl http2;
+    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512;
+}
+```
+
+#### Firewall Rules
+```bash
+# Basic firewall configuration
+ufw allow 22/tcp    # SSH
+ufw allow 80/tcp    # HTTP
+ufw allow 443/tcp   # HTTPS
+ufw allow 4001/tcp  # Monitoring API (internal only)
+ufw deny 6011/tcp   # Block direct dashboard access
+```
+
+#### Environment Security
+```bash
+# Secure environment variables
+echo "CLAUDE_API_KEY=your_key_here" > .env.production
+chmod 600 .env.production
+
+# Database security
+psql -c "CREATE USER monitor_user WITH PASSWORD 'secure_password';"
+psql -c "GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO monitor_user;"
+```
 
 ## Testing & Development Workflow
 
@@ -658,6 +707,38 @@ The system includes comprehensive test suites:
 - **Performance Tests**: Load testing and performance benchmarking
 - **CI/CD Pipeline**: Automated testing on GitHub Actions
 - **Security Testing**: Dependency scanning and vulnerability assessment
+
+#### Performance Validation Checklist
+
+**API Performance Requirements**:
+- [ ] Monitoring API response time < 100ms (95th percentile)
+- [ ] WebSocket connection establishment < 500ms
+- [ ] Session creation/retrieval < 200ms
+- [ ] Database query performance < 50ms average
+- [ ] Memory usage < 512MB per agent process
+
+**Load Testing Scenarios**:
+```bash
+# Basic load test with Artillery
+npm install -g artillery
+artillery quick --count 50 --num 10 http://localhost:4001/api/health
+
+# Dual-agent coordination load test
+artillery run tests/load/dual-agent-workflow.yml
+
+# WebSocket connection stress test
+artillery run tests/load/websocket-connections.yml
+```
+
+**Production Readiness Criteria**:
+- [ ] All health checks passing
+- [ ] SSL certificates valid and auto-renewing
+- [ ] Database backups automated and tested
+- [ ] Monitoring alerts configured and tested
+- [ ] Log rotation and retention policies active
+- [ ] Security scans passing (no critical vulnerabilities)
+- [ ] Load balancer health checks responding
+- [ ] Disaster recovery procedures documented and tested
 
 ## Recent Updates (Updated: 2024-09-01)
 
@@ -737,6 +818,93 @@ The system includes comprehensive test suites:
 - **Service Management**: Multiple startup options (native, PM2, Docker, PowerShell)
 - **ML Service**: Machine Learning features temporarily disabled to ensure core functionality
 - **Database Requirement**: PostgreSQL recommended for production, in-memory fallback for development
+
+## Troubleshooting Guide
+
+### Common Issues and Solutions
+
+#### Monitoring Server Won't Start
+```bash
+# Check port conflicts
+netstat -tulpn | grep :4001
+
+# Kill conflicting processes
+sudo lsof -ti:4001 | xargs kill -9
+
+# Restart with debug logging
+DEBUG=* pnpm run dev
+```
+
+#### Dual-Agent Coordination Issues
+```bash
+# Check Claude CLI installation
+claude --version
+
+# Verify agent spawn processes
+ps aux | grep claude
+
+# Debug agent communication
+DEBUG=agent:* acc run "test" --dual-agent -v
+```
+
+#### Database Connection Problems
+```bash
+# Test PostgreSQL connection
+psql -h localhost -p 5432 -U monitor_user -d dual_agent_monitor
+
+# Check connection pool status
+SELECT * FROM pg_stat_activity;
+
+# Reset connections if needed
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle';
+```
+
+#### Performance Issues
+```bash
+# Monitor system resources
+top -p $(pgrep -d, node)
+
+# Check memory usage
+ps aux --sort=-%mem | head
+
+# Analyze slow queries
+SELECT query, mean_time, calls FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10;
+```
+
+### Real-World Usage Examples
+
+#### Example 1: E-commerce Feature Development
+```bash
+# Complex multi-component task
+acc run "Build a complete shopping cart system with Redis caching, payment integration, and admin dashboard" --dual-agent -i 10 -v
+
+# Expected Manager breakdown:
+# 1. Database schema design
+# 2. Redis cache implementation
+# 3. Payment gateway integration
+# 4. Admin interface development
+# 5. Testing and validation
+```
+
+#### Example 2: API Security Audit
+```bash
+# Security-focused task
+acc run "Perform complete security audit of REST API, implement rate limiting, add input validation, and create security documentation" --dual-agent -i 8 -v
+
+# Expected coordination:
+# Manager: Strategic security assessment
+# Worker: Implementation of specific security measures
+```
+
+#### Example 3: Performance Optimization
+```bash
+# Performance improvement task
+acc run "Optimize database queries, implement caching strategies, and add performance monitoring for high-traffic endpoints" --dual-agent -i 6 -v
+
+# Expected workflow:
+# Manager: Analysis and bottleneck identification
+# Worker: Implementation of optimizations
+```
 
 ## Important Notes
 

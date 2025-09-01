@@ -477,7 +477,7 @@ app.post('/api/monitoring', async (req, res) => {
         
         // Broadcast to connected clients
         broadcast({
-          type: 'agent_message',
+          type: 'agent:message',
           data: agentMessage
         });
       }

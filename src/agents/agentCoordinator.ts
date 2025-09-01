@@ -339,6 +339,15 @@ export class AgentCoordinator extends EventEmitter {
     
     if (pendingWorkItems.length === 0) {
       this.logger.info('No pending work items');
+      
+      // If we have no pending work AND no work items were ever created,
+      // trigger manager to analyze the task again or mark as complete
+      const { totalWorkItems } = this.executionContext.workflowState;
+      if (totalWorkItems === 0 && this.executionContext.workflowState.phase === 'analysis') {
+        this.logger.info('No work items created, attempting manager analysis');
+        await this.initiateManagerAnalysis(this.executionContext.userRequest);
+      }
+      
       return;
     }
 
@@ -1154,8 +1163,12 @@ QUALITY REQUIREMENTS:
 
   private isWorkflowComplete(): boolean {
     const { totalWorkItems, completedWorkItems } = this.executionContext.workflowState;
-    const hasCompletedAllWork = totalWorkItems > 0 && completedWorkItems >= totalWorkItems;
     const hasNoPendingWork = this.handoffQueue.length === 0 && this.pendingWorkItems.size === 0;
+    
+    // If no work items were created but there's no pending work, consider it complete
+    // This fixes the infinite loop when totalWorkItems remains 0
+    const hasCompletedAllWork = (totalWorkItems > 0 && completedWorkItems >= totalWorkItems) || 
+                                (totalWorkItems === 0 && hasNoPendingWork);
     
     return hasCompletedAllWork && hasNoPendingWork;
   }

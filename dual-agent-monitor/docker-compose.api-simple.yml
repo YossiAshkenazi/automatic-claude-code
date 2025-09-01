@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # API Server Service (using direct Node.js approach)
+  api-server:
+    image: node:18-alpine
+    container_name: ${API_CONTAINER_NAME:-dual-agent-api}
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      # Database Configuration
+      - DB_TYPE=postgresql
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-dual_agent_monitor}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dual_agent_secure_pass_2025}
+      - POSTGRES_MAX_CONNECTIONS=${POSTGRES_MAX_CONNECTIONS:-20}
+      - POSTGRES_SSL=false
+      
+      # Application Configuration
+      - NODE_ENV=${NODE_ENV:-production}
+      - WEBSOCKET_SERVER_PORT=${WEBSOCKET_SERVER_PORT:-4005}
+      - API_BASE_URL=http://localhost:4005/api
+      
+      # Security Configuration
+      - JWT_SECRET=${JWT_SECRET:-dual-agent-jwt-secret-key-minimum-32-chars-2025}
+      - SESSION_SECRET=${SESSION_SECRET:-dual-agent-session-secret-key-minimum-32-chars-2025}
+      
+      # Logging Configuration
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+    ports:
+      - "${WEBSOCKET_SERVER_PORT:-4005}:4005"
+    volumes:
+      - ./:/app:ro
+      - api_logs:/app/logs
+    networks:
+      - dual-agent-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "
+        apk add --no-cache wget &&
+        npm install -g pnpm tsx &&
+        cd /app &&
+        pnpm install --prod --ignore-scripts &&
+        npx tsx server/websocket-server-minimal.ts
+      "
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4005/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # PostgreSQL Database (reuse existing configuration)
+  postgres:
+    image: postgres:15-alpine
+    container_name: ${POSTGRES_CONTAINER_NAME:-dual-agent-postgres}
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-dual_agent_monitor}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dual_agent_secure_pass_2025}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./server/database/schema-postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./server/database/seed-postgres.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ./backups:/backups
+    networks:
+      - dual-agent-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-dual_agent_monitor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/data/postgres
+  api_logs:
+    driver: local
+
+networks:
+  dual-agent-network:
+    driver: bridge
+    name: ${NETWORK_NAME:-dual-agent-network}
+    external: true

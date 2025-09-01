@@ -2,7 +2,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
-import { InMemoryDatabaseService } from './database/InMemoryDatabaseService';
+import { PostgresDatabaseService } from './database/PostgresDatabaseService';
+import { DatabaseInterface } from './database/DatabaseInterface';
 import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from './types';
 import { AnalyticsService } from './analytics/AnalyticsService';
 import { SessionReplayManager } from './replay/SessionReplayManager';
@@ -19,11 +20,19 @@ app.use(express.json());
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Initialize database service and analytics
-const dbService = new InMemoryDatabaseService();
-const analyticsService = new AnalyticsService(dbService);
-const replayManager = new SessionReplayManager(dbService);
-const mlService = new MLService(dbService, {
+// Initialize database service and analytics with PostgreSQL connection
+const dbService: DatabaseInterface = new PostgresDatabaseService({
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: parseInt(process.env.POSTGRES_PORT || '5434'),
+  database: process.env.POSTGRES_DB || 'dual_agent_monitor',
+  username: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || 'password123',
+  ssl: process.env.POSTGRES_SSL === 'true',
+  maxConnections: parseInt(process.env.POSTGRES_MAX_CONNECTIONS || '20')
+});
+const analyticsService = new AnalyticsService(dbService as any);
+const replayManager = new SessionReplayManager(dbService as any);
+const mlService = new MLService(dbService as any, {
   enableRealTimeAnalysis: true,
   insightGenerationInterval: 5 * 60 * 1000, // 5 minutes
   anomalyDetectionSensitivity: 'medium'
@@ -408,20 +417,35 @@ function broadcast(message: any) {
 }
 
 // REST API endpoints for non-WebSocket clients
-app.get('/api/health', (req, res) => {
-  const dbHealth = dbService.getHealthStatus();
-  
-  res.json({
-    status: 'healthy',
-    database: dbHealth,
-    agents: {
-      running: currentSession?.status === 'running',
-      sessionId: currentSession?.id
-    },
-    websocket: {
-      clients: clients.size
-    }
-  });
+app.get('/api/health', async (req, res) => {
+  try {
+    const dbHealth = dbService.getHealthCheck ? await dbService.getHealthCheck() : { healthy: true, message: 'Health check not implemented' };
+    
+    res.json({
+      status: 'healthy',
+      database: dbHealth,
+      agents: {
+        running: currentSession?.status === 'running',
+        sessionId: currentSession?.id
+      },
+      websocket: {
+        clients: clients.size
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      database: { healthy: false, message: 'Database health check failed' },
+      agents: {
+        running: false,
+        sessionId: null
+      },
+      websocket: {
+        clients: clients.size
+      }
+    });
+  }
 });
 
 // Monitoring data endpoint for automatic-claude-code integration
@@ -1595,13 +1619,26 @@ app.get('/api/replay/status', async (req, res) => {
 
 
 // Enhanced port configuration with proper environment variable handling
-const DEFAULT_PORT = 4001;
+const DEFAULT_PORT = 4005;
 const PORT = parseInt(process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT.toString(), 10);
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`WebSocket server running on ws://localhost:${PORT}`);
   console.log(`REST API available at http://localhost:${PORT}/api`);
-  console.log(`Database health: ${dbService.getHealthStatus().healthy ? 'healthy' : 'unhealthy'}`);
+  
+  try {
+    if (dbService.getHealthCheck) {
+      const dbHealth = await dbService.getHealthCheck();
+      console.log(`Database health: ${dbHealth.healthy ? 'healthy' : 'unhealthy'}`);
+      if (dbHealth.details) {
+        console.log(`Database details:`, dbHealth.details);
+      }
+    } else {
+      console.log('Database health check not implemented');
+    }
+  } catch (error) {
+    console.error('Error checking database health:', error);
+  }
 });
 
 // Cleanup background tasks

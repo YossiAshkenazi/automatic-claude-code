@@ -67,7 +67,7 @@ function EnterpriseAppInner() {
     reconnectAttempts,
     maxReconnectAttempts,
     sendMessage
-  } = useWebSocket(import.meta.env.VITE_WS_URL || `ws://localhost:4001`, {
+  } = useWebSocket(import.meta.env.VITE_WS_URL || (import.meta.env.DEV ? `ws://localhost:8091/ws` : `ws://localhost:4001`), {
     onOpen: () => {
       // Refresh sessions when connection is established
       if (sessions.length === 0) {

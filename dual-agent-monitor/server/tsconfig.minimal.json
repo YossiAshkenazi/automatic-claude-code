@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strict": false
+  },
+  "include": [
+    "websocket-server.ts",
+    "database/**/*.ts",
+    "analytics/**/*.ts",
+    "types.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/__tests__/**",
+    "webhooks/**",
+    "ml/**",
+    "replay/**"
+  ]
+}

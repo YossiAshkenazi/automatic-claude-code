@@ -27,7 +27,7 @@ COPY . .
 RUN echo "{\"version\":\"$VERSION\",\"buildTime\":\"$BUILD_TIME\"}" > build-info.json
 
 # Build the application
-RUN pnpm run build:validate
+RUN pnpm run build
 
 # Production stage
 FROM node:18-alpine AS production
@@ -49,7 +49,8 @@ COPY package*.json ./
 # Install pnpm globally in production stage
 RUN npm install -g pnpm
 
-# Install only production dependencies
+# Copy pnpm lockfile if available, install production dependencies
+COPY pnpm-lock.yaml* ./
 RUN pnpm install --prod --frozen-lockfile && \
     pnpm store prune
 

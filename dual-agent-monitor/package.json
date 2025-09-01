@@ -51,8 +51,18 @@
     "api:deploy": "bash scripts/deploy-api.sh",
     "api:deploy:win": "powershell -ExecutionPolicy Bypass -File scripts/deploy-api.ps1",
     "api:test": "node scripts/test-api.js",
+    "fullstack:deploy": "bash scripts/deploy-full-stack.sh",
+    "fullstack:deploy:win": "powershell -ExecutionPolicy Bypass -File scripts/deploy-full-stack.ps1",
+    "fullstack:stop": "docker-compose -f docker-compose.full-stack.yml down",
+    "fullstack:restart": "docker-compose -f docker-compose.full-stack.yml restart",
+    "fullstack:logs": "docker-compose -f docker-compose.full-stack.yml logs -f",
+    "fullstack:status": "docker-compose -f docker-compose.full-stack.yml ps",
+    "fullstack:clean": "docker-compose -f docker-compose.full-stack.yml down --rmi all --volumes --remove-orphans",
+    "fullstack:test": "bash scripts/test-networking.sh",
+    "fullstack:health": "docker-compose -f docker-compose.full-stack.yml --profile test run --rm healthcheck",
     "deploy:staging": "npm run build:validate && npm run docker:build",
-    "deploy:production": "npm run test:all && npm run build:validate && npm run docker:build"
+    "deploy:production": "npm run test:all && npm run build:validate && npm run docker:build",
+    "deploy:fullstack": "npm run fullstack:deploy"
   },
   "dependencies": {
     "@reactflow/core": "^11.11.4",

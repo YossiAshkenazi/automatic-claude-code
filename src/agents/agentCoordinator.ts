@@ -61,6 +61,12 @@ export class AgentCoordinator extends EventEmitter {
   private lastHandoffTime?: Date;
   private handoffCount: number = 0;
 
+  // Rate limiting for monitoring events
+  private lastMonitoringEventTime: Map<string, number> = new Map();
+  private monitoringEventCooldown: number = 10000; // 10 seconds minimum between similar events
+  private lastProgressUpdate: number = 0;
+  private progressUpdateThreshold: number = 0.05; // Only send updates for 5% progress changes
+
   constructor(config: AgentCoordinatorConfig) {
     super();
     
@@ -207,7 +213,8 @@ export class AgentCoordinator extends EventEmitter {
    * Start the coordination monitoring loop
    */
   private startCoordinationLoop(): void {
-    const interval = this.executionContext.config.coordinationInterval || 5000;
+    // Increase default interval to reduce frequency of monitoring events
+    const interval = this.executionContext.config.coordinationInterval || 15000; // Changed from 5s to 15s
     
     this.coordinationInterval = setInterval(() => {
       this.performCoordinationTasks();
@@ -232,12 +239,18 @@ export class AgentCoordinator extends EventEmitter {
       // Check for quality gates
       this.checkQualityGates();
 
-      // Emit coordination event
-      this.emitCoordinationEvent('AGENT_COORDINATION', null, {
-        messageQueueLength: this.messageQueue.length,
-        workflowProgress: this.executionContext.workflowState.overallProgress,
-        activePhase: this.executionContext.workflowState.phase
-      });
+      // Only emit coordination events if there's meaningful change
+      const currentProgress = this.executionContext.workflowState.overallProgress;
+      const shouldEmitProgressUpdate = Math.abs(currentProgress - this.lastProgressUpdate) >= this.progressUpdateThreshold;
+      
+      if (shouldEmitProgressUpdate || this.messageQueue.length > 0) {
+        this.emitCoordinationEvent('AGENT_COORDINATION', null, {
+          messageQueueLength: this.messageQueue.length,
+          workflowProgress: currentProgress,
+          activePhase: this.executionContext.workflowState.phase
+        });
+        this.lastProgressUpdate = currentProgress;
+      }
 
     } catch (error) {
       this.logger.error('Coordination task failed', { error });
@@ -350,12 +363,16 @@ export class AgentCoordinator extends EventEmitter {
               phase: currentWorkflowState.phase
             });
             
-            // Try to force progress by triggering analysis again
-            if (currentWorkflowState.totalWorkItems === 0) {
-              this.logger.info('Attempting to restart manager analysis due to lack of work items');
+            // Only try to restart analysis once, then exit to prevent infinite loops
+            if (currentWorkflowState.totalWorkItems === 0 && idleIterations === maxIdleIterations) {
+              this.logger.info('Attempting to restart manager analysis due to lack of work items (final attempt)');
               await this.initiateManagerAnalysis(this.executionContext.userRequest);
+              // Continue the loop for one more cycle to see if analysis produces work items
             } else {
-              break; // Exit the loop to prevent infinite cycling
+              // Force completion if still no progress after restart attempt
+              this.logger.warning('Forcing workflow completion due to lack of progress');
+              this.updateWorkflowPhase('completion');
+              break;
             }
           }
         } else {
@@ -1489,26 +1506,58 @@ QUALITY REQUIREMENTS:
 
     this.emit('coordination_event', event);
 
-    // Send to monitoring server
-    monitoringManager.sendMonitoringData({
-      agentType: agentRole || 'manager',
-      messageType: 'coordination_event',
-      message: type,
-      metadata: {
-        eventType: type,
-        eventData: data,
-        timestamp: event.timestamp,
-        workflowPhase: this.executionContext.workflowState.phase,
-        overallProgress: this.executionContext.workflowState.overallProgress
-      },
-      sessionInfo: {
-        task: this.executionContext.userRequest,
-        workDir: process.cwd()
-      }
-    }).catch(error => {
-      // Don't let monitoring errors break execution
-      this.logger.debug('Failed to send monitoring data', { error });
-    });
+    // Rate limit monitoring events to prevent spam
+    if (this.shouldSendMonitoringEvent(type)) {
+      monitoringManager.sendMonitoringData({
+        agentType: agentRole || 'manager',
+        messageType: 'coordination_event',
+        message: type,
+        metadata: {
+          eventType: type,
+          eventData: data,
+          timestamp: event.timestamp,
+          workflowPhase: this.executionContext.workflowState.phase,
+          overallProgress: this.executionContext.workflowState.overallProgress
+        },
+        sessionInfo: {
+          task: this.executionContext.userRequest,
+          workDir: process.cwd()
+        }
+      }).catch(error => {
+        // Don't let monitoring errors break execution
+        this.logger.debug('Failed to send monitoring data', { error });
+      });
+    }
+  }
+
+  /**
+   * Rate limiting logic for monitoring events
+   */
+  private shouldSendMonitoringEvent(eventType: string): boolean {
+    const now = Date.now();
+    const lastTime = this.lastMonitoringEventTime.get(eventType) || 0;
+    
+    // Always send important events
+    const criticalEvents = [
+      'MANAGER_TASK_ASSIGNMENT',
+      'WORKER_PROGRESS_UPDATE', 
+      'MANAGER_QUALITY_CHECK',
+      'MANAGER_WORKER_HANDOFF',
+      'WORKFLOW_TRANSITION'
+    ];
+    
+    if (criticalEvents.includes(eventType)) {
+      this.lastMonitoringEventTime.set(eventType, now);
+      return true;
+    }
+    
+    // Rate limit routine coordination events
+    if (now - lastTime > this.monitoringEventCooldown) {
+      this.lastMonitoringEventTime.set(eventType, now);
+      return true;
+    }
+    
+    return false;
   }
 
   /**

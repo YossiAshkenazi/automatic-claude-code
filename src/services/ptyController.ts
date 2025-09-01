@@ -1,4 +1,10 @@
-import * as pty from 'node-pty';
+// Optional import for node-pty (fallback if not available)
+let pty: any = null;
+try {
+  pty = require('node-pty');
+} catch (error) {
+  // node-pty not available, will use fallback implementation
+}
 import stripAnsi from 'strip-ansi';
 import * as os from 'os';
 import * as path from 'path';
@@ -12,7 +18,7 @@ import { ClaudeUtils } from '../claudeUtils';
  * Alternative to headless mode that uses subscription authentication
  */
 export class ClaudeCodePTYController extends EventEmitter {
-  private ptyProcess?: pty.IPty;
+  private ptyProcess?: any; // IPty type when node-pty is available
   private buffer: string = '';
   private sessionId?: string;
   private logger: Logger;
@@ -77,6 +83,10 @@ export class ClaudeCodePTYController extends EventEmitter {
       this.logger.debug(`Command: ${command} ${args.join(' ')}`);
 
       // Create PTY process with Claude Code in interactive mode
+      if (!pty) {
+        throw new Error('node-pty module not available. Install with: pnpm add node-pty');
+      }
+      
       this.ptyProcess = pty.spawn(command, args, {
         name: 'xterm-color',
         cols: 120,

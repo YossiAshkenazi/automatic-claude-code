@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { ClaudeUtils } from '../claudeUtils';
 import { Logger } from '../logger';
 import { ACCPTYManager } from './ptyController';
-import { InteractiveClaudeExecutor } from './interactiveClaudeExecutor';
+import { BrowserAuthClaudeExecutor } from './browserAuthClaudeExecutor';
 
 /**
  * Custom error types for type-driven error handling
@@ -93,13 +93,13 @@ export interface ClaudeExecutionResult {
 export class ClaudeExecutor {
   private logger: Logger;
   private ptyManager: ACCPTYManager;
-  private interactiveExecutor: InteractiveClaudeExecutor;
+  private browserAuthExecutor: BrowserAuthClaudeExecutor;
   private activePTYSessions: Map<string, string> = new Map();
 
   constructor(logger?: Logger) {
     this.logger = logger || new Logger();
     this.ptyManager = new ACCPTYManager(this.logger);
-    this.interactiveExecutor = new InteractiveClaudeExecutor(this.logger);
+    this.browserAuthExecutor = new BrowserAuthClaudeExecutor(this.logger);
   }
 
   /**
@@ -112,14 +112,15 @@ export class ClaudeExecutor {
     prompt: string, 
     options: ClaudeExecutionOptions = {}
   ): Promise<ClaudeExecutionResult> {
-    // Check if we should use interactive mode (browser auth)
-    // If no API key is set, use interactive mode
+    // Check if we should use browser auth mode
+    // If no API key is set, use browser-authenticated Claude
     const hasApiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
     
     if (!hasApiKey) {
-      // Use interactive mode (browser authenticated)
+      // Use browser-authenticated Claude (interactive but automated)
+      this.logger.debug('No API key found, using browser-authenticated Claude');
       try {
-        const result = await this.interactiveExecutor.executeClaudeInteractive(prompt, {
+        const result = await this.browserAuthExecutor.executeBrowserAuthClaude(prompt, {
           model: options.model as 'sonnet' | 'opus' | undefined,
           workDir: options.workDir,
           sessionId: options.sessionId,
@@ -127,9 +128,15 @@ export class ClaudeExecutor {
           timeout: options.timeout
         });
         return result;
-      } catch (error) {
-        // If interactive mode fails, fall back to regular mode
-        this.logger.debug('Interactive mode failed, falling back to headless mode');
+      } catch (error: any) {
+        // If it's an auth error, re-throw it
+        if (error.message && error.message.includes('Authentication required')) {
+          throw error;
+        }
+        // Otherwise log and try fallback
+        this.logger.debug(`Browser auth mode failed: ${error.message}`);
+        // Don't fall back to headless - it won't work without API key
+        throw new Error(`Claude execution failed: ${error.message}. Please ensure Claude is authenticated or set ANTHROPIC_API_KEY.`);
       }
     }
     

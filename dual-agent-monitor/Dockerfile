@@ -85,4 +85,4 @@ ENV WEBSOCKET_SERVER_PORT=4005
 ENTRYPOINT ["/sbin/tini", "--"]
 
 # Start the server
-CMD ["node", "dist/server/websocket-server.js"]
+CMD ["node", "dist/server/websocket-server-minimal.js"]

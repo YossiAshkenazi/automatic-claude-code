@@ -12,7 +12,7 @@ import { PromptBuilder } from './promptBuilder';
 import { Logger } from './logger';
 import { LogViewer } from './logViewer';
 import { launchTUI } from './tuiBrowser';
-import { AgentOrchestrator } from './agentOrchestrator';
+import { AgentCoordinator } from './agents/agentCoordinator';
 import { ClaudeUtils } from './claudeUtils';
 import { monitoringManager } from './monitoringManager';
 import { config } from './config';
@@ -491,10 +491,17 @@ async function main() {
 
       // Handle dual-agent mode
       if (options.dualAgent) {
-        const orchestrator = new AgentOrchestrator();
+        const coordinator = new AgentCoordinator({
+          coordinationInterval: 3,
+          qualityGateThreshold: 0.8,
+          maxConcurrentTasks: 2,
+          enableCrossValidation: true,
+          timeoutMs: 300000,
+          retryAttempts: 3
+        });
         
         try {
-          await orchestrator.startDualAgentSession(prompt, {
+          await coordinator.startCoordination(prompt, {
             maxIterations: parseInt(options.iterations),
             managerModel: options.managerModel,
             workerModel: options.workerModel,
@@ -545,10 +552,17 @@ async function main() {
     .option('--escalation-threshold <number>', 'Max failures before human intervention (default: 5)', '5')
     .option('--fallback-single', 'Fall back to single-agent mode if dual-agent fails')
     .action(async (prompt, options) => {
-      const orchestrator = new AgentOrchestrator();
+      const coordinator = new AgentCoordinator({
+        coordinationInterval: 3,
+        qualityGateThreshold: 0.8,
+        maxConcurrentTasks: 2,
+        enableCrossValidation: true,
+        timeoutMs: parseInt(options.timeout) * 60000,
+        retryAttempts: parseInt(options.maxRetries)
+      });
       
       try {
-        await orchestrator.startDualAgentSession(prompt, {
+        await coordinator.startCoordination(prompt, {
           maxIterations: parseInt(options.iterations),
           managerModel: options.manager,
           workerModel: options.worker,
@@ -556,11 +570,7 @@ async function main() {
           allowedTools: options.tools,
           continueOnError: options.continueOnError,
           verbose: options.verbose,
-          timeout: parseInt(options.timeout) * 60000, // Convert minutes to milliseconds
-          loopDetectionThreshold: parseInt(options.loopThreshold),
-          maxRetries: parseInt(options.maxRetries),
-          escalationThreshold: parseInt(options.escalationThreshold),
-          fallbackToSingleAgent: options.fallbackSingle
+          timeout: parseInt(options.timeout) * 60000 // Convert minutes to milliseconds
         });
       } catch (error) {
         console.error(chalk.red('Fatal error in dual-agent mode:'), error);

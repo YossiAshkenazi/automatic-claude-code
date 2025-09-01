@@ -4,10 +4,10 @@ import express from 'express';
 import cors from 'cors';
 import { PostgresDatabaseService } from './database/PostgresDatabaseService.js';
 import { DatabaseInterface } from './database/DatabaseInterface.js';
-import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from './types';
-import { AnalyticsService } from './analytics/AnalyticsService';
-import { SessionReplayManager } from './replay/SessionReplayManager';
-import { MLService } from './ml/MLService';
+import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from './types.js';
+import { AnalyticsService } from './analytics/AnalyticsService.js';
+import { SessionReplayManager } from './replay/SessionReplayManager.js';
+import { MLService } from './ml/MLService.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const app = express();

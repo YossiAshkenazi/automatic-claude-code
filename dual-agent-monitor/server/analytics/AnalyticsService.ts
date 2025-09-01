@@ -1,8 +1,8 @@
-import { PerformanceAnalyzer, SessionAnalytics, ComparisonAnalytics } from './PerformanceAnalyzer';
-import { MetricsCollector, RealTimeMetrics, AggregatedMetrics } from './MetricsCollector';
-import { AgentMessage, DualAgentSession, PerformanceMetrics, AgentCommunication } from '../types';
-import { DatabaseService } from '../database/DatabaseService';
-import { InMemoryDatabaseService } from '../database/InMemoryDatabaseService';
+import { PerformanceAnalyzer, SessionAnalytics, ComparisonAnalytics } from './PerformanceAnalyzer.js';
+import { MetricsCollector, RealTimeMetrics, AggregatedMetrics } from './MetricsCollector.js';
+import { AgentMessage, DualAgentSession, PerformanceMetrics, AgentCommunication } from '../types.js';
+import { DatabaseService } from '../database/DatabaseService.js';
+import { InMemoryDatabaseService } from '../database/InMemoryDatabaseService.js';
 
 export interface AnalyticsQuery {
   sessionIds?: string[];

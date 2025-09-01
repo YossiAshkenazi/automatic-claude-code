@@ -16,3 +16,6 @@ nul
 send-test-session.ps1
 test-websocket.js
 MONITORING-TEST-REPORT.md
+
+# PostgreSQL data directory
+dual-agent-monitor/data/postgres/pgdata/

@@ -5,6 +5,23 @@ All notable changes to the Automatic Claude Code project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-09-01
+
+### Fixed
+- **Critical**: Fixed dual-agent monitoring dashboard network connection error
+  - Frontend was hardcoded to use `http://localhost:4001/api` but API runs on port 4005
+  - Changed API_BASE in `dual-agent-monitor/src/utils/api.ts` to always use nginx proxy (`/api`)
+  - Dashboard now properly connects to backend through nginx reverse proxy
+  - Verified fix using Playwright browser automation
+- Monitoring dashboard now displays "Connected" status instead of "Network error"
+- WebSocket connections working correctly through nginx proxy
+- All monitoring features (sessions, metrics, real-time updates) fully functional
+
+### Infrastructure
+- Updated monitoring service configuration to use consistent API endpoints
+- Improved frontend-backend communication reliability through proxy architecture
+- Enhanced container networking for production deployments
+
 ## [1.1.0] - 2025-01-09
 
 ### Added

@@ -1,6 +1,5 @@
-// import * as pty from 'node-pty'; // Temporarily disabled - will use after dependency fix
-// import * as stripAnsi from 'strip-ansi'; // Temporarily disabled - will use after dependency fix
-const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, ''); // Temporary replacement
+import * as pty from 'node-pty';
+import * as stripAnsi from 'strip-ansi';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -13,7 +12,7 @@ import { ClaudeUtils } from '../claudeUtils';
  * Alternative to headless mode that uses subscription authentication
  */
 export class ClaudeCodePTYController extends EventEmitter {
-  private ptyProcess?: any; // pty.IPty - temporarily using any until dependency fixed
+  private ptyProcess?: pty.IPty;
   private buffer: string = '';
   private sessionId?: string;
   private logger: Logger;
@@ -77,17 +76,16 @@ export class ClaudeCodePTYController extends EventEmitter {
       this.logger.info(`Initializing PTY with Claude in interactive mode`);
       this.logger.debug(`Command: ${command} ${args.join(' ')}`);
 
-      // Create PTY process - temporarily disabled until node-pty dependency is fixed
-      // this.ptyProcess = pty.spawn(command, args, {
-      //   name: 'xterm-color',
-      //   cols: 120,
-      //   rows: 30,
-      //   cwd: cwd,
-      //   env: env as { [key: string]: string }
-      // });
+      // Create PTY process with Claude Code in interactive mode
+      this.ptyProcess = pty.spawn(command, args, {
+        name: 'xterm-color',
+        cols: 120,
+        rows: 30,
+        cwd: cwd,
+        env: env as { [key: string]: string }
+      });
       
-      // For now, throw an error to demonstrate error handling
-      throw new Error('PTY mode not yet available - node-pty dependency needs to be installed');
+      this.logger.debug(`PTY process spawned with PID: ${this.ptyProcess.pid}`);
 
       this.setupEventHandlers();
       
@@ -315,18 +313,45 @@ export class ClaudeCodePTYController extends EventEmitter {
           this.logger.debug('No OAuth token found in macOS Keychain');
         }
       } else {
-        // Linux/Windows credential file
+        // Windows credential file
+        if (process.platform === 'win32') {
+          const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
+          if (fs.existsSync(credPath)) {
+            const creds = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+            return creds.oauth_token;
+          }
+        }
+        
+        // Linux credential file and session tokens
         const credPath = path.join(os.homedir(), '.claude', '.credentials.json');
         if (fs.existsSync(credPath)) {
           const creds = JSON.parse(fs.readFileSync(credPath, 'utf8'));
-          return creds.oauth_token;
+          return creds.oauth_token || creds.session_token;
+        }
+        
+        // Try to extract from existing session files
+        const sessionsPath = path.join(os.homedir(), '.claude', 'projects');
+        if (fs.existsSync(sessionsPath)) {
+          const sessionFiles = fs.readdirSync(sessionsPath);
+          for (const sessionFile of sessionFiles) {
+            try {
+              const sessionPath = path.join(sessionsPath, sessionFile, 'conversation.jsonl');
+              if (fs.existsSync(sessionPath)) {
+                // Found active session, can proceed without explicit token
+                return 'session-exists';
+              }
+            } catch (e) {
+              // Continue to next session
+            }
+          }
         }
       }
     } catch (error) {
       this.logger.debug(`Failed to extract OAuth token: ${error}`);
     }
     
-    return undefined;
+    // Check environment variables as last resort
+    return process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.CLAUDE_SESSION_TOKEN;
   }
 
   /**

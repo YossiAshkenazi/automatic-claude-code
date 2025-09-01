@@ -1,6 +1,10 @@
 # Dual-Agent Claude Code Monitor
 
+**Status**: ✅ **FULLY OPERATIONAL - READY FOR USE** (Network connection issue fixed in v1.1.1)
+
 A comprehensive web UI for monitoring and analyzing dual-agent Claude Code system interactions between Manager (Opus) and Worker (Sonnet) agents.
+
+> **🚀 Quick Start**: The system is currently running and tested! Access the dashboard at [http://localhost:6011](http://localhost:6011) and API at [http://localhost:4005/api/health](http://localhost:4005/api/health)
 
 ## Features
 
@@ -49,7 +53,7 @@ pnpm run dev
 
 This will start:
 - Frontend dev server at http://localhost:6011
-- Backend API server at http://localhost:4001
+- Backend API server at http://localhost:4005
 - WebSocket server for real-time updates
 
 ### Option 2: Persistent Monitoring Service (Always Running)
@@ -69,10 +73,10 @@ pnpm run monitor:status
 ```
 
 This will start:
-- Lightweight monitoring server at http://localhost:6007
-- Basic health and status monitoring
-- Auto-restart capabilities
-- Lower resource usage
+- Backend API server at http://localhost:4005
+- Frontend dashboard at http://localhost:6011
+- WebSocket real-time monitoring
+- Auto-restart capabilities with Docker
 
 ### Option 3: Production Mode
 

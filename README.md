@@ -1,4 +1,4 @@
-# Automatic Claude Code (v1.1.0)
+# Automatic Claude Code (v1.1.1)
 
 A powerful dual-agent system that revolutionizes AI-assisted development through coordinated Claude Code automation. Features a Manager-Worker architecture where specialized agents collaborate to tackle complex development tasks with unprecedented sophistication and reliability.
 
@@ -186,8 +186,8 @@ pnpm run docker:logs
 
 **Monitoring Dashboard URLs:**
 - **Persistent Monitor**: http://localhost:6007 (lightweight, always running)
-- **Full Dashboard**: http://localhost:6011 (development mode)
-- **API Server**: http://localhost:4001 (WebSocket + REST API)
+- **Full Dashboard**: http://localhost:6011 (development mode) ✅ *Connection issue fixed in v1.1.1*
+- **API Server**: http://localhost:4005 (WebSocket + REST API)
 
 ## Prerequisites
 

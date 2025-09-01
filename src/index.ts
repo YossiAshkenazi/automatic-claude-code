@@ -316,7 +316,7 @@ async function main() {
   program
     .name('automatic-claude-code')
     .description('Run Claude Code in an automated loop for continuous development')
-    .version('1.1.0');
+    .version('1.1.1');
 
   program
     .command('run <prompt>')

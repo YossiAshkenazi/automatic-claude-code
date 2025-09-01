@@ -1,6 +1,6 @@
 import { describe, test, expect, vi, beforeEach, afterEach, MockedFunction } from 'vitest';
 import { EventEmitter } from 'events';
-import * as pty from 'node-pty';
+import * as pty from '@lydell/node-pty';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -9,7 +9,7 @@ import { Logger } from '../logger';
 import { ClaudeUtils } from '../claudeUtils';
 
 // Mock dependencies
-vi.mock('node-pty');
+vi.mock('@lydell/node-pty');
 vi.mock('fs');
 vi.mock('os');
 vi.mock('path');

@@ -1,34 +1,46 @@
 #!/usr/bin/env node
+/**
+ * Docker health check script for dual-agent-monitor
+ * This script checks if the WebSocket server is running and responding
+ */
 
 const http = require('http');
+const process = require('process');
+
+const PORT = process.env.PORT || process.env.WEBSOCKET_SERVER_PORT || 4005;
+
+const healthCheckUrl = `http://localhost:${PORT}/api/health`;
 
 const options = {
-  host: 'localhost',
-  port: process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || 4005,
+  hostname: 'localhost',
+  port: PORT,
   path: '/api/health',
-  timeout: 2000,
-  method: 'GET'
+  method: 'GET',
+  timeout: 5000,
 };
 
-const request = http.request(options, (res) => {
+const req = http.request(options, (res) => {
   console.log(`Health check status: ${res.statusCode}`);
   
   if (res.statusCode === 200) {
+    console.log('Health check passed');
     process.exit(0);
   } else {
+    console.log('Health check failed - server returned non-200 status');
     process.exit(1);
   }
 });
 
-request.on('timeout', () => {
-  console.log('Health check timeout');
-  request.abort();
+req.on('error', (err) => {
+  console.error('Health check failed - request error:', err.message);
   process.exit(1);
 });
 
-request.on('error', (err) => {
-  console.log('Health check error:', err.message);
+req.on('timeout', () => {
+  console.error('Health check failed - request timeout');
+  req.destroy();
   process.exit(1);
 });
 
-request.end();
+req.setTimeout(5000);
+req.end();

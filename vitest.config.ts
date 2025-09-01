@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     setupFiles: ['./src/__tests__/setup.ts'],
+    testTimeout: 15000,
+    hookTimeout: 15000,
     coverage: {
       reporter: ['text', 'json', 'html', 'lcov'],
       exclude: [

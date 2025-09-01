@@ -6,7 +6,7 @@ import { useMobile } from './hooks/useMobile';
 import { usePWA } from './hooks/usePWA';
 import { apiClient } from './utils/api';
 import { formatDate } from './utils/formatters';
-import { ErrorBoundaryWrapper, WebSocketErrorBoundaryWrapper } from './components/ui/ErrorBoundaryWrapper';
+import { ErrorBoundaryWrapper } from './components/ui/ErrorBoundaryWrapper';
 import { LoadingState } from './components/ui/LoadingSpinner';
 import { initializeErrorReporting, reportError } from './utils/errorReporting';
 import { EnhancedError, NetworkError, ApiError } from './types/errors';
@@ -300,8 +300,6 @@ function App() {
   }
 
   return (
-    <ErrorBoundaryWrapper componentName="App Main">
-      <WebSocketErrorBoundaryWrapper>
     <ResponsiveLayout
       currentView={viewMode as any}
       onViewChange={setViewMode as any}
@@ -581,8 +579,8 @@ function App() {
         </main>
         </div>
         </ResponsiveLayout>
-      </WebSocketErrorBoundaryWrapper>
-    </ErrorBoundaryWrapper>
+      </WebSocketErrorBoundary>
+    </ErrorBoundary>
   );
 }
 

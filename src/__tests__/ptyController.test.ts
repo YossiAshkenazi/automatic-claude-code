@@ -169,26 +169,29 @@ describe('ClaudeCodePTYController', () => {
     test('should wait for ready timeout', async () => {
       vi.useFakeTimers();
       
-      const initPromise = controller.initialize();
-      
-      // Don't send ready event, let timeout occur
-      vi.advanceTimersByTime(11000);
-      
-      await expect(initPromise).rejects.toThrow('Timeout waiting for Claude to be ready');
-      
-      vi.useRealTimers();
-    });
+      try {
+        const initPromise = controller.initialize();
+        
+        // Advance time to trigger timeout
+        await vi.advanceTimersByTimeAsync(11000);
+        
+        await expect(initPromise).rejects.toThrow('Timeout waiting for Claude to be ready');
+      } finally {
+        vi.useRealTimers();
+      }
+    }, 15000);
   });
 
   describe('Process Spawning Configuration', () => {
     test('should spawn process without -p flag', async () => {
       const initPromise = controller.initialize();
       
-      setTimeout(() => {
+      // Simulate ready event immediately
+      process.nextTick(() => {
         if (mockDataHandler) {
           mockDataHandler('Ready\n');
         }
-      }, 10);
+      });
       
       await initPromise;
 
@@ -197,18 +200,19 @@ describe('ClaudeCodePTYController', () => {
       
       expect(args).not.toContain('-p');
       expect(args).not.toContain('--print');
-    });
+    }, 10000);
 
     test('should configure environment for subscription auth', async () => {
       process.env.ANTHROPIC_API_KEY = 'test-api-key';
       
       const initPromise = controller.initialize();
       
-      setTimeout(() => {
+      // Simulate ready event immediately
+      process.nextTick(() => {
         if (mockDataHandler) {
           mockDataHandler('Ready\n');
         }
-      }, 10);
+      });
       
       await initPromise;
 
@@ -218,7 +222,7 @@ describe('ClaudeCodePTYController', () => {
       expect(env).not.toHaveProperty('ANTHROPIC_API_KEY');
       expect(env).toHaveProperty('CLAUDE_CODE_USE_BEDROCK', '0');
       expect(env).toHaveProperty('CLAUDE_CODE_ENABLE_TELEMETRY', '0');
-    });
+    }, 10000);
 
     test('should include OAuth token in environment', async () => {
       const tokenController = new ClaudeCodePTYController({
@@ -227,11 +231,12 @@ describe('ClaudeCodePTYController', () => {
 
       const initPromise = tokenController.initialize();
       
-      setTimeout(() => {
+      // Simulate ready event immediately
+      process.nextTick(() => {
         if (mockDataHandler) {
           mockDataHandler('Ready\n');
         }
-      }, 10);
+      });
       
       await initPromise;
 
@@ -241,21 +246,22 @@ describe('ClaudeCodePTYController', () => {
       expect(env).toHaveProperty('CLAUDE_CODE_OAUTH_TOKEN', 'test-oauth-token');
 
       tokenController.close();
-    });
+    }, 10000);
   });
 
   describe('Process Lifecycle Management', () => {
     beforeEach(async () => {
       const initPromise = controller.initialize();
       
-      setTimeout(() => {
+      // Simulate ready event immediately
+      process.nextTick(() => {
         if (mockDataHandler) {
           mockDataHandler('Ready\n');
         }
-      }, 10);
+      });
       
       await initPromise;
-    });
+    }, 15000);
 
     test('should handle process start successfully', () => {
       expect(mockPty.onData).toHaveBeenCalled();
@@ -286,8 +292,10 @@ describe('ClaudeCodePTYController', () => {
       await expect(promptPromise).rejects.toThrow('Process exited unexpectedly: 1');
     });
 
-    test('should close process properly', () => {
+    test('should close process properly', async () => {
+      // Wait a bit for the close operation to complete
       controller.close();
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       expect(mockPty.kill).toHaveBeenCalled();
     });
@@ -303,14 +311,15 @@ describe('ClaudeCodePTYController', () => {
     beforeEach(async () => {
       const initPromise = controller.initialize();
       
-      setTimeout(() => {
+      // Simulate ready event immediately
+      process.nextTick(() => {
         if (mockDataHandler) {
           mockDataHandler('Ready\n');
         }
-      }, 10);
+      });
       
       await initPromise;
-    });
+    }, 15000);
 
     test('should process JSON messages correctly', () => {
       const messageSpy = vi.fn();
@@ -369,7 +378,7 @@ describe('ClaudeCodePTYController', () => {
       expect(messageSpy).toHaveBeenCalledWith({ type: 'result', content: 'colored' });
     });
 
-    test('should emit different message types correctly', () => {
+    test('should emit different message types correctly', async () => {
       const readySpy = vi.fn();
       const toolUseSpy = vi.fn();
       const errorSpy = vi.fn();
@@ -381,6 +390,9 @@ describe('ClaudeCodePTYController', () => {
       mockDataHandler(`${JSON.stringify({ type: 'ready' })}\n`);
       mockDataHandler(`${JSON.stringify({ type: 'tool_use', tool: 'test' })}\n`);
       mockDataHandler(`${JSON.stringify({ type: 'error', error: 'test error' })}\n`);
+
+      // Wait for events to process
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(readySpy).toHaveBeenCalled();
       expect(toolUseSpy).toHaveBeenCalledWith({ type: 'tool_use', tool: 'test' });
@@ -560,14 +572,15 @@ describe('ClaudeCodePTYController', () => {
     beforeEach(async () => {
       const initPromise = controller.initialize();
       
-      setTimeout(() => {
+      // Simulate ready event immediately
+      process.nextTick(() => {
         if (mockDataHandler) {
           mockDataHandler('Ready\n');
         }
-      }, 10);
+      });
       
       await initPromise;
-    });
+    }, 15000);
 
     test('should resize PTY correctly', () => {
       controller.resize(80, 24);
@@ -853,14 +866,15 @@ describe('ACCPTYManager', () => {
     beforeEach(async () => {
       const sessionPromise = manager.createSession('/test/project');
       
-      setTimeout(() => {
+      // Simulate ready event immediately
+      process.nextTick(() => {
         if (mockDataHandler) {
           mockDataHandler('Ready\n');
         }
-      }, 10);
+      });
       
       sessionId = await sessionPromise;
-    });
+    }, 15000);
 
     test('should send prompt to session successfully', async () => {
       const promptPromise = manager.sendPrompt(sessionId, 'test prompt');

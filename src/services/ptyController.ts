@@ -355,7 +355,7 @@ export class ClaudeCodePTYController extends EventEmitter {
       return { found: true, message, endIndex: jsonEnd };
     } catch (error) {
       this.malformedJsonAttempts++;
-      this.logger.warning(`Malformed JSON detected (attempt ${this.malformedJsonAttempts}/${this.maxMalformedAttempts}): ${jsonText.substring(0, 100)}...`);
+      this.logger.warn(`Malformed JSON detected (attempt ${this.malformedJsonAttempts}/${this.maxMalformedAttempts}): ${jsonText.substring(0, 100)}...`);
       
       if (this.malformedJsonAttempts >= this.maxMalformedAttempts) {
         // Skip this malformed JSON and continue processing
@@ -401,7 +401,7 @@ export class ClaudeCodePTYController extends EventEmitter {
     const maxBufferSize = 1024 * 1024; // 1MB max buffer size
     
     if (this.jsonBuffer.length > maxBufferSize) {
-      this.logger.warning(`Buffer overflow detected. Buffer size: ${this.jsonBuffer.length}. Truncating...`);
+      this.logger.warn(`Buffer overflow detected. Buffer size: ${this.jsonBuffer.length}. Truncating...`);
       
       // Keep only the last portion of the buffer
       const keepSize = Math.floor(maxBufferSize / 2);
@@ -417,7 +417,7 @@ export class ClaudeCodePTYController extends EventEmitter {
   private handleJsonMessage(message: any): void {
     // Validate message before processing
     if (!this.validateJsonMessage(message)) {
-      this.logger.warning('Discarding invalid JSON message');
+      this.logger.warn('Discarding invalid JSON message');
       return;
     }
 
@@ -636,7 +636,7 @@ export class ClaudeCodePTYController extends EventEmitter {
    * Handle buffer recovery from malformed data
    */
   private recoverFromMalformedBuffer(): void {
-    this.logger.warning('Attempting buffer recovery from malformed data');
+    this.logger.warn('Attempting buffer recovery from malformed data');
     
     // Try to find the last valid position
     let lastValidPos = 0;
@@ -654,7 +654,7 @@ export class ClaudeCodePTYController extends EventEmitter {
       this.logger.info(`Recovered buffer from position ${lastValidPos}`);
       this.jsonBuffer = cleanBuffer.substring(lastValidPos);
     } else {
-      this.logger.warning('Full buffer reset required');
+      this.logger.warn('Full buffer reset required');
       this.resetBuffers();
     }
   }
@@ -787,10 +787,10 @@ export class ClaudeCodePTYController extends EventEmitter {
         if (this.validateJsonMessage(message)) {
           messages.push(message);
         } else {
-          this.logger.warning(`Invalid message structure: ${messageText.substring(0, 100)}...`);
+          this.logger.warn(`Invalid message structure: ${messageText.substring(0, 100)}...`);
         }
       } catch (error) {
-        this.logger.warning(`Failed to parse streaming JSON: ${error}`);
+        this.logger.warn(`Failed to parse streaming JSON: ${error}`);
         break;
       }
       
@@ -816,17 +816,17 @@ export class ClaudeCodePTYController extends EventEmitter {
       this.logger.error(`JSON buffer size critical: ${stats.jsonBufferSize} bytes. Performing emergency cleanup.`);
       this.recoverFromMalformedBuffer();
     } else if (stats.jsonBufferSize > warningThreshold) {
-      this.logger.warning(`JSON buffer size high: ${stats.jsonBufferSize} bytes. Consider flushing.`);
+      this.logger.warn(`JSON buffer size high: ${stats.jsonBufferSize} bytes. Consider flushing.`);
     }
     
     // Check for excessive malformed attempts
     if (stats.malformedAttempts >= this.maxMalformedAttempts - 1) {
-      this.logger.warning(`Malformed JSON attempts high: ${stats.malformedAttempts}/${this.maxMalformedAttempts}`);
+      this.logger.warn(`Malformed JSON attempts high: ${stats.malformedAttempts}/${this.maxMalformedAttempts}`);
     }
     
     // Check for stuck pending messages
     if (stats.pendingMessages > 10) {
-      this.logger.warning(`High number of pending messages: ${stats.pendingMessages}. Consider flushing.`);
+      this.logger.warn(`High number of pending messages: ${stats.pendingMessages}. Consider flushing.`);
     }
     
     // Force cleanup if necessary
@@ -927,7 +927,7 @@ export class ClaudeCodePTYController extends EventEmitter {
         timeoutPromise
       ]);
     } catch (error) {
-      this.logger.warning(`Some promises failed during shutdown: ${error}`);
+      this.logger.warn(`Some promises failed during shutdown: ${error}`);
     }
     
     // Clear the set regardless of outcome
@@ -977,7 +977,7 @@ export class ClaudeCodePTYController extends EventEmitter {
       // Set up timeout for forceful kill
       const forceTimeout = setTimeout(() => {
         if (!resolved) {
-          this.logger.warning(`Force killing PTY process ${pid}`);
+          this.logger.warn(`Force killing PTY process ${pid}`);
           try {
             process.kill('SIGKILL');
           } catch (error) {
@@ -1058,7 +1058,7 @@ export class ClaudeCodePTYController extends EventEmitter {
    * Force cleanup when graceful shutdown fails
    */
   private async forceCleanup(): Promise<void> {
-    this.logger.warning('Performing force cleanup');
+    this.logger.warn('Performing force cleanup');
     
     // Kill process immediately
     if (this.ptyProcess) {
@@ -1591,7 +1591,7 @@ export class ACCPTYManager {
    * Force shutdown all sessions (emergency)
    */
   public emergencyShutdown(): void {
-    this.logger.warning('Emergency shutdown initiated');
+    this.logger.warn('Emergency shutdown initiated');
     
     // Stop cleanup interval immediately
     this.stopSessionCleanup();
@@ -1612,7 +1612,7 @@ export class ACCPTYManager {
     this.isDisposed = true;
     this.isShuttingDown = false;
     
-    this.logger.warning('Emergency shutdown completed');
+    this.logger.warn('Emergency shutdown completed');
   }
   
   /**

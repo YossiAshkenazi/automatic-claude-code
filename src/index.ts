@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import chalk from 'chalk';
 import { Command } from 'commander';
-import { SessionManager } from './sessionManager';
+import { SessionManager, EnhancedSessionManager, SessionLimitError } from './sessionManager';
 import { OutputParser, ParsedOutput } from './outputParser';
 import { PromptBuilder } from './promptBuilder';
 import { Logger } from './logger';
@@ -38,7 +38,7 @@ interface AnalysisResult {
 }
 
 class AutomaticClaudeCode {
-  private sessionManager: SessionManager;
+  private sessionManager: EnhancedSessionManager;
   private outputParser: OutputParser;
   private promptBuilder: PromptBuilder;
   private logger: Logger;
@@ -47,7 +47,7 @@ class AutomaticClaudeCode {
   private sessionHistory: string[] = [];
 
   constructor() {
-    this.sessionManager = new SessionManager();
+    this.sessionManager = new EnhancedSessionManager();
     this.outputParser = new OutputParser();
     this.promptBuilder = new PromptBuilder();
     this.logger = new Logger();
@@ -154,7 +154,34 @@ class AutomaticClaudeCode {
       options
     });
 
-    await this.sessionManager.createSession(initialPrompt, options.workDir || process.cwd());
+    try {
+      if (options.sessionId) {
+        // Resume existing session
+        await this.sessionManager.resumeSession(options.sessionId, initialPrompt);
+        sessionId = options.sessionId;
+        console.log(chalk.green(`📄 Resumed session: ${sessionId}`));
+      } else {
+        // Create new session
+        sessionId = await this.sessionManager.createSession(initialPrompt, options.workDir || process.cwd());
+        console.log(chalk.green(`📝 Created new session: ${sessionId}`));
+      }
+    } catch (error) {
+      if (error instanceof SessionLimitError) {
+        console.log(chalk.red(`❌ ${error.message}`));
+        console.log(chalk.yellow('💡 Try closing some running sessions or use --resume to continue an existing session'));
+        
+        // Show current sessions
+        const activeSessions = await this.sessionManager.listActiveSessions();
+        if (activeSessions.length > 0) {
+          console.log(chalk.cyan('\n🔄 Active sessions:'));
+          activeSessions.slice(0, 5).forEach(session => {
+            console.log(chalk.gray(`  - ${session.sessionId}: ${session.session?.initialPrompt?.substring(0, 60)}...`));
+          });
+        }
+        return;
+      }
+      throw error;
+    }
 
     while (this.iteration < maxIterations) {
       this.iteration++;
@@ -332,6 +359,7 @@ async function main() {
     .option('--worker-model <model>', 'Worker agent model (sonnet or opus)', 'sonnet')
     .option('--no-monitoring', 'Disable monitoring server')
     .option('--timeout <minutes>', 'Timeout for each Claude execution in minutes (default: 30)', '30')
+    .option('--resume <sessionId>', 'Resume an existing session instead of creating a new one')
     .action(async (prompt, options) => {
       // Start monitoring server if enabled and not disabled
       if (!options.noMonitoring && config.isMonitoringEnabled()) {
@@ -377,6 +405,7 @@ async function main() {
             continueOnError: options.continueOnError,
             verbose: options.verbose,
             timeout: parseInt(options.timeout) * 60000,
+            sessionId: options.resume,
           });
         } catch (error) {
           console.error(chalk.red('Fatal error:'), error);
@@ -911,6 +940,177 @@ async function main() {
         const content = fs.readFileSync(logPath, 'utf-8');
         console.log(chalk.blue.bold(`\nLog: ${latestLog}\n`));
         console.log(content);
+      }
+    });
+
+  // Session management commands
+  program
+    .command('sessions')
+    .description('Manage active and completed sessions')
+    .option('-l, --list', 'List all sessions')
+    .option('-a, --active', 'Show only active sessions')
+    .option('-s, --stats', 'Show session statistics')
+    .option('-r, --resume <sessionId>', 'Resume a specific session')
+    .option('-k, --kill <sessionId>', 'Force kill a session')
+    .option('-c, --cleanup [hours]', 'Clean up old sessions (default: 24 hours)')
+    .option('--export <sessionId>', 'Export session data for backup')
+    .option('--limit <number>', 'Set max concurrent sessions limit')
+    .action(async (options) => {
+      const acc = new AutomaticClaudeCode();
+      const sessionManager = acc['sessionManager'] as EnhancedSessionManager;
+
+      try {
+        // List sessions
+        if (options.list) {
+          const sessions = await sessionManager.listSessions();
+          if (sessions.length === 0) {
+            console.log(chalk.yellow('No sessions found.'));
+            return;
+          }
+
+          const table = new Table({
+            head: ['Session ID', 'Status', 'Created', 'Task'],
+            colWidths: [20, 12, 20, 50]
+          });
+
+          sessions.forEach(session => {
+            const status = session.status === 'running' ? chalk.green('●') : 
+                          session.status === 'completed' ? chalk.blue('✓') : 
+                          chalk.red('✗');
+            table.push([
+              session.id.substring(0, 18),
+              `${status} ${session.status}`,
+              session.date.toLocaleDateString(),
+              session.prompt
+            ]);
+          });
+
+          console.log('\n📋 Session History:');
+          console.log(table.toString());
+          return;
+        }
+
+        // Show active sessions
+        if (options.active) {
+          const activeSessions = await sessionManager.listActiveSessions();
+          if (activeSessions.length === 0) {
+            console.log(chalk.yellow('No active sessions.'));
+            return;
+          }
+
+          console.log(chalk.cyan.bold('\n🔄 Active Sessions:\n'));
+          activeSessions.forEach(session => {
+            const state = sessionManager.getSessionState(session.sessionId);
+            console.log(chalk.green(`● ${session.sessionId}`));
+            console.log(chalk.gray(`  Task: ${session.session?.initialPrompt?.substring(0, 80)}...`));
+            console.log(chalk.gray(`  Directory: ${state?.paths.workDir || 'Unknown'}`));
+            console.log(chalk.gray(`  Controller: ${state?.processInfo.hasActiveController ? 'Active' : 'Inactive'}`));
+            console.log(chalk.gray(`  Last Activity: ${state?.processInfo.lastActivity?.toLocaleTimeString() || 'Unknown'}`));
+            console.log('');
+          });
+          return;
+        }
+
+        // Show statistics
+        if (options.stats) {
+          const stats = sessionManager.getSessionStatistics();
+          console.log(chalk.cyan.bold('\n📊 Session Statistics:\n'));
+          console.log(chalk.green(`✓ Total Sessions: ${stats.total}`));
+          console.log(chalk.yellow(`🔄 Running: ${stats.running}`));
+          console.log(chalk.blue(`✅ Completed: ${stats.completed}`));
+          console.log(chalk.red(`❌ Failed: ${stats.failed}`));
+          console.log(chalk.cyan(`🎯 Max Concurrent: ${stats.maxConcurrent}`));
+          
+          if (stats.running > 0) {
+            const usage = Math.round((stats.running / stats.maxConcurrent) * 100);
+            console.log(chalk.magenta(`📈 Usage: ${usage}% (${stats.running}/${stats.maxConcurrent})`));
+          }
+          return;
+        }
+
+        // Resume session
+        if (options.resume) {
+          try {
+            await sessionManager.resumeSession(options.resume);
+            console.log(chalk.green(`✅ Resumed session: ${options.resume}`));
+          } catch (error) {
+            console.log(chalk.red(`❌ Failed to resume session: ${error instanceof Error ? error.message : error}`));
+          }
+          return;
+        }
+
+        // Force kill session
+        if (options.kill) {
+          try {
+            await sessionManager.forceKillSession(options.kill);
+            console.log(chalk.red(`🗑️  Force killed session: ${options.kill}`));
+          } catch (error) {
+            console.log(chalk.red(`❌ Failed to kill session: ${error instanceof Error ? error.message : error}`));
+          }
+          return;
+        }
+
+        // Cleanup old sessions
+        if (options.cleanup !== undefined) {
+          const hours = options.cleanup ? parseInt(options.cleanup) : 24;
+          try {
+            const cleaned = await sessionManager.cleanupOldSessions(hours);
+            console.log(chalk.green(`🧹 Cleaned up ${cleaned.length} old sessions (older than ${hours}h)`));
+            if (cleaned.length > 0) {
+              cleaned.forEach(id => console.log(chalk.gray(`  - ${id}`)));
+            }
+          } catch (error) {
+            console.log(chalk.red(`❌ Cleanup failed: ${error instanceof Error ? error.message : error}`));
+          }
+          return;
+        }
+
+        // Export session
+        if (options.export) {
+          try {
+            const exportData = await sessionManager.exportSession(options.export);
+            const filename = `session-export-${options.export}-${Date.now()}.json`;
+            await fs.promises.writeFile(filename, JSON.stringify(exportData, null, 2));
+            console.log(chalk.green(`📦 Exported session to: ${filename}`));
+            console.log(chalk.gray(`  Session: ${exportData.session.initialPrompt?.substring(0, 60)}...`));
+            console.log(chalk.gray(`  Iterations: ${exportData.session.iterations.length}`));
+            console.log(chalk.gray(`  Status: ${exportData.session.status}`));
+          } catch (error) {
+            console.log(chalk.red(`❌ Export failed: ${error instanceof Error ? error.message : error}`));
+          }
+          return;
+        }
+
+        // Set session limit
+        if (options.limit) {
+          const limit = parseInt(options.limit);
+          if (isNaN(limit) || limit < 1) {
+            console.log(chalk.red('❌ Invalid limit. Must be a positive number.'));
+            return;
+          }
+          
+          sessionManager.setMaxConcurrentSessions(limit);
+          console.log(chalk.green(`✅ Set max concurrent sessions to: ${limit}`));
+          return;
+        }
+
+        // Default: show active sessions
+        const activeSessions = await sessionManager.listActiveSessions();
+        if (activeSessions.length === 0) {
+          console.log(chalk.yellow('No active sessions. Use --list to see all sessions.'));
+        } else {
+          console.log(chalk.cyan.bold(`\n🔄 Active Sessions (${activeSessions.length}):\n`));
+          activeSessions.slice(0, 5).forEach(session => {
+            console.log(chalk.green(`● ${session.sessionId.substring(0, 18)}`));
+            console.log(chalk.gray(`  ${session.session?.initialPrompt?.substring(0, 80)}...`));
+          });
+          if (activeSessions.length > 5) {
+            console.log(chalk.gray(`  ... and ${activeSessions.length - 5} more (use --active to see all)`));
+          }
+        }
+
+      } catch (error) {
+        console.error(chalk.red('Session management error:'), error);
       }
     });
 

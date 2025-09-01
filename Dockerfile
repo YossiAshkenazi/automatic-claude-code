@@ -1,5 +1,5 @@
 # Multi-stage build for Automatic Claude Code
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 WORKDIR /app
 
 # Install pnpm globally
@@ -18,7 +18,7 @@ COPY . .
 RUN pnpm run build
 
 # Production stage
-FROM node:20-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app
 
 # Install pnpm globally

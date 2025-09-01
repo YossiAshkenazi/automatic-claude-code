@@ -7,6 +7,21 @@ import { EventEmitter } from 'events';
 import { Logger } from '../logger';
 import { ClaudeUtils } from '../claudeUtils';
 
+// Global shutdown management
+interface GlobalShutdownManager {
+  controllers: Set<ClaudeCodePTYController>;
+  managers: Set<ACCPTYManager>;
+  isShuttingDown: boolean;
+  signalHandlersRegistered: boolean;
+}
+
+const globalShutdown: GlobalShutdownManager = {
+  controllers: new Set(),
+  managers: new Set(),
+  isShuttingDown: false,
+  signalHandlersRegistered: false
+};
+
 // Type definitions for enhanced buffer management
 interface ClaudeMessage {
   type: string;
@@ -40,7 +55,7 @@ interface StreamingJsonResult {
 }
 
 /**
- * PTY Controller for interactive Claude Code control
+ * PTY Controller for interactive Claude Code control with enhanced shutdown and cleanup
  * Alternative to headless mode that uses subscription authentication
  */
 export class ClaudeCodePTYController extends EventEmitter {
@@ -61,6 +76,16 @@ export class ClaudeCodePTYController extends EventEmitter {
   private malformedJsonAttempts: number = 0;
   private maxMalformedAttempts: number = 3;
   private healthCheckInterval?: NodeJS.Timeout;
+  
+  // Enhanced shutdown and cleanup properties
+  private isShuttingDown: boolean = false;
+  private isDisposed: boolean = false;
+  private activePromises: Set<Promise<any>> = new Set();
+  private eventListeners: Map<string, ((...args: any[]) => void)[]> = new Map();
+  private cleanup: (() => void)[] = [];
+  private shutdownTimeout?: NodeJS.Timeout;
+  private processExitHandler?: () => void;
+  private errorHandler?: (error: Error) => void;
 
   constructor(options: any = {}) {
     super();
@@ -70,6 +95,16 @@ export class ClaudeCodePTYController extends EventEmitter {
     
     // Initialize enhanced buffer management
     this.resetBuffers();
+    
+    // Register this controller globally for shutdown handling
+    globalShutdown.controllers.add(this);
+    this.registerGlobalSignalHandlers();
+    
+    // Set up error handling for unhandled errors
+    this.setupErrorHandling();
+    
+    // Track event listeners for cleanup
+    this.setupEventListenerTracking();
   }
 
   /**
@@ -534,37 +569,7 @@ export class ClaudeCodePTYController extends EventEmitter {
     });
   }
 
-  /**
-   * Send a prompt to Claude
-   */
-  async sendPrompt(prompt: string): Promise<string> {
-    if (!this.ptyProcess) {
-      throw new Error('PTY process not initialized');
-    }
-    
-    if (!this.isReady) {
-      await this.waitForReady();
-    }
-    
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Prompt timeout'));
-      }, 30000);
-      
-      this.currentPromptResolve = (value: string) => {
-        clearTimeout(timeout);
-        resolve(value);
-      };
-      
-      this.currentPromptReject = (reason: any) => {
-        clearTimeout(timeout);
-        reject(reason);
-      };
-      
-      // Send prompt to PTY
-      this.ptyProcess!.write(prompt + '\n');
-    });
-  }
+  // This method is replaced by the enhanced version above
 
   /**
    * Extract OAuth token from system credentials
@@ -832,28 +837,495 @@ export class ClaudeCodePTYController extends EventEmitter {
   }
 
   /**
-   * Close the PTY process
+   * Graceful shutdown with comprehensive cleanup
    */
-  close(): void {
-    // Stop health monitoring
-    this.stopBufferHealthMonitoring();
-    
-    // Flush buffers before closing
-    this.flushBuffers();
-    
-    if (this.ptyProcess) {
-      this.ptyProcess.kill();
-      this.ptyProcess = undefined;
+  async shutdown(timeout: number = 10000): Promise<void> {
+    if (this.isShuttingDown || this.isDisposed) {
+      return;
     }
     
-    // Clean up any pending promises
+    this.isShuttingDown = true;
+    this.logger.info('Initiating graceful shutdown of PTY controller');
+    
+    // Set a timeout for the shutdown process
+    const shutdownPromise = this.performShutdown();
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      this.shutdownTimeout = setTimeout(() => {
+        reject(new Error(`Shutdown timeout after ${timeout}ms`));
+      }, timeout);
+    });
+    
+    try {
+      await Promise.race([shutdownPromise, timeoutPromise]);
+      this.logger.info('PTY controller shutdown completed successfully');
+    } catch (error) {
+      this.logger.error(`PTY controller shutdown error: ${error}`);
+      await this.forceCleanup();
+    } finally {
+      this.markAsDisposed();
+    }
+  }
+  
+  /**
+   * Perform the actual shutdown process
+   */
+  private async performShutdown(): Promise<void> {
+    const shutdownSteps: (() => Promise<void>)[] = [
+      () => this.stopAcceptingNewRequests(),
+      () => this.waitForActivePromisesToComplete(),
+      () => this.stopHealthMonitoring(),
+      () => this.flushAndClearBuffers(),
+      () => this.closeProcessGracefully(),
+      () => this.cleanupEventListeners(),
+      () => this.runCustomCleanupHandlers(),
+      () => this.unregisterFromGlobal()
+    ];
+    
+    for (const [index, step] of shutdownSteps.entries()) {
+      try {
+        await step();
+        this.logger.debug(`Shutdown step ${index + 1}/${shutdownSteps.length} completed`);
+      } catch (error) {
+        this.logger.error(`Shutdown step ${index + 1} failed: ${error}`);
+        // Continue with remaining steps
+      }
+    }
+  }
+  
+  /**
+   * Stop accepting new requests
+   */
+  private async stopAcceptingNewRequests(): Promise<void> {
+    this.isReady = false;
+    
+    // Reject any pending prompts
     if (this.currentPromptReject) {
-      this.currentPromptReject(new Error('PTY process closed'));
+      this.currentPromptReject(new Error('PTY controller shutting down'));
       this.currentPromptResolve = undefined;
       this.currentPromptReject = undefined;
     }
   }
+  
+  /**
+   * Wait for active promises to complete
+   */
+  private async waitForActivePromisesToComplete(timeout: number = 5000): Promise<void> {
+    if (this.activePromises.size === 0) {
+      return;
+    }
+    
+    this.logger.debug(`Waiting for ${this.activePromises.size} active promises to complete`);
+    
+    const activePromiseArray = Array.from(this.activePromises);
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(resolve, timeout);
+    });
+    
+    try {
+      await Promise.race([
+        Promise.allSettled(activePromiseArray),
+        timeoutPromise
+      ]);
+    } catch (error) {
+      this.logger.warning(`Some promises failed during shutdown: ${error}`);
+    }
+    
+    // Clear the set regardless of outcome
+    this.activePromises.clear();
+  }
+  
+  /**
+   * Stop health monitoring
+   */
+  private async stopHealthMonitoring(): Promise<void> {
+    this.stopBufferHealthMonitoring();
+  }
+  
+  /**
+   * Flush and clear all buffers
+   */
+  private async flushAndClearBuffers(): Promise<void> {
+    try {
+      this.flushBuffers();
+    } finally {
+      this.resetBuffers();
+    }
+  }
+  
+  /**
+   * Close the PTY process gracefully
+   */
+  private async closeProcessGracefully(): Promise<void> {
+    if (!this.ptyProcess) {
+      return;
+    }
+    
+    const process = this.ptyProcess;
+    this.ptyProcess = undefined;
+    
+    return new Promise<void>((resolve) => {
+      const pid = process.pid;
+      let resolved = false;
+      
+      const cleanup = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      };
+      
+      // Set up timeout for forceful kill
+      const forceTimeout = setTimeout(() => {
+        if (!resolved) {
+          this.logger.warning(`Force killing PTY process ${pid}`);
+          try {
+            process.kill('SIGKILL');
+          } catch (error) {
+            this.logger.error(`Error force killing process: ${error}`);
+          }
+          cleanup();
+        }
+      }, 3000);
+      
+      // Listen for process exit
+      const exitHandler = () => {
+        clearTimeout(forceTimeout);
+        cleanup();
+      };
+      
+      try {
+        process.onExit(exitHandler);
+        
+        // Try graceful termination first
+        process.kill('SIGTERM');
+        
+        // If still alive after 1 second, try SIGINT
+        setTimeout(() => {
+          if (!resolved) {
+            try {
+              process.kill('SIGINT');
+            } catch (error) {
+              // Process might already be dead
+            }
+          }
+        }, 1000);
+        
+      } catch (error) {
+        this.logger.error(`Error during graceful process termination: ${error}`);
+        cleanup();
+      }
+    });
+  }
+  
+  /**
+   * Clean up all event listeners
+   */
+  private async cleanupEventListeners(): Promise<void> {
+    // Remove all tracked event listeners
+    for (const [event, listeners] of this.eventListeners.entries()) {
+      for (const listener of listeners) {
+        this.removeListener(event, listener);
+      }
+    }
+    this.eventListeners.clear();
+    
+    // Remove all listeners from this EventEmitter
+    this.removeAllListeners();
+  }
+  
+  /**
+   * Run custom cleanup handlers
+   */
+  private async runCustomCleanupHandlers(): Promise<void> {
+    for (const cleanupHandler of this.cleanup.reverse()) {
+      try {
+        cleanupHandler();
+      } catch (error) {
+        this.logger.error(`Cleanup handler failed: ${error}`);
+      }
+    }
+    this.cleanup = [];
+  }
+  
+  /**
+   * Unregister from global shutdown management
+   */
+  private async unregisterFromGlobal(): Promise<void> {
+    globalShutdown.controllers.delete(this);
+  }
+  
+  /**
+   * Force cleanup when graceful shutdown fails
+   */
+  private async forceCleanup(): Promise<void> {
+    this.logger.warning('Performing force cleanup');
+    
+    // Kill process immediately
+    if (this.ptyProcess) {
+      try {
+        this.ptyProcess.kill('SIGKILL');
+      } catch (error) {
+        // Ignore errors during force cleanup
+      }
+      this.ptyProcess = undefined;
+    }
+    
+    // Clear all timeouts
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+    if (this.shutdownTimeout) {
+      clearTimeout(this.shutdownTimeout);
+    }
+    
+    // Clear all data structures
+    this.resetBuffers();
+    this.activePromises.clear();
+    this.cleanup = [];
+    this.removeAllListeners();
+  }
+  
+  /**
+   * Mark the controller as disposed
+   */
+  private markAsDisposed(): void {
+    this.isDisposed = true;
+    this.isShuttingDown = false;
+    
+    if (this.shutdownTimeout) {
+      clearTimeout(this.shutdownTimeout);
+      this.shutdownTimeout = undefined;
+    }
+  }
+  
+  /**
+   * Legacy close method - now delegates to graceful shutdown
+   */
+  close(): void {
+    if (!this.isShuttingDown && !this.isDisposed) {
+      this.shutdown().catch(error => {
+        this.logger.error(`Error during close: ${error}`);
+      });
+    }
+  }
 
+  /**
+   * Register global signal handlers for graceful shutdown
+   */
+  private registerGlobalSignalHandlers(): void {
+    if (globalShutdown.signalHandlersRegistered) {
+      return;
+    }
+    
+    globalShutdown.signalHandlersRegistered = true;
+    
+    // Handle SIGINT (Ctrl+C)
+    process.on('SIGINT', () => {
+      this.logger.info('Received SIGINT, initiating graceful shutdown...');
+      this.handleGlobalShutdown('SIGINT');
+    });
+    
+    // Handle SIGTERM (process termination)
+    process.on('SIGTERM', () => {
+      this.logger.info('Received SIGTERM, initiating graceful shutdown...');
+      this.handleGlobalShutdown('SIGTERM');
+    });
+    
+    // Handle process exit
+    process.on('exit', (code) => {
+      this.logger.info(`Process exiting with code ${code}`);
+      // Perform synchronous cleanup only
+      this.synchronousCleanup();
+    });
+    
+    // Handle unhandled errors
+    process.on('uncaughtException', (error) => {
+      this.logger.error(`Uncaught exception: ${error}`);
+      this.handleGlobalShutdown('uncaughtException');
+    });
+    
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+      this.logger.error(`Unhandled promise rejection: ${reason}`);
+      // Don't exit immediately, just log
+    });
+  }
+  
+  /**
+   * Handle global shutdown for all controllers and managers
+   */
+  private async handleGlobalShutdown(signal: string): Promise<void> {
+    if (globalShutdown.isShuttingDown) {
+      return;
+    }
+    
+    globalShutdown.isShuttingDown = true;
+    console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
+    
+    const shutdownPromises: Promise<void>[] = [];
+    
+    // Shutdown all controllers
+    for (const controller of globalShutdown.controllers) {
+      shutdownPromises.push(
+        controller.shutdown(5000).catch(error => {
+          console.error(`Controller shutdown error: ${error}`);
+        })
+      );
+    }
+    
+    // Shutdown all managers
+    for (const manager of globalShutdown.managers) {
+      shutdownPromises.push(
+        manager.shutdown(5000).catch(error => {
+          console.error(`Manager shutdown error: ${error}`);
+        })
+      );
+    }
+    
+    // Wait for all shutdowns to complete or timeout
+    const globalTimeout = setTimeout(() => {
+      console.log('⚠️ Global shutdown timeout, force exiting...');
+      process.exit(1);
+    }, 10000);
+    
+    try {
+      await Promise.allSettled(shutdownPromises);
+      clearTimeout(globalTimeout);
+      console.log('✅ Graceful shutdown completed');
+      process.exit(0);
+    } catch (error) {
+      clearTimeout(globalTimeout);
+      console.error(`Global shutdown error: ${error}`);
+      process.exit(1);
+    }
+  }
+  
+  /**
+   * Synchronous cleanup for process exit
+   */
+  private synchronousCleanup(): void {
+    // Only do synchronous cleanup here
+    try {
+      if (this.ptyProcess) {
+        // Try to kill the process synchronously
+        try {
+          process.kill(this.ptyProcess.pid!, 'SIGKILL');
+        } catch (error) {
+          // Ignore errors during emergency cleanup
+        }
+      }
+      
+      // Clear intervals
+      if (this.healthCheckInterval) {
+        clearInterval(this.healthCheckInterval);
+      }
+      if (this.shutdownTimeout) {
+        clearTimeout(this.shutdownTimeout);
+      }
+    } catch (error) {
+      // Ignore all errors during emergency cleanup
+    }
+  }
+  
+  /**
+   * Set up error handling for the controller
+   */
+  private setupErrorHandling(): void {
+    this.errorHandler = (error: Error) => {
+      this.logger.error(`PTY Controller error: ${error}`);
+      this.emit('controller_error', error);
+    };
+    
+    this.on('error', this.errorHandler);
+  }
+  
+  /**
+   * Set up event listener tracking for proper cleanup
+   */
+  private setupEventListenerTracking(): void {
+    const originalOn = this.on.bind(this);
+    const originalAddListener = this.addListener.bind(this);
+    
+    // Override on/addListener to track listeners
+    this.on = (event: string | symbol, listener: (...args: any[]) => void) => {
+      const eventStr = String(event);
+      if (!this.eventListeners.has(eventStr)) {
+        this.eventListeners.set(eventStr, []);
+      }
+      this.eventListeners.get(eventStr)!.push(listener);
+      return originalOn(event, listener);
+    };
+    
+    this.addListener = this.on;
+  }
+  
+  /**
+   * Add a cleanup handler to run during shutdown
+   */
+  public addCleanupHandler(handler: () => void): void {
+    this.cleanup.push(handler);
+  }
+  
+  /**
+   * Track a promise for cleanup during shutdown
+   */
+  private trackPromise<T>(promise: Promise<T>): Promise<T> {
+    this.activePromises.add(promise);
+    
+    const cleanup = () => {
+      this.activePromises.delete(promise);
+    };
+    
+    promise.then(cleanup, cleanup);
+    
+    return promise;
+  }
+  
+  /**
+   * Enhanced sendPrompt with promise tracking
+   */
+  async sendPrompt(prompt: string): Promise<string> {
+    if (this.isShuttingDown || this.isDisposed) {
+      throw new Error('PTY controller is shutting down or disposed');
+    }
+    
+    if (!this.ptyProcess) {
+      throw new Error('PTY process not initialized');
+    }
+    
+    if (!this.isReady) {
+      await this.waitForReady();
+    }
+    
+    const promptPromise = new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Prompt timeout'));
+      }, 30000);
+      
+      this.currentPromptResolve = (value: string) => {
+        clearTimeout(timeout);
+        resolve(value);
+      };
+      
+      this.currentPromptReject = (reason: any) => {
+        clearTimeout(timeout);
+        reject(reason);
+      };
+      
+      // Send prompt to PTY
+      this.ptyProcess!.write(prompt + '\n');
+    });
+    
+    return this.trackPromise(promptPromise);
+  }
+  
+  /**
+   * Check if the controller is in a usable state
+   */
+  public isUsable(): boolean {
+    return !this.isShuttingDown && !this.isDisposed && this.ptyProcess !== undefined;
+  }
+  
   /**
    * Get current session ID
    */
@@ -872,31 +1344,78 @@ export class ClaudeCodePTYController extends EventEmitter {
 }
 
 /**
- * Manager class for multiple PTY controllers
+ * Manager class for multiple PTY controllers with enhanced shutdown handling
  */
 export class ACCPTYManager {
   private controllers: Map<string, ClaudeCodePTYController> = new Map();
   private logger: Logger;
+  private isShuttingDown: boolean = false;
+  private isDisposed: boolean = false;
+  private sessionCleanupInterval?: NodeJS.Timeout;
 
   constructor(logger?: Logger) {
     this.logger = logger || new Logger();
+    
+    // Register this manager globally
+    globalShutdown.managers.add(this);
+    
+    // Start periodic session cleanup
+    this.startSessionCleanup();
+  }
+  
+  /**
+   * Start periodic cleanup of inactive sessions
+   */
+  private startSessionCleanup(): void {
+    this.sessionCleanupInterval = setInterval(() => {
+      this.cleanupInactiveSessions();
+    }, 60000); // Cleanup every minute
+  }
+  
+  /**
+   * Clean up inactive or disposed sessions
+   */
+  private cleanupInactiveSessions(): void {
+    const inactiveSessions: string[] = [];
+    
+    for (const [sessionId, controller] of this.controllers.entries()) {
+      if (!controller.isUsable()) {
+        inactiveSessions.push(sessionId);
+      }
+    }
+    
+    for (const sessionId of inactiveSessions) {
+      this.logger.debug(`Cleaning up inactive session: ${sessionId}`);
+      this.closeSession(sessionId);
+    }
   }
 
   /**
    * Create a new PTY session
    */
   async createSession(projectPath: string, sessionId?: string): Promise<string> {
+    if (this.isShuttingDown || this.isDisposed) {
+      throw new Error('Manager is shutting down or disposed');
+    }
+    
     const controller = new ClaudeCodePTYController({
       logger: this.logger,
       sessionId: sessionId
     });
     
-    await controller.initialize(projectPath);
-    
-    const id = sessionId || this.generateSessionId();
-    this.controllers.set(id, controller);
-    
-    return id;
+    try {
+      await controller.initialize(projectPath);
+      
+      const id = sessionId || this.generateSessionId();
+      this.controllers.set(id, controller);
+      
+      this.logger.info(`Created PTY session: ${id}`);
+      return id;
+    } catch (error) {
+      // Clean up the controller if initialization failed
+      controller.close();
+      throw error;
+    }
   }
 
   /**
@@ -910,39 +1429,240 @@ export class ACCPTYManager {
    * Send prompt to a specific session
    */
   async sendPrompt(sessionId: string, prompt: string): Promise<string> {
+    if (this.isShuttingDown || this.isDisposed) {
+      throw new Error('Manager is shutting down or disposed');
+    }
+    
     const controller = this.controllers.get(sessionId);
     if (!controller) {
       throw new Error(`Session ${sessionId} not found`);
+    }
+    
+    if (!controller.isUsable()) {
+      throw new Error(`Session ${sessionId} is not in a usable state`);
     }
     
     return controller.sendPrompt(prompt);
   }
 
   /**
-   * Close a session
+   * Close a session gracefully
    */
-  closeSession(sessionId: string): void {
+  async closeSession(sessionId: string, timeout: number = 5000): Promise<void> {
     const controller = this.controllers.get(sessionId);
     if (controller) {
-      controller.close();
-      this.controllers.delete(sessionId);
+      try {
+        await controller.shutdown(timeout);
+        this.logger.info(`Closed PTY session: ${sessionId}`);
+      } catch (error) {
+        this.logger.error(`Error closing session ${sessionId}: ${error}`);
+      } finally {
+        this.controllers.delete(sessionId);
+      }
     }
+  }
+  
+  /**
+   * Close a session synchronously (legacy method)
+   */
+  closeSessions(sessionId: string): void {
+    this.closeSession(sessionId).catch(error => {
+      this.logger.error(`Async close failed for ${sessionId}: ${error}`);
+    });
   }
 
   /**
-   * Close all sessions
+   * Close all sessions gracefully
    */
-  closeAllSessions(): void {
-    for (const controller of this.controllers.values()) {
-      controller.close();
+  async closeAllSessions(timeout: number = 10000): Promise<void> {
+    if (this.controllers.size === 0) {
+      return;
     }
-    this.controllers.clear();
+    
+    this.logger.info(`Closing ${this.controllers.size} sessions`);
+    
+    const shutdownPromises: Promise<void>[] = [];
+    
+    for (const [sessionId, controller] of this.controllers.entries()) {
+      shutdownPromises.push(
+        controller.shutdown(timeout / 2).catch(error => {
+          this.logger.error(`Error closing session ${sessionId}: ${error}`);
+        })
+      );
+    }
+    
+    try {
+      await Promise.allSettled(shutdownPromises);
+      this.logger.info('All sessions closed successfully');
+    } catch (error) {
+      this.logger.error(`Error during session cleanup: ${error}`);
+    } finally {
+      this.controllers.clear();
+    }
+  }
+  
+  /**
+   * Graceful shutdown of the manager
+   */
+  async shutdown(timeout: number = 15000): Promise<void> {
+    if (this.isShuttingDown || this.isDisposed) {
+      return;
+    }
+    
+    this.isShuttingDown = true;
+    this.logger.info('Shutting down PTY Manager');
+    
+    try {
+      // Stop accepting new sessions
+      this.stopSessionCleanup();
+      
+      // Close all existing sessions
+      await this.closeAllSessions(timeout - 1000);
+      
+      // Unregister from global
+      globalShutdown.managers.delete(this);
+      
+      this.isDisposed = true;
+      this.logger.info('PTY Manager shutdown completed');
+    } catch (error) {
+      this.logger.error(`PTY Manager shutdown error: ${error}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * Stop session cleanup interval
+   */
+  private stopSessionCleanup(): void {
+    if (this.sessionCleanupInterval) {
+      clearInterval(this.sessionCleanupInterval);
+      this.sessionCleanupInterval = undefined;
+    }
+  }
+  
+  /**
+   * Check if the manager is in a usable state
+   */
+  public isUsable(): boolean {
+    return !this.isShuttingDown && !this.isDisposed;
   }
 
+  /**
+   * Get session count
+   */
+  getSessionCount(): number {
+    return this.controllers.size;
+  }
+  
+  /**
+   * Get all session IDs
+   */
+  getSessionIds(): string[] {
+    return Array.from(this.controllers.keys());
+  }
+  
+  /**
+   * Get statistics about sessions
+   */
+  getSessionStats(): { total: number; usable: number; shutting_down: number; disposed: number } {
+    let usable = 0;
+    let shuttingDown = 0;
+    let disposed = 0;
+    
+    for (const controller of this.controllers.values()) {
+      if (controller.isUsable()) {
+        usable++;
+      } else if (controller['isShuttingDown']) {
+        shuttingDown++;
+      } else {
+        disposed++;
+      }
+    }
+    
+    return {
+      total: this.controllers.size,
+      usable,
+      shutting_down: shuttingDown,
+      disposed
+    };
+  }
+
+  /**
+   * Force shutdown all sessions (emergency)
+   */
+  public emergencyShutdown(): void {
+    this.logger.warning('Emergency shutdown initiated');
+    
+    // Stop cleanup interval immediately
+    this.stopSessionCleanup();
+    
+    // Force close all controllers
+    for (const [sessionId, controller] of this.controllers.entries()) {
+      try {
+        controller.close(); // Use legacy close for immediate shutdown
+        this.logger.debug(`Emergency closed session: ${sessionId}`);
+      } catch (error) {
+        this.logger.error(`Error during emergency close of ${sessionId}: ${error}`);
+      }
+    }
+    
+    this.controllers.clear();
+    globalShutdown.managers.delete(this);
+    
+    this.isDisposed = true;
+    this.isShuttingDown = false;
+    
+    this.logger.warning('Emergency shutdown completed');
+  }
+  
   /**
    * Generate a unique session ID
    */
   private generateSessionId(): string {
     return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
+}
+
+/**
+ * Global cleanup function for emergency situations
+ */
+export function emergencyCleanup(): void {
+  console.log('🚨 Emergency cleanup initiated');
+  
+  // Force cleanup all controllers
+  for (const controller of globalShutdown.controllers) {
+    try {
+      controller['synchronousCleanup']();
+    } catch (error) {
+      // Ignore errors during emergency cleanup
+    }
+  }
+  
+  // Force cleanup all managers
+  for (const manager of globalShutdown.managers) {
+    try {
+      if (manager['sessionCleanupInterval']) {
+        clearInterval(manager['sessionCleanupInterval']);
+      }
+      manager['controllers'].clear();
+    } catch (error) {
+      // Ignore errors during emergency cleanup
+    }
+  }
+  
+  globalShutdown.controllers.clear();
+  globalShutdown.managers.clear();
+  
+  console.log('🚨 Emergency cleanup completed');
+}
+
+/**
+ * Get global shutdown status
+ */
+export function getGlobalShutdownStatus(): { isShuttingDown: boolean; controllerCount: number; managerCount: number } {
+  return {
+    isShuttingDown: globalShutdown.isShuttingDown,
+    controllerCount: globalShutdown.controllers.size,
+    managerCount: globalShutdown.managers.size
+  };
 }

@@ -454,6 +454,6 @@ export function withComponentErrorReporting<P extends {}>(
 
     // Note: This would need to import the actual ErrorBoundary component
     // For now, just return the component directly
-    return <Component {...props} />;
+    return React.createElement(Component, props);
   };
 }

@@ -1,7 +1,7 @@
 import { WebhookManager } from '../WebhookManager';
 import { WebhookQueue } from '../WebhookQueue';
 import { WebhookSecurity } from '../WebhookSecurity';
-import type { WebhookEndpoint, WebhookEvent, WebhookEventPayload } from '../../types';
+import type { WebhookEndpoint, WebhookEvent, WebhookEventPayload, AgentMessage } from '../../types';
 
 // Mock axios
 jest.mock('axios');
@@ -253,7 +253,14 @@ describe('WebhookManager', () => {
 
       const eventPayload: WebhookEventPayload = {
         sessionId: 'test-session-123',
-        message: 'This should be filtered out'
+        message: {
+          id: 'test-msg',
+          sessionId: 'test-session-123',
+          agentType: 'manager',
+          messageType: 'prompt',
+          content: 'This should be filtered out',
+          timestamp: new Date()
+        } as AgentMessage
       };
 
       await webhookManager.triggerEvent('session.started', eventPayload);

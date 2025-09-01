@@ -83,7 +83,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dual_agent_secure_pass_2025}
       - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
-      - "${POSTGRES_PORT:-5434}:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./server/database/schema-postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro

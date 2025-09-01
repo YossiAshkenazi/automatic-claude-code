@@ -23,10 +23,28 @@ const dbService: DatabaseInterface = new PostgresDatabaseService({
   port: parseInt(process.env.POSTGRES_PORT || '5434'),
   database: process.env.POSTGRES_DB || 'dual_agent_monitor',
   username: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'password123',
+  password: process.env.POSTGRES_PASSWORD || 'dual_agent_secure_pass_2025',
   ssl: process.env.POSTGRES_SSL === 'true',
   maxConnections: parseInt(process.env.POSTGRES_MAX_CONNECTIONS || '20')
 });
+
+// Check database health on startup
+async function checkDatabaseHealth() {
+  try {
+    const health = await dbService.getHealthStatus();
+    if (health.healthy) {
+      console.log('Database connection is healthy');
+    } else {
+      console.log('Database connection is not healthy');
+    }
+  } catch (error) {
+    console.error('Failed to check database health:', error);
+    console.log('API server will continue with limited functionality');
+  }
+}
+
+// Check database health asynchronously
+checkDatabaseHealth();
 
 const clients = new Set<WebSocket>();
 

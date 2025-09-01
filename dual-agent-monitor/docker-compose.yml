@@ -4,7 +4,6 @@ services:
   dual-agent-monitor:
     build: .
     ports:
-      - "6011:6011"  # Frontend (via reverse proxy)
       - "4005:4005"  # Backend API and WebSocket
     volumes:
       - ./.dual-agent-sessions:/app/.dual-agent-sessions
@@ -13,6 +12,8 @@ services:
       - NODE_ENV=production
       - PORT=4005
       - WEBSOCKET_SERVER_PORT=4005
+      - DB_TYPE=sqlite
+      - SQLITE_FILENAME=/app/data/dual-agent-monitor.db
     restart: unless-stopped
     
   # Nginx reverse proxy to serve frontend on port 6011

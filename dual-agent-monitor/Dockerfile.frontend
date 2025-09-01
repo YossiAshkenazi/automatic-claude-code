@@ -1,0 +1,47 @@
+# Frontend-only Dockerfile for dual-agent monitoring dashboard
+FROM node:18-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Install pnpm globally
+RUN npm install -g pnpm
+
+# Copy package files
+COPY package*.json ./
+COPY pnpm-lock.yaml* ./
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source code and configuration
+COPY . .
+
+# Build the React frontend
+RUN pnpm run client:build
+
+# Production stage - nginx to serve the frontend
+FROM nginx:alpine
+
+# Copy built frontend from builder stage
+COPY --from=builder /app/dist/client /usr/share/nginx/html
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Add security headers and optimize nginx
+RUN echo 'server_tokens off;' >> /etc/nginx/conf.d/security.conf
+
+# Create nginx user and set permissions
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 755 /usr/share/nginx/html
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost/ || exit 1
+
+# Expose port 80 for the frontend
+EXPOSE 80
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

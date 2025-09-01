@@ -175,10 +175,10 @@ export class WebhookEventTrigger {
   }): Promise<void> {
     const payload: WebhookEventPayload = {
       user: {
+        ...user,
         id: user.id,
         email: user.email,
-        timestamp: user.timestamp || new Date(),
-        ...user
+        timestamp: user.timestamp || new Date()
       } as any
     };
 

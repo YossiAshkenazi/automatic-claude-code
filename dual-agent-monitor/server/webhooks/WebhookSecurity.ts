@@ -246,7 +246,10 @@ export class WebhookSecurity extends EventEmitter {
       const iv = crypto.randomBytes(16);
       
       const cipher = crypto.createCipher(algorithm, keyBuffer);
-      cipher.setAAD(Buffer.from('webhook-payload'));
+      // GCM specific operations only for GCM algorithms
+      if (algorithm.includes('gcm') && 'setAAD' in cipher) {
+        (cipher as any).setAAD(Buffer.from('webhook-payload'));
+      }
 
       let encrypted = cipher.update(payload, 'utf8', 'hex');
       encrypted += cipher.final('hex');
@@ -287,9 +290,11 @@ export class WebhookSecurity extends EventEmitter {
       
       const decipher = crypto.createDecipher(algorithm, keyBuffer);
       
-      if (algorithm.includes('gcm') && authTag) {
+      if (algorithm.includes('gcm') && authTag && 'setAuthTag' in decipher) {
         (decipher as any).setAuthTag(Buffer.from(authTag, 'hex'));
-        decipher.setAAD(Buffer.from('webhook-payload'));
+        if ('setAAD' in decipher) {
+          (decipher as any).setAAD(Buffer.from('webhook-payload'));
+        }
       }
 
       let decrypted = decipher.update(encryptedData, 'hex', 'utf8');

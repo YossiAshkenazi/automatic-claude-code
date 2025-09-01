@@ -49,7 +49,7 @@ export class DatabaseFactory {
         return await db.getHealthCheck();
       }
       
-      if ('checkDatabaseHealth' in db) {
+      if ('checkDatabaseHealth' in db && typeof db.checkDatabaseHealth === 'function') {
         return db.checkDatabaseHealth();
       }
       

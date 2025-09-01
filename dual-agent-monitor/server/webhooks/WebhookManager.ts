@@ -332,6 +332,17 @@ export class WebhookManager extends EventEmitter {
       });
 
       const duration = Date.now() - startTime;
+      
+      if (!response) {
+        return {
+          success: false,
+          statusCode: 0,
+          error: 'No response received',
+          deliveredAt: new Date(),
+          duration
+        };
+      }
+      
       const success = response.status >= 200 && response.status < 300;
 
       return {

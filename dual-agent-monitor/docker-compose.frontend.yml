@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  # Frontend Service
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: dual-agent-frontend
+    restart: unless-stopped
+    ports:
+      - "6011:80"  # Frontend accessible on port 6011
+    environment:
+      - NODE_ENV=production
+    networks:
+      - dual-agent-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`dual-agent-monitor.local`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+
+networks:
+  dual-agent-network:
+    driver: bridge
+    name: dual-agent-network
+    external: true  # Assumes the API network already exists

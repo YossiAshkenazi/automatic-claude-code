@@ -12,15 +12,17 @@ services:
     image: dual-agent-monitor:${VERSION:-latest}
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "4005:4005"
     environment:
       - NODE_ENV=production
-      - PORT=8080
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/dual_agent_monitor}
-      - JWT_SECRET=${JWT_SECRET}
-      - SESSION_SECRET=${SESSION_SECRET}
+      - PORT=4005
+      - WEBSOCKET_SERVER_PORT=4005
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:dual_agent_secure_pass_2025@postgres:5432/dual_agent_monitor}
+      - JWT_SECRET=${JWT_SECRET:-dual-agent-jwt-secret-key-minimum-32-chars-2025}
+      - SESSION_SECRET=${SESSION_SECRET:-dual-agent-session-secret-key-minimum-32-chars-2025}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DB_TYPE=postgresql
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,11 +55,11 @@ services:
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-dual_agent_monitor}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dual_agent_secure_pass_2025}
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./server/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./server/database/schema-postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     networks:
       - app-network
     healthcheck:
@@ -78,7 +80,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --requirepass ${REDIS_PASSWORD:-dual_agent_redis_pass_2025} --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:

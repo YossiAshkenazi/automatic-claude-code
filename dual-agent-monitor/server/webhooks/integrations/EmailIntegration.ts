@@ -25,10 +25,10 @@ export class EmailIntegration {
   /**
    * Transform webhook event payload to email format
    */
-  static transformPayload(event: WebhookEvent, payload: WebhookEventPayload, config: { to: string; from?: string }): EmailMessage {
+  static transformPayload(event: WebhookEvent, payload: WebhookEventPayload): EmailMessage {
     const baseEmail: EmailMessage = {
-      to: config.to,
-      from: config.from || 'noreply@dual-agent-monitor.com',
+      to: 'admin@example.com',
+      from: 'noreply@dual-agent-monitor.com',
       subject: '',
       text: '',
       html: ''
@@ -303,8 +303,8 @@ Login Details:
 - User ID: ${payload.user?.id || 'Unknown'}
 - Email: ${payload.user?.email || 'Unknown'}
 - Login Time: ${payload.user?.timestamp ? new Date(payload.user.timestamp).toLocaleString() : timestamp}
-- IP Address: ${payload.user?.ipAddress || 'Not available'}
-- User Agent: ${payload.user?.userAgent || 'Not available'}
+- IP Address: ${(payload as any).user?.ipAddress || 'Not available'}
+- User Agent: ${(payload as any).user?.userAgent || 'Not available'}
 
 A user has successfully logged into the Dual-Agent Monitor system.
 
@@ -324,7 +324,7 @@ Test Details:
 - Status: SUCCESS
 - Test Time: ${timestamp}
 - Integration: Email
-- Webhook URL: ${payload.webhookUrl || 'Not specified'}
+- Webhook URL: ${(payload as any).webhookUrl || 'Not specified'}
 
 This is a test email from Dual-Agent Monitor to verify that your email webhook integration is working correctly.
 

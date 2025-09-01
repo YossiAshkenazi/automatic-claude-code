@@ -15,7 +15,7 @@ import type { WebhookEvent, WebhookEventPayload } from '../../types.js';
  * Integration registry for webhook payload transformations
  */
 export class IntegrationRegistry {
-  private static integrations = new Map([
+  private static integrations = new Map<string, any>([
     ['slack', SlackIntegration],
     ['discord', DiscordIntegration],
     ['email', EmailIntegration],
@@ -43,7 +43,7 @@ export class IntegrationRegistry {
     }
 
     try {
-      return integration.transformPayload(event, payload, config);
+      return integration.transformPayload(event, payload);
     } catch (error) {
       console.error(`Failed to transform payload for ${integrationType}:`, error);
       return payload; // Fallback to original payload

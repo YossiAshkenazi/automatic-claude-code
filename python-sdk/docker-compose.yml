@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  claude-sdk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VERSION: ${VERSION:-0.1.0}
+        VCS_REF: ${VCS_REF:-}
+    image: claude-code-sdk:latest
+    container_name: claude-sdk-demo
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - CLAUDE_SDK_DEBUG=${CLAUDE_SDK_DEBUG:-false}
+    
+    # Volumes for persistence
+    volumes:
+      - ./workspace:/app/workspace
+      - ~/.claude:/home/claude/.claude:ro  # Mount Claude CLI config (read-only)
+      - claude-data:/home/claude/.local
+    
+    # Port mapping for monitoring
+    ports:
+      - "6011:6011"  # Dashboard UI
+      - "4005:4005"  # API server
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import claude_code_sdk; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Command override for interactive mode
+    # command: python interactive_demo.py
+    
+    # Network configuration
+    networks:
+      - claude-network
+
+  # Optional: Monitoring dashboard service
+  claude-monitor:
+    image: claude-code-sdk:latest
+    container_name: claude-monitor
+    restart: unless-stopped
+    
+    environment:
+      - NODE_ENV=production
+    
+    volumes:
+      - ./monitoring:/app/monitoring
+      - claude-data:/home/claude/.local
+    
+    ports:
+      - "3000:3000"  # Monitoring web interface
+    
+    command: python -m http.server 3000
+    depends_on:
+      - claude-sdk
+    
+    networks:
+      - claude-network
+
+  # Development service with volume mounts
+  claude-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder  # Use builder stage for development
+    image: claude-code-sdk:dev
+    container_name: claude-dev
+    restart: "no"
+    
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - CLAUDE_SDK_DEBUG=true
+    
+    volumes:
+      - .:/app  # Mount entire source for development
+      - ~/.claude:/home/claude/.claude
+    
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    
+    networks:
+      - claude-network
+
+networks:
+  claude-network:
+    driver: bridge
+    name: claude-sdk-network
+
+volumes:
+  claude-data:
+    driver: local
+    name: claude-sdk-data
+
+# Environment file example
+# Create .env file with:
+# BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+# VERSION=0.1.0
+# VCS_REF=$(git rev-parse --short HEAD)
+# CLAUDE_SDK_DEBUG=false

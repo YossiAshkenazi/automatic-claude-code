@@ -1,0 +1,108 @@
+# Docker ignore file for Claude Code Python SDK
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+test_venv/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Testing
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+.testmondata
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Documentation build
+docs/_build/
+.readthedocs.yml
+
+# Cache and logs
+.cache
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.log
+
+# Security
+.bandit
+security/
+
+# Development files
+.pre-commit-config.yaml
+.github/
+benchmark*
+performance_*
+test_*
+*_test.py
+integration_test*
+simple_*test*
+quick_test.py
+CROSS_PLATFORM_REPORT.md
+MIGRATION.md
+CONTRIBUTING.md
+SECURITY.md
+security_scan_results.json
+
+# Build artifacts
+*.tar.gz
+*.zip
+*.whl
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/

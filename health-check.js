@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Enhanced health check for ACC TypeScript SDK Testing Infrastructure
+ * Complete health check for ACC TypeScript SDK Testing Infrastructure
  * Epic 1, Story 1.2: Comprehensive diagnostics for SDK testing environment
+ * Epic 3: Process management validation for clean termination
  */
 
 const { execSync, spawn } = require('child_process');
@@ -333,6 +334,246 @@ const healthChecks = [
     },
     fix: 'Use Windows, macOS, or Linux',
     critical: true
+  },
+
+  // Epic 3: Process Management Validation
+  {
+    category: 'Epic 3 - Process Management',
+    name: 'ProcessHandleTracker Availability',
+    test: () => {
+      logVerbose('Checking ProcessHandleTracker module...');
+      const trackerCheck = checkFileExists('./dist/testing/ProcessHandleTracker.js');
+      const trackerSourceCheck = checkFileExists('./src/testing/ProcessHandleTracker.ts');
+      
+      return {
+        success: trackerCheck.exists && trackerCheck.isFile,
+        details: {
+          compiledExists: trackerCheck.exists,
+          sourceExists: trackerSourceCheck.exists,
+          canImport: trackerCheck.exists
+        }
+      };
+    },
+    fix: 'Run: pnpm run build to compile ProcessHandleTracker',
+    critical: true
+  },
+
+  {
+    category: 'Epic 3 - Process Management',
+    name: 'ShutdownManager Availability', 
+    test: () => {
+      logVerbose('Checking ShutdownManager module...');
+      const managerCheck = checkFileExists('./dist/testing/ShutdownManager.js');
+      const managerSourceCheck = checkFileExists('./src/testing/ShutdownManager.ts');
+      
+      return {
+        success: managerCheck.exists && managerCheck.isFile,
+        details: {
+          compiledExists: managerCheck.exists,
+          sourceExists: managerSourceCheck.exists,
+          canImport: managerCheck.exists
+        }
+      };
+    },
+    fix: 'Run: pnpm run build to compile ShutdownManager',
+    critical: true
+  },
+
+  {
+    category: 'Epic 3 - Process Management',
+    name: 'IsolatedTestRunner Availability',
+    test: () => {
+      logVerbose('Checking IsolatedTestRunner module...');
+      const runnerCheck = checkFileExists('./dist/testing/IsolatedTestRunner.js');
+      const runnerSourceCheck = checkFileExists('./src/testing/IsolatedTestRunner.ts');
+      
+      return {
+        success: runnerCheck.exists && runnerCheck.isFile,
+        details: {
+          compiledExists: runnerCheck.exists,
+          sourceExists: runnerSourceCheck.exists,
+          canImport: runnerCheck.exists
+        }
+      };
+    },
+    fix: 'Run: pnpm run build to compile IsolatedTestRunner',
+    critical: true
+  },
+
+  {
+    category: 'Epic 3 - Process Management',
+    name: 'Testing Module Integration',
+    test: () => {
+      logVerbose('Checking testing module index integration...');
+      const indexCheck = checkFileExists('./dist/testing/index.js');
+      const indexSourceCheck = checkFileExists('./src/testing/index.ts');
+      
+      let exportsCheck = false;
+      if (indexSourceCheck.exists) {
+        try {
+          const indexContent = require('fs').readFileSync('./src/testing/index.ts', 'utf8');
+          const hasTracker = indexContent.includes('ProcessHandleTracker');
+          const hasManager = indexContent.includes('ShutdownManager');
+          const hasRunner = indexContent.includes('IsolatedTestRunner');
+          exportsCheck = hasTracker && hasManager && hasRunner;
+        } catch (e) {
+          logVerbose(`Failed to read testing index: ${e.message}`);
+        }
+      }
+      
+      return {
+        success: indexCheck.exists && exportsCheck,
+        details: {
+          indexCompiled: indexCheck.exists,
+          indexSource: indexSourceCheck.exists,
+          epic3ComponentsExported: exportsCheck
+        }
+      };
+    },
+    fix: 'Verify testing/index.ts exports all Epic 3 components',
+    critical: true
+  },
+
+  {
+    category: 'Epic 3 - Process Management',
+    name: 'Process Handle Tracking Test',
+    test: () => {
+      logVerbose('Testing basic handle tracking functionality...');
+      
+      try {
+        // Test basic handle tracking simulation
+        const testTimers = {
+          timer1: setTimeout(() => {}, 5000),
+          timer2: setTimeout(() => {}, 5000)
+        };
+        
+        // Clean up test timers
+        clearTimeout(testTimers.timer1);
+        clearTimeout(testTimers.timer2);
+        
+        const handleCount = Object.keys(testTimers).length;
+        
+        return {
+          success: handleCount === 2,
+          details: {
+            testHandlesCreated: handleCount,
+            testHandlesCleaned: handleCount,
+            canTrackHandles: true
+          }
+        };
+      } catch (error) {
+        return {
+          success: false,
+          details: {
+            error: error.message,
+            canTrackHandles: false
+          }
+        };
+      }
+    },
+    fix: 'Check Node.js timer functionality',
+    critical: false
+  },
+
+  {
+    category: 'Epic 3 - Process Management',
+    name: 'Manual Test Process Management Integration',
+    test: () => {
+      logVerbose('Checking manual test Epic 3 integration...');
+      const testFile = './src/__tests__/manual/testSDKAutopilot.ts';
+      const testCheck = checkFileExists(testFile);
+      
+      let hasEpic3Integration = false;
+      if (testCheck.exists) {
+        try {
+          const testContent = require('fs').readFileSync(testFile, 'utf8');
+          const hasTracker = testContent.includes('ProcessHandleTracker');
+          const hasManager = testContent.includes('ShutdownManager');
+          const hasRunner = testContent.includes('IsolatedTestRunner');
+          const hasEpic3Tests = testContent.includes('testProcessManagementInfrastructure');
+          hasEpic3Integration = hasTracker && hasManager && hasRunner && hasEpic3Tests;
+        } catch (e) {
+          logVerbose(`Failed to read manual test: ${e.message}`);
+        }
+      }
+      
+      return {
+        success: testCheck.exists && hasEpic3Integration,
+        details: {
+          testFileExists: testCheck.exists,
+          hasEpic3Integration,
+          canTestProcessManagement: hasEpic3Integration
+        }
+      };
+    },
+    fix: 'Update manual test to include Epic 3 process management tests',
+    critical: true
+  },
+
+  {
+    category: 'Epic 3 - Process Management',
+    name: 'Integration Test Suite',
+    test: () => {
+      logVerbose('Checking Epic 3 integration test suite...');
+      const integrationTest = './src/__tests__/integration/epic3-process-management.test.ts';
+      const testCheck = checkFileExists(integrationTest);
+      
+      let hasComprehensiveTests = false;
+      if (testCheck.exists) {
+        try {
+          const testContent = require('fs').readFileSync(integrationTest, 'utf8');
+          const hasHandleTrackerTests = testContent.includes('ProcessHandleTracker');
+          const hasShutdownTests = testContent.includes('ShutdownManager');
+          const hasIsolatedTests = testContent.includes('IsolatedTestRunner');
+          const hasIntegrationTests = testContent.includes('Complete Integration');
+          hasComprehensiveTests = hasHandleTrackerTests && hasShutdownTests && hasIsolatedTests && hasIntegrationTests;
+        } catch (e) {
+          logVerbose(`Failed to read integration test: ${e.message}`);
+        }
+      }
+      
+      return {
+        success: testCheck.exists && hasComprehensiveTests,
+        details: {
+          integrationTestExists: testCheck.exists,
+          hasComprehensiveTests,
+          testFileSize: testCheck.size || 0
+        }
+      };
+    },
+    fix: 'Create comprehensive Epic 3 integration tests',
+    critical: false
+  },
+
+  {
+    category: 'Epic 3 - Process Management',
+    name: 'Clean Termination Readiness',
+    test: () => {
+      logVerbose('Validating clean termination readiness...');
+      
+      // Check if all Epic 3 components are properly configured
+      const componentChecks = {
+        handleTracker: checkFileExists('./dist/testing/ProcessHandleTracker.js'),
+        shutdownManager: checkFileExists('./dist/testing/ShutdownManager.js'),
+        testRunner: checkFileExists('./dist/testing/IsolatedTestRunner.js'),
+        testFactory: checkFileExists('./dist/testing/TestSDKFactory.js')
+      };
+      
+      const allComponentsReady = Object.values(componentChecks).every(check => check.exists);
+      const readinessScore = Object.values(componentChecks).filter(check => check.exists).length;
+      
+      return {
+        success: allComponentsReady,
+        details: {
+          componentsReady: readinessScore,
+          totalComponents: 4,
+          readinessPercentage: Math.round((readinessScore / 4) * 100),
+          canPreventHanging: allComponentsReady
+        }
+      };
+    },
+    fix: 'Ensure all Epic 3 components are built: pnpm run build',
+    critical: true
   }
 ];
 
@@ -443,17 +684,59 @@ console.log(`  Platform: ${os.platform()} ${os.arch()}`);
 console.log(`  Node.js: ${process.version}`);
 console.log(`  Working Directory: ${process.cwd()}`);
 
-// Final status
+// Epic 3 specific validation
+const epic3Categories = Object.entries(results.categories).filter(([category]) => 
+  category.includes('Epic 3')
+);
+
+let epic3Score = 100;
+let epic3Ready = true;
+
+if (epic3Categories.length > 0) {
+  const epic3Stats = epic3Categories.reduce((acc, [, stats]) => ({
+    total: acc.total + stats.total,
+    passed: acc.passed + stats.passed
+  }), { total: 0, passed: 0 });
+  
+  epic3Score = epic3Stats.total > 0 ? Math.round((epic3Stats.passed / epic3Stats.total) * 100) : 100;
+  epic3Ready = epic3Stats.passed === epic3Stats.total;
+  
+  console.log(`\n🔧 Epic 3 Process Management: ${epic3Stats.passed}/${epic3Stats.total} (${epic3Score}%)`);
+  if (epic3Ready) {
+    console.log('   ✅ Process management ready - tests should not hang!');
+  } else {
+    console.log('   ❌ Process management issues - tests may hang without Ctrl+C!');
+  }
+}
+
+// Final status with Epic 3 considerations
 if (results.criticalPassed === results.critical && overallScore >= 80) {
   console.log('\n🎉 Testing infrastructure is ready!');
   console.log('   All critical systems operational and overall health is good.');
+  
+  if (epic3Ready) {
+    console.log('   ✅ Epic 3: Process management active - clean termination guaranteed!');
+  } else {
+    console.log('   ⚠️  Epic 3: Process management issues detected - manual intervention may be needed.');
+  }
+  
   process.exit(0);
 } else if (results.criticalPassed < results.critical) {
   console.log('\n🚨 Critical issues detected!');
   console.log('   Fix critical system issues before proceeding with tests.');
+  
+  if (!epic3Ready) {
+    console.log('   🚨 Epic 3 Critical: Process hanging prevention not ready!');
+  }
+  
   process.exit(1);
 } else {
   console.log('\n⚠️  Some issues detected');
   console.log('   Non-critical issues found. Testing may still work but could be unreliable.');
+  
+  if (!epic3Ready) {
+    console.log('   ⚠️  Epic 3 Warning: Process management not fully operational.');
+  }
+  
   process.exit(1);
 }

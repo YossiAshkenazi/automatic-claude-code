@@ -303,7 +303,7 @@ def main():
             bumper.commit_changes(new_version, updated_files, args.dry_run, args.no_commit)
             bumper.create_git_tag(new_version, args.dry_run, args.no_git)
         
-        print(f"\n✅ Version successfully {'would be ' if args.dry_run else ''}bumped to {new_version}")
+        print(f"\n[SUCCESS] Version successfully {'would be ' if args.dry_run else ''}bumped to {new_version}")
         
         if not args.dry_run and not args.no_git:
             print(f"\nNext steps:")
@@ -311,7 +311,7 @@ def main():
             print(f"  git push origin v{new_version}")
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] {e}")
         sys.exit(1)
 
 

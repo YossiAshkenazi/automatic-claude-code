@@ -1,471 +1,379 @@
 #!/usr/bin/env python3
 """
-Integration with automatic-claude-code System
-============================================
-
-This example demonstrates how to integrate the ClaudeSDKClient with the 
-automatic-claude-code dual-agent architecture, monitoring system, and 
-task coordination features.
-
-Requirements:
-    - Python 3.10+
-    - Claude Code CLI installed and configured
-    - automatic-claude-code system running
-    - claude-code-sdk package installed
-    - Monitoring server running (optional)
-
-Usage:
-    # Start monitoring server first (in another terminal):
-    # cd dual-agent-monitor && pnpm run dev
-    
-    python integration_with_automatic_claude.py
+Integration Examples with Automatic Claude Code System
+Demonstrates dual-agent architecture and monitoring integration
 """
 
 import asyncio
-import json
 import time
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
-from claude_code_sdk import ClaudeSDKClient
-from claude_code_sdk.core.options import create_dual_agent_options, create_production_options
-from claude_code_sdk.integrations.automatic_claude import AutomaticClaudeIntegration
-from claude_code_sdk.integrations.monitoring import MonitoringIntegration
-from claude_code_sdk.exceptions import ClaudeCodeError
-import logging
+from claude_code_sdk.integrations import AutomaticClaudeIntegration, MonitoringIntegration
+from claude_code_sdk import ClaudeSDKClient, create_dual_agent_options
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-
-@dataclass
-class TaskResult:
-    """Represents the result of a task execution."""
-    task_id: str
-    success: bool
-    result: Optional[str] = None
-    error: Optional[str] = None
-    duration: Optional[float] = None
-    agent_type: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class IntegrationManager:
-    """
-    Manages integration between ClaudeSDKClient and automatic-claude-code system.
-    """
-    
-    def __init__(self, enable_monitoring: bool = True, enable_dual_agent: bool = True):
-        self.enable_monitoring = enable_monitoring
-        self.enable_dual_agent = enable_dual_agent
-        self.session_id = f"integration_session_{int(time.time())}"
-        self.task_results: List[TaskResult] = []
-        
-    async def setup_integrations(self) -> Dict[str, Any]:
-        """Set up all integrations and return status."""
-        status = {
-            'client_ready': False,
-            'monitoring_ready': False,
-            'dual_agent_ready': False,
-            'errors': []
-        }
-        
-        try:
-            # Setup monitoring integration
-            if self.enable_monitoring:
-                self.monitoring = MonitoringIntegration(
-                    dashboard_url="http://localhost:6011",
-                    api_url="http://localhost:4005"
-                )
-                monitoring_status = await self.monitoring.check_connection()
-                status['monitoring_ready'] = monitoring_status.get('connected', False)
-                if not status['monitoring_ready']:
-                    status['errors'].append("Monitoring server not available")
-            
-            # Setup automatic claude integration
-            self.integration = AutomaticClaudeIntegration(
-                enable_dual_agent=self.enable_dual_agent,
-                enable_monitoring=self.enable_monitoring,
-                session_id=self.session_id
-            )
-            
-            # Test integration readiness
-            integration_status = await self.integration.test_connection()
-            status['client_ready'] = integration_status.get('claude_cli_available', False)
-            status['dual_agent_ready'] = integration_status.get('dual_agent_capable', False)
-            
-            if not status['client_ready']:
-                status['errors'].append("Claude CLI not available")
-                
-        except Exception as e:
-            status['errors'].append(f"Integration setup failed: {e}")
-            
-        return status
-
-
-async def basic_integration_example():
-    """
-    Demonstrates basic integration with the automatic-claude-code system.
-    """
-    print("🔵 Basic Integration Example")
-    print("=" * 40)
-    
-    manager = IntegrationManager(enable_monitoring=False, enable_dual_agent=False)
+async def example_1_basic_integration():
+    """Example 1: Basic integration with monitoring"""
+    print("🔹 Example 1: Basic Integration with Monitoring")
     
     try:
-        # Setup integrations
-        status = await manager.setup_integrations()
-        
-        print(f"Integration Status:")
-        print(f"  Client Ready: {'✅' if status['client_ready'] else '❌'}")
-        print(f"  Errors: {status['errors'] if status['errors'] else 'None'}")
-        
-        if not status['client_ready']:
-            print("❌ Cannot proceed without Claude CLI")
-            return
-            
-        # Execute a simple task through integration
-        print("\n🚀 Executing task through integration...")
-        
-        result = await manager.integration.execute_with_monitoring(
-            "Create a Python function to calculate the factorial of a number"
+        integration = AutomaticClaudeIntegration(
+            dashboard_url="http://localhost:6011",
+            api_url="http://localhost:4005",
+            enable_monitoring=True,
+            enable_dual_agent=False  # Single agent mode
         )
         
-        if result.get('success'):
-            print("✅ Task completed successfully")
-            print(f"Result preview: {result.get('result', '')[:150]}...")
-        else:
-            print("❌ Task failed")
-            print(f"Error: {result.get('error', 'Unknown error')}")
-            
-    except Exception as e:
-        print(f"❌ Integration error: {e}")
+        print(f"📊 Dashboard: {integration.dashboard_url}")
+        print(f"🔗 API URL: {integration.api_url}")
         
-    print()
+        # Execute task with monitoring
+        start_time = time.time()
+        result = await integration.execute_with_monitoring(
+            "Create a simple Python function to validate email addresses using regex",
+            agent_role="worker",
+            timeout=120
+        )
+        
+        execution_time = time.time() - start_time
+        
+        print(f"✅ Task completed in {execution_time:.2f}s")
+        print(f"🎯 Success: {result.get('success', False)}")
+        if result.get('final_result'):
+            print(f"📝 Result preview: {result['final_result'][:200]}...")
+        
+        # Get execution statistics
+        stats = result.get('statistics', {})
+        print(f"📈 Statistics: {len(stats)} metrics collected")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Basic integration failed: {e}")
+        return None
 
-
-async def dual_agent_integration_example():
-    """
-    Demonstrates integration with dual-agent architecture.
-    """
-    print("🔵 Dual-Agent Integration Example")  
-    print("=" * 40)
-    
-    manager = IntegrationManager(enable_monitoring=True, enable_dual_agent=True)
+async def example_2_dual_agent_coordination():
+    """Example 2: Dual-agent coordination"""
+    print("\n🔹 Example 2: Dual-Agent Coordination")
     
     try:
-        # Setup with dual-agent support
-        status = await manager.setup_integrations()
+        integration = AutomaticClaudeIntegration(
+            enable_dual_agent=True,
+            enable_monitoring=True,
+            manager_model="opus",  # Higher capability for management
+            worker_model="sonnet"  # Efficient for execution
+        )
         
-        print(f"Dual-Agent Integration Status:")
-        print(f"  Client Ready: {'✅' if status['client_ready'] else '❌'}")
-        print(f"  Dual-Agent Ready: {'✅' if status['dual_agent_ready'] else '❌'}")
-        print(f"  Monitoring Ready: {'✅' if status['monitoring_ready'] else '❌'}")
+        print("🤖 Dual-agent system initialized")
+        print("🧠 Manager: Opus model (strategic planning)")
+        print("⚡ Worker: Sonnet model (efficient execution)")
         
-        if not status['client_ready']:
-            print("❌ Cannot proceed without Claude CLI")
-            return
-            
-        # Create dual-agent options
-        options = create_dual_agent_options(
-            manager_model="claude-3-opus-20240229",
-            worker_model="claude-3-sonnet-20241022",
+        # Execute complex task requiring coordination
+        result = await integration.execute_dual_agent_session(
+            "Create a complete REST API with authentication, user management, and database integration using FastAPI",
+            max_iterations=10,
             coordination_timeout=300
         )
         
-        print("\n🤖 Starting dual-agent task...")
+        print(f"✅ Dual-agent session completed")
+        print(f"🎯 Success: {result.get('success', False)}")
+        print(f"🔄 Iterations: {result.get('total_iterations', 0)}")
+        print(f"⏱️ Total time: {result.get('total_time', 0):.2f}s")
         
-        # Execute complex task that benefits from dual-agent coordination
-        complex_task = """
-        Create a complete Python web application with the following features:
-        1. FastAPI backend with user authentication
-        2. SQLite database with user and post models
-        3. JWT token authentication
-        4. CRUD endpoints for posts
-        5. Basic error handling and validation
-        6. Unit tests for all endpoints
-        """
+        # Coordination statistics
+        coordination = result.get('coordination_stats', {})
+        if coordination:
+            print(f"📊 Manager-Worker exchanges: {coordination.get('exchanges', 0)}")
+            print(f"🎯 Task completion rate: {coordination.get('completion_rate', 0):.2%}")
         
-        async with ClaudeSDKClient(options) as client:
-            # This would coordinate with the dual-agent system
-            response = await client.execute(complex_task)
-            
-            if response.success:
-                print("✅ Dual-agent task completed")
-                print(f"Response length: {len(response.result or '')} characters")
-                
-                # Log to monitoring system
-                if manager.enable_monitoring and status['monitoring_ready']:
-                    await manager.monitoring.log_task_completion({
-                        'task_type': 'dual_agent_complex',
-                        'success': True,
-                        'duration': response.metadata.get('duration', 0),
-                        'agent_coordination': True
-                    })
-                    
-            else:
-                print("❌ Dual-agent task failed")
-                print(f"Error: {response.error}")
-                
+        return result
+        
     except Exception as e:
-        print(f"❌ Dual-agent integration error: {e}")
-        
-    print()
+        print(f"❌ Dual-agent coordination failed: {e}")
+        return None
 
-
-async def monitoring_integration_example():
-    """
-    Demonstrates integration with monitoring and observability features.
-    """
-    print("🔵 Monitoring Integration Example")
-    print("=" * 40)
-    
-    manager = IntegrationManager(enable_monitoring=True, enable_dual_agent=False)
+async def example_3_real_time_monitoring():
+    """Example 3: Real-time monitoring integration"""
+    print("\n🔹 Example 3: Real-Time Monitoring")
     
     try:
-        status = await manager.setup_integrations()
+        monitoring = MonitoringIntegration(
+            monitoring_port=6011,
+            api_port=4005,
+            websocket_enabled=True
+        )
         
-        if not status['monitoring_ready']:
-            print("🟡 Monitoring server not available - running without monitoring")
-            print("   Start monitoring with: cd dual-agent-monitor && pnpm run dev")
+        # Check monitoring server health
+        health = await monitoring.get_health()
+        print(f"🏥 Monitoring health: {health.get('status', 'unknown')}")
         
-        # Execute tasks with monitoring
-        tasks = [
-            ("file_processing", "Create a Python script to process CSV files and generate reports"),
-            ("api_integration", "Write a Python client for a REST API with retry logic"),
-            ("data_analysis", "Create functions for basic statistical analysis of datasets")
-        ]
-        
-        print(f"\n📊 Executing {len(tasks)} monitored tasks...")
-        
-        for task_type, task_description in tasks:
+        if health.get('status') == 'healthy':
+            print("📊 Monitoring server is running")
+            
+            # Send custom events
+            await monitoring.send_event("sdk_example_start", {
+                "example": "real_time_monitoring",
+                "timestamp": time.time()
+            })
+            
+            # Monitor a task execution
             start_time = time.time()
             
+            # Use regular SDK client with monitoring
+            options = create_dual_agent_options("worker")
+            async with ClaudeSDKClient(options) as client:
+                async for message in client.query("Create a Python script for web scraping with error handling"):
+                    # Send progress events
+                    await monitoring.track_query_performance(
+                        duration=time.time() - start_time,
+                        message_type=type(message).__name__,
+                        agent_role="worker"
+                    )
+                    
+                    if hasattr(message, 'result') and message.result:
+                        break
+            
+            execution_time = time.time() - start_time
+            
+            # Send completion event
+            await monitoring.send_event("sdk_example_complete", {
+                "example": "real_time_monitoring", 
+                "execution_time": execution_time,
+                "success": True
+            })
+            
+            # Get metrics summary
+            metrics = await monitoring.get_metrics_summary()
+            print(f"📈 Metrics collected: {len(metrics)} data points")
+            
+            print(f"✅ Real-time monitoring completed in {execution_time:.2f}s")
+            
+        else:
+            print("⚠️ Monitoring server not available - running without monitoring")
+            
+    except Exception as e:
+        print(f"❌ Real-time monitoring failed: {e}")
+
+async def example_4_performance_tracking():
+    """Example 4: Performance tracking and optimization"""
+    print("\n🔹 Example 4: Performance Tracking")
+    
+    class PerformanceTracker:
+        def __init__(self):
+            self.metrics = {
+                'query_count': 0,
+                'total_time': 0,
+                'average_response_time': 0,
+                'token_usage': 0,
+                'error_count': 0
+            }
+        
+        async def track_query(self, query_func, *args, **kwargs):
+            start_time = time.time()
+            self.metrics['query_count'] += 1
+            
             try:
-                result = await manager.integration.execute_with_monitoring(
-                    task_description,
-                    task_metadata={'type': task_type, 'priority': 'normal'}
+                result = await query_func(*args, **kwargs)
+                execution_time = time.time() - start_time
+                
+                self.metrics['total_time'] += execution_time
+                self.metrics['average_response_time'] = (
+                    self.metrics['total_time'] / self.metrics['query_count']
                 )
                 
-                duration = time.time() - start_time
-                
-                task_result = TaskResult(
-                    task_id=f"{task_type}_{int(start_time)}",
-                    success=result.get('success', False),
-                    result=result.get('result'),
-                    error=result.get('error'),
-                    duration=duration,
-                    metadata={'type': task_type}
-                )
-                
-                manager.task_results.append(task_result)
-                
-                print(f"  {'✅' if task_result.success else '❌'} {task_type}: "
-                      f"{duration:.1f}s")
+                return result, execution_time
                 
             except Exception as e:
-                print(f"  ❌ {task_type}: Failed - {e}")
-                
-        # Generate monitoring report
-        await generate_monitoring_report(manager)
+                self.metrics['error_count'] += 1
+                raise e
+        
+        def get_performance_report(self):
+            return {
+                'total_queries': self.metrics['query_count'],
+                'total_time': f"{self.metrics['total_time']:.2f}s",
+                'average_response': f"{self.metrics['average_response_time']:.2f}s",
+                'error_rate': f"{(self.metrics['error_count'] / max(1, self.metrics['query_count'])) * 100:.1f}%",
+                'queries_per_minute': f"{(self.metrics['query_count'] / max(1, self.metrics['total_time'])) * 60:.1f}"
+            }
+    
+    tracker = PerformanceTracker()
+    
+    try:
+        integration = AutomaticClaudeIntegration(enable_monitoring=True)
+        
+        # Track multiple queries
+        queries = [
+            "Write a Python function to parse CSV files",
+            "Create a simple web server using Flask",
+            "Implement a binary search algorithm"
+        ]
+        
+        print(f"📊 Tracking performance for {len(queries)} queries...")
+        
+        for i, query_text in enumerate(queries, 1):
+            print(f"🔄 Query {i}/{len(queries)}: {query_text[:50]}...")
+            
+            result, exec_time = await tracker.track_query(
+                integration.execute_with_monitoring,
+                query_text,
+                agent_role="worker"
+            )
+            
+            print(f"   ✅ Completed in {exec_time:.2f}s")
+        
+        # Performance report
+        report = tracker.get_performance_report()
+        print(f"\n📈 Performance Report:")
+        for metric, value in report.items():
+            print(f"   {metric.replace('_', ' ').title()}: {value}")
         
     except Exception as e:
-        print(f"❌ Monitoring integration error: {e}")
-        
-    print()
+        print(f"❌ Performance tracking failed: {e}")
 
-
-async def generate_monitoring_report(manager: IntegrationManager):
-    """Generate and display monitoring report."""
+async def example_5_custom_integration():
+    """Example 5: Custom integration patterns"""
+    print("\n🔹 Example 5: Custom Integration Patterns")
     
-    if not manager.task_results:
-        print("📊 No task results to report")
-        return
+    class CustomIntegration:
+        def __init__(self):
+            self.session_data = {}
+            self.event_log = []
         
-    print(f"\n📊 Monitoring Report ({manager.session_id}):")
-    print("=" * 50)
-    
-    successful_tasks = [t for t in manager.task_results if t.success]
-    failed_tasks = [t for t in manager.task_results if not t.success]
-    
-    total_duration = sum(t.duration or 0 for t in manager.task_results if t.duration)
-    avg_duration = total_duration / len(manager.task_results) if manager.task_results else 0
-    
-    print(f"Total Tasks: {len(manager.task_results)}")
-    print(f"Successful: {len(successful_tasks)} ({len(successful_tasks)/len(manager.task_results)*100:.1f}%)")
-    print(f"Failed: {len(failed_tasks)}")
-    print(f"Total Duration: {total_duration:.1f}s")
-    print(f"Average Duration: {avg_duration:.1f}s")
-    
-    # Task details
-    print(f"\nTask Details:")
-    for task in manager.task_results:
-        status_icon = "✅" if task.success else "❌"
-        duration_str = f"{task.duration:.1f}s" if task.duration else "N/A"
-        task_type = task.metadata.get('type', 'unknown') if task.metadata else 'unknown'
-        
-        print(f"  {status_icon} {task.task_id}: {task_type} - {duration_str}")
-        if task.error:
-            print(f"      Error: {task.error[:80]}...")
+        async def execute_with_context(self, prompt, context_data=None):
+            """Execute with custom context and logging"""
+            session_id = f"session_{int(time.time())}"
+            self.session_data[session_id] = {
+                'start_time': time.time(),
+                'context': context_data or {},
+                'events': []
+            }
             
-    # Send to monitoring system if available
-    if manager.enable_monitoring:
-        try:
-            report_data = {
-                'session_id': manager.session_id,
+            try:
+                # Log start event
+                self.log_event(session_id, "session_start", {"prompt": prompt[:100]})
+                
+                # Execute with automatic claude integration
+                integration = AutomaticClaudeIntegration()
+                result = await integration.execute_with_monitoring(
+                    prompt,
+                    agent_role="worker"
+                )
+                
+                # Log completion
+                self.log_event(session_id, "session_complete", {
+                    "success": result.get('success', False),
+                    "execution_time": time.time() - self.session_data[session_id]['start_time']
+                })
+                
+                return {
+                    'session_id': session_id,
+                    'result': result,
+                    'session_data': self.session_data[session_id]
+                }
+                
+            except Exception as e:
+                self.log_event(session_id, "session_error", {"error": str(e)})
+                raise
+        
+        def log_event(self, session_id, event_type, data):
+            """Log custom events"""
+            event = {
+                'session_id': session_id,
+                'event_type': event_type,
                 'timestamp': time.time(),
-                'summary': {
-                    'total_tasks': len(manager.task_results),
-                    'successful_tasks': len(successful_tasks),
-                    'failed_tasks': len(failed_tasks),
-                    'total_duration': total_duration,
-                    'average_duration': avg_duration
-                },
-                'tasks': [asdict(task) for task in manager.task_results]
+                'data': data
             }
-            
-            # This would send to monitoring dashboard
-            print(f"\n📡 Monitoring report ready for dashboard")
-            print(f"   Session ID: {manager.session_id}")
-            
-        except Exception as e:
-            print(f"⚠️  Could not send to monitoring system: {e}")
-
-
-async def task_coordination_example():
-    """
-    Demonstrates task coordination and workflow management.
-    """
-    print("🔵 Task Coordination Example")
-    print("=" * 40)
-    
-    manager = IntegrationManager(enable_monitoring=True, enable_dual_agent=True)
+            self.event_log.append(event)
+            self.session_data[session_id]['events'].append(event)
+        
+        def get_analytics(self):
+            """Get analytics from logged events"""
+            return {
+                'total_sessions': len(self.session_data),
+                'total_events': len(self.event_log),
+                'event_types': list(set(event['event_type'] for event in self.event_log)),
+                'average_session_time': sum(
+                    session['events'][-1]['timestamp'] - session['start_time']
+                    for session in self.session_data.values()
+                    if session['events']
+                ) / max(1, len(self.session_data))
+            }
     
     try:
-        status = await manager.setup_integrations()
+        custom = CustomIntegration()
         
-        if not status['client_ready']:
-            print("❌ Cannot proceed without Claude CLI")
-            return
-            
-        # Define a coordinated workflow
-        workflow_tasks = [
-            {
-                'id': 'task_1',
-                'description': 'Design a database schema for a blog application',
-                'agent_type': 'manager',  # Strategic task
-                'dependencies': []
-            },
-            {
-                'id': 'task_2', 
-                'description': 'Implement SQLAlchemy models based on the schema',
-                'agent_type': 'worker',  # Implementation task
-                'dependencies': ['task_1']
-            },
-            {
-                'id': 'task_3',
-                'description': 'Create FastAPI endpoints for the blog models',
-                'agent_type': 'worker',
-                'dependencies': ['task_2']
-            },
-            {
-                'id': 'task_4',
-                'description': 'Write comprehensive tests for all endpoints',
-                'agent_type': 'worker', 
-                'dependencies': ['task_3']
-            }
+        # Execute multiple tasks with context
+        tasks = [
+            ("Create a Python data processing pipeline", {"domain": "data_science"}),
+            ("Implement a simple chat bot", {"domain": "ai_ml"}),
+            ("Write unit tests for a calculator", {"domain": "testing"})
         ]
         
-        print(f"🔄 Executing coordinated workflow ({len(workflow_tasks)} tasks)...")
+        results = []
+        for prompt, context in tasks:
+            print(f"🔄 Executing: {prompt[:50]}...")
+            
+            result = await custom.execute_with_context(prompt, context)
+            results.append(result)
+            
+            print(f"   ✅ Session: {result['session_id']}")
+            print(f"   📊 Events: {len(result['session_data']['events'])}")
         
-        completed_tasks = []
-        
-        for task in workflow_tasks:
-            # Check dependencies
-            dependencies_met = all(dep in completed_tasks for dep in task['dependencies'])
-            
-            if not dependencies_met:
-                missing_deps = [dep for dep in task['dependencies'] if dep not in completed_tasks]
-                print(f"  ⏸️  {task['id']}: Waiting for dependencies {missing_deps}")
-                continue
-                
-            print(f"  🚀 {task['id']}: Starting ({task['agent_type']} agent)")
-            
-            start_time = time.time()
-            
-            try:
-                # Execute with appropriate agent configuration
-                options = create_dual_agent_options() if task['agent_type'] == 'manager' else create_production_options()
-                
-                async with ClaudeSDKClient(options) as client:
-                    response = await client.execute(task['description'])
-                    
-                duration = time.time() - start_time
-                
-                if response.success:
-                    completed_tasks.append(task['id'])
-                    print(f"    ✅ {task['id']}: Completed in {duration:.1f}s")
-                    
-                    # Log task coordination
-                    if manager.enable_monitoring:
-                        await manager.monitoring.log_task_coordination({
-                            'task_id': task['id'],
-                            'agent_type': task['agent_type'],
-                            'dependencies': task['dependencies'],
-                            'duration': duration,
-                            'success': True
-                        })
-                        
-                else:
-                    print(f"    ❌ {task['id']}: Failed - {response.error}")
-                    break  # Stop workflow on failure
-                    
-            except Exception as e:
-                print(f"    ❌ {task['id']}: Exception - {e}")
-                break
-                
-        print(f"\n🏁 Workflow completed: {len(completed_tasks)}/{len(workflow_tasks)} tasks successful")
+        # Analytics
+        analytics = custom.get_analytics()
+        print(f"\n📊 Custom Integration Analytics:")
+        print(f"   Total Sessions: {analytics['total_sessions']}")
+        print(f"   Total Events: {analytics['total_events']}")
+        print(f"   Event Types: {', '.join(analytics['event_types'])}")
+        print(f"   Avg Session Time: {analytics['average_session_time']:.2f}s")
         
     except Exception as e:
-        print(f"❌ Task coordination error: {e}")
-        
-    print()
-
+        print(f"❌ Custom integration failed: {e}")
 
 async def main():
-    """
-    Main function demonstrating all integration patterns.
-    """
-    print("🚀 Claude SDK Client - automatic-claude-code Integration Examples")
-    print("=" * 70)
-    print()
+    """Run all integration examples"""
+    print("🔗 Claude Code SDK - Integration Examples")
+    print("=" * 60)
     
-    print("ℹ️  Prerequisites:")
-    print("   - Claude Code CLI installed and configured")
-    print("   - automatic-claude-code system available")  
-    print("   - Optional: Monitoring server running on localhost:6011")
-    print()
+    examples = [
+        ("Basic Integration", example_1_basic_integration),
+        ("Dual-Agent Coordination", example_2_dual_agent_coordination),
+        ("Real-Time Monitoring", example_3_real_time_monitoring),
+        ("Performance Tracking", example_4_performance_tracking),
+        ("Custom Integration", example_5_custom_integration)
+    ]
     
-    # Run all integration examples
-    await basic_integration_example()
-    await dual_agent_integration_example()
-    await monitoring_integration_example()
-    await task_coordination_example()
+    successful = 0
     
-    print("✅ All integration examples completed!")
-    print()
-    print("Integration capabilities demonstrated:")
-    print("- Basic Claude CLI integration")
-    print("- Dual-agent architecture coordination")
-    print("- Real-time monitoring and observability")
-    print("- Task workflow coordination")
-    print("- Error handling and fallback strategies")
-
+    for name, example_func in examples:
+        try:
+            print(f"\n🚀 Running: {name}")
+            await example_func()
+            print(f"✅ Completed: {name}")
+            successful += 1
+        except Exception as e:
+            print(f"❌ Failed: {name} - {e}")
+    
+    # Summary
+    print("\n" + "=" * 60)
+    print("📊 Integration Examples Summary")
+    print("=" * 60)
+    print(f"🎯 Success rate: {successful}/{len(examples)} examples")
+    
+    if successful == len(examples):
+        print("🎉 All integration examples completed!")
+        print("🌟 Ready for production dual-agent deployments!")
+    elif successful >= 3:
+        print("⚠️ Most examples completed. Some features may require monitoring server.")
+    else:
+        print("🚨 Multiple examples failed. Check automatic-claude-code system setup.")
+    
+    print("\n💡 Tips:")
+    print("   • Start monitoring server: cd dual-agent-monitor && npm run dev")
+    print("   • Check API health: curl http://localhost:4005/api/health")
+    print("   • View dashboard: http://localhost:6011")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n🛑 Integration examples interrupted by user")
+        print("\n⏹️ Integration examples interrupted")
     except Exception as e:
-        print(f"\n💥 Unexpected error running integration examples: {e}")
-        logger.exception("Error running integration examples")
+        print(f"💥 Examples crashed: {e}")

@@ -1283,7 +1283,17 @@ async function main() {
           const data = JSON.parse(fs.readFileSync(path.join('.claude-sessions/', file), 'utf-8'));
           const duration = data.endTime ? Math.round((new Date(data.endTime).getTime() - new Date(data.startTime).getTime()) / 1000) : 'ongoing';
           console.log(chalk.cyan(`${index + 1}. ${data.id}`));
-          console.log(chalk.gray(`   Task: ${data.initialPrompt.substring(0, 50)}${data.initialPrompt.length > 50 ? '...' : ''}`));
+          // Handle backward compatibility - initialPrompt can be string or object
+          let promptText: string;
+          if (typeof data.initialPrompt === 'string') {
+            promptText = data.initialPrompt;
+          } else if (data.initialPrompt && typeof data.initialPrompt === 'object') {
+            // Extract task from object format
+            promptText = (data.initialPrompt as any).task || 'Unknown task';
+          } else {
+            promptText = 'Unknown task';
+          }
+          console.log(chalk.gray(`   Task: ${promptText.substring(0, 50)}${promptText.length > 50 ? '...' : ''}`));
           console.log(chalk.gray(`   Iterations: ${data.iterations?.length || 0} | Duration: ${duration}s\n`));
         });
         return;
@@ -1304,7 +1314,17 @@ async function main() {
         const sessionData = JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
         
         console.log(chalk.blue.bold(`\n📊 Session: ${sessionData.id}\n`));
-        console.log(chalk.cyan(`Initial Task: ${sessionData.initialPrompt}`));
+        // Handle backward compatibility - initialPrompt can be string or object
+        let promptText: string;
+        if (typeof sessionData.initialPrompt === 'string') {
+          promptText = sessionData.initialPrompt;
+        } else if (sessionData.initialPrompt && typeof sessionData.initialPrompt === 'object') {
+          // Extract task from object format
+          promptText = (sessionData.initialPrompt as any).task || 'Unknown task';
+        } else {
+          promptText = 'Unknown task';
+        }
+        console.log(chalk.cyan(`Initial Task: ${promptText}`));
         console.log(chalk.cyan(`Working Directory: ${sessionData.workDir}`));
         console.log(chalk.cyan(`Started: ${new Date(sessionData.startTime).toLocaleString()}`));
         console.log(chalk.cyan(`Status: ${sessionData.status || 'unknown'}`));

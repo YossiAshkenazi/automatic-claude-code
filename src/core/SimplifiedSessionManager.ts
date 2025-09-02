@@ -328,11 +328,23 @@ export class SimplifiedSessionManager extends EventEmitter {
       if (file.endsWith('.json')) {
         try {
           const session = await this.loadSession(file.replace('.json', ''));
+          
+          // Handle backward compatibility - initialPrompt can be string or object
+          let promptText: string;
+          if (typeof session.initialPrompt === 'string') {
+            promptText = session.initialPrompt;
+          } else if (session.initialPrompt && typeof session.initialPrompt === 'object') {
+            // Extract task from object format
+            promptText = (session.initialPrompt as any).task || 'Unknown task';
+          } else {
+            promptText = 'Unknown task';
+          }
+          
           sessions.push({
             id: session.id,
             date: new Date(session.startTime),
             status: session.status,
-            prompt: session.initialPrompt.substring(0, 50) + '...',
+            prompt: promptText.substring(0, 50) + '...',
           });
         } catch (error) {
           this.logger?.error(`Failed to load session ${file}:`, error instanceof Error ? error.message : String(error));
@@ -380,7 +392,17 @@ export class SimplifiedSessionManager extends EventEmitter {
     report += `**Status:** ${session.status}\n`;
     report += `**Execution Mode:** ${session.executionMode || 'cli'}\n`;
     report += `**Working Directory:** ${session.workDir}\n`;
-    report += `**Initial Task:** ${session.initialPrompt}\n\n`;
+    // Handle backward compatibility - initialPrompt can be string or object
+    let promptText: string;
+    if (typeof session.initialPrompt === 'string') {
+      promptText = session.initialPrompt;
+    } else if (session.initialPrompt && typeof session.initialPrompt === 'object') {
+      // Extract task from object format
+      promptText = (session.initialPrompt as any).task || 'Unknown task';
+    } else {
+      promptText = 'Unknown task';
+    }
+    report += `**Initial Task:** ${promptText}\n\n`;
     
     report += `## Summary\n`;
     report += `- Total Iterations: ${summary.totalIterations}\n`;

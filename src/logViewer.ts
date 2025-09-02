@@ -164,7 +164,18 @@ export class LogViewer {
       const initialPromptEntry = entries.find(e => 
         e.details && typeof e.details === 'object' && e.details.initialPrompt
       );
-      const initialPrompt = initialPromptEntry?.details?.initialPrompt || 'Unknown task';
+      
+      // Handle backward compatibility - initialPrompt can be string or object
+      let initialPrompt = 'Unknown task';
+      if (initialPromptEntry?.details?.initialPrompt) {
+        const prompt = initialPromptEntry.details.initialPrompt;
+        if (typeof prompt === 'string') {
+          initialPrompt = prompt;
+        } else if (prompt && typeof prompt === 'object') {
+          // Extract task from object format
+          initialPrompt = (prompt as any).task || 'Unknown task';
+        }
+      }
 
       // Get max iteration
       const iterations = Math.max(...entries
@@ -265,7 +276,18 @@ export class LogViewer {
 
     // Session header
     const sessionInfo = entries.find(e => e.details && e.details.initialPrompt);
-    const initialPrompt = sessionInfo?.details?.initialPrompt || 'Unknown task';
+    
+    // Handle backward compatibility - initialPrompt can be string or object
+    let initialPrompt = 'Unknown task';
+    if (sessionInfo?.details?.initialPrompt) {
+      const prompt = sessionInfo.details.initialPrompt;
+      if (typeof prompt === 'string') {
+        initialPrompt = prompt;
+      } else if (prompt && typeof prompt === 'object') {
+        // Extract task from object format
+        initialPrompt = (prompt as any).task || 'Unknown task';
+      }
+    }
     
     console.log(boxen(
       chalk.bold.blue(`📋 Session: ${sessionId}\n`) +
@@ -386,7 +408,18 @@ export class LogViewer {
     }
 
     const sessionInfo = entries.find(e => e.details && e.details.initialPrompt);
-    const initialPrompt = sessionInfo?.details?.initialPrompt || 'Unknown task';
+    
+    // Handle backward compatibility - initialPrompt can be string or object
+    let initialPrompt = 'Unknown task';
+    if (sessionInfo?.details?.initialPrompt) {
+      const prompt = sessionInfo.details.initialPrompt;
+      if (typeof prompt === 'string') {
+        initialPrompt = prompt;
+      } else if (prompt && typeof prompt === 'object') {
+        // Extract task from object format
+        initialPrompt = (prompt as any).task || 'Unknown task';
+      }
+    }
 
     const html = this.generateSessionHTML(sessionId, initialPrompt, entries);
     

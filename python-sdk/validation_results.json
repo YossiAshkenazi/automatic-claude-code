@@ -1,0 +1,68 @@
+{
+  "validation_summary": {
+    "passed": 3,
+    "total": 6,
+    "success_rate": "50.0%",
+    "total_duration": "1.97s"
+  },
+  "validation_steps": [
+    {
+      "step": "SDK Structure",
+      "status": "PASS",
+      "details": "All imports successful, v0.1.0",
+      "duration": "0.00s",
+      "timestamp": "2025-09-02T17:46:23.727104"
+    },
+    {
+      "step": "Authentication Setup",
+      "status": "FAIL",
+      "details": "Setup error: 'CLIDetector' object has no attribute 'find_claude_installations'",
+      "duration": "0.00s",
+      "timestamp": "2025-09-02T17:46:23.727139"
+    },
+    {
+      "step": "Script Execution Flow",
+      "status": "PASS",
+      "details": "Workflow validated: 5 steps",
+      "duration": "1.97s",
+      "timestamp": "2025-09-02T17:46:25.698242"
+    },
+    {
+      "step": "Streaming Implementation",
+      "status": "FAIL",
+      "details": "Streaming error: 'MessageCollector' object has no attribute 'get_messages'",
+      "duration": "0.00s",
+      "timestamp": "2025-09-02T17:46:25.698331"
+    },
+    {
+      "step": "Error Handling",
+      "status": "PASS",
+      "details": "Classification: 3/3; Recovery logic: 3 types",
+      "duration": "0.00s",
+      "timestamp": "2025-09-02T17:46:25.698549"
+    },
+    {
+      "step": "User Experience",
+      "status": "FAIL",
+      "details": "UX validation error: create_dual_agent_options() missing 1 required positional argument: 'agent_role'",
+      "duration": "0.00s",
+      "timestamp": "2025-09-02T17:46:25.698643"
+    }
+  ],
+  "integration_readiness": {
+    "sdk_structure": true,
+    "authentication": false,
+    "execution_flow": true,
+    "streaming": false,
+    "error_handling": true,
+    "user_experience": false
+  },
+  "next_steps": [
+    "[ERROR] Multiple validation failures detected",
+    "[INSTALL] Verify SDK installation: pip install -e .",
+    "[CLI] Install Claude CLI: npm install -g @anthropic-ai/claude-code",
+    "[AUTH] Configure authentication: claude auth login",
+    "[PYTHON] Check Python version compatibility (3.10+)",
+    "[SUPPORT] Contact support if issues persist"
+  ]
+}

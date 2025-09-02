@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import chalk from 'chalk';
 import { EventEmitter } from 'events';
-import cliProgress from 'cli-progress';
+import * as cliProgress from 'cli-progress';
 import boxen from 'boxen';
 import ora from 'ora';
 

@@ -1,3 +1,4 @@
+// @ts-ignore
 import blessed from 'blessed';
 import contrib from 'blessed-contrib';
 import * as path from 'path';
@@ -195,6 +196,7 @@ export class TUIBrowser {
     // Progress Bar
     this.progressBar = contrib.gauge({
       label: 'Session Progress',
+      // @ts-ignore
       left: '40%',
       width: '30%',
       height: 4,

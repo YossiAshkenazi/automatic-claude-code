@@ -17,9 +17,10 @@
     "allowSyntheticDefaultImports": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
+    "downlevelIteration": true,
     "typeRoots": [
       "./node_modules/@types",
-      "./types"
+      "./src/types"
     ],
     "types": [
       "node"

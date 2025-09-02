@@ -1,6 +1,6 @@
-# Claude SDK Examples
+# Claude CLI Wrapper Examples
 
-This directory contains comprehensive examples demonstrating the Claude SDK Client capabilities and integration patterns.
+This directory contains practical examples demonstrating the Claude CLI wrapper functionality alongside the existing SDK examples. Each example is self-contained and runnable, showcasing different aspects of CLI wrapper capabilities.
 
 ## Prerequisites
 

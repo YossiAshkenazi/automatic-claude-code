@@ -15,8 +15,36 @@ A comprehensive Python SDK for Claude Code CLI interactions with full integratio
 
 ## 📦 Installation
 
+### Development Installation (Current)
+
+Since the package is not yet published to PyPI, install from source:
+
 ```bash
-pip install claude-code-sdk
+# Clone the repository
+git clone https://github.com/yossiashkenazi/automatic-claude-code
+cd automatic-claude-code/python-sdk
+
+# Install in development mode
+pip install -e .
+
+# Or install dependencies manually
+pip install -r requirements.txt
+```
+
+### Prerequisites
+
+- **Python 3.8+** (tested with 3.8-3.13)
+- **Claude Code CLI** must be installed and accessible
+- **Valid Anthropic API key** or Claude CLI authentication setup
+
+### Verify Installation
+
+```bash
+# Check if Claude CLI is accessible
+python -c "from claude_code_sdk.utils import CLIDetector; import asyncio; print(asyncio.run(CLIDetector().detect_claude_cli()))"
+
+# Test basic SDK functionality
+python -c "from claude_code_sdk import ClaudeCodeOptions; print('SDK installed successfully')"
 ```
 
 ## 🏃 Quick Start
@@ -272,19 +300,30 @@ await monitoring.send_event("custom_event", {"data": "value"})
 
 ## 🧪 Testing
 
+⚠️ **Note**: Comprehensive test suite is currently in development.
+
+For now, you can validate the SDK functionality with:
+
 ```bash
 # Install development dependencies
-pip install -e ".[dev]"
+pip install -e .
 
-# Run tests
-pytest tests/
+# Basic functionality test
+python -c "from claude_code_sdk import ClaudeCodeOptions; print('Core imports working')"
 
-# Run with coverage
-pytest --cov=claude_code_sdk tests/
+# CLI detection test
+python -c "from claude_code_sdk.utils import CLIDetector; import asyncio; print('CLI detection:', asyncio.run(CLIDetector().detect_claude_cli()))"
 
-# Type checking
-mypy claude_code_sdk/
+# Integration test (requires Claude CLI authentication)
+# python examples/basic_query_example.py
 ```
+
+**Future Testing Features** (planned):
+- Comprehensive test suite with pytest
+- Code coverage analysis
+- Type checking with mypy
+- Integration tests with mock Claude CLI
+- Security vulnerability scanning
 
 ## 🚨 Troubleshooting
 

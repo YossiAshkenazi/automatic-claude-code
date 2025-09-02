@@ -3,7 +3,7 @@ Claude Code SDK - Message Types
 Defines the message hierarchy for Claude Code interactions
 """
 
-from dataclasses import dataclass, field, field
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Union, List
 from datetime import datetime
 from abc import ABC, abstractmethod

@@ -723,7 +723,7 @@ export class SDKClaudeExecutor {
         currentPrompt = this.generateNextPrompt(result.output, initialPrompt);
         
       } catch (error) {
-        this.logger.error(`Autopilot iteration ${i + 1} failed:`, { error: error instanceof Error ? error.message : String(error) });
+        this.logger.error(`Autopilot iteration ${i + 1} failed:`, error instanceof Error ? error.message : String(error));
         
         if (!options.continueOnError) {
           return {

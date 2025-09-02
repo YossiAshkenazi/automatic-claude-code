@@ -766,7 +766,7 @@ async function main() {
         
         const sdkHealth = healthMetrics.sdkHealth || { available: false };
         console.log(chalk.cyan(`\nSDK Available: ${sdkHealth.available ? '✅' : '❌'}`));
-        console.log(chalk.cyan(`Circuit Breaker: ${sdkHealth.circuitBreakerOpen ? '🔴 Open' : '🟢 Closed'}`));
+        console.log(chalk.cyan(`Circuit Breaker: ${(sdkHealth as any).circuitBreakerOpen ? '🔴 Open' : '🟢 Closed'}`));
         
         const browserHealth = healthMetrics.browserHealth || { available: false };
         console.log(chalk.cyan(`\nBrowser Sessions: ${browserHealth.available ? '✅' : '❌'}`));

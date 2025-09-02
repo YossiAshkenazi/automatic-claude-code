@@ -72,7 +72,7 @@ export class StreamingExecutor extends EventEmitter {
     };
 
     this.bufferManager = createBufferManager(this.options.bufferPreset);
-    this.logger = new Logger('StreamingExecutor', this.options.logLevel);
+    this.logger = new Logger('StreamingExecutor');
   }
 
   /**
@@ -105,7 +105,7 @@ export class StreamingExecutor extends EventEmitter {
       // Set up timeout
       if (this.options.timeout > 0) {
         timeout = setTimeout(() => {
-          this.logger.warn('Command execution timeout');
+          this.logger.warning('Command execution timeout');
           this.cleanup();
           result.error = new Error(`Command execution timeout after ${this.options.timeout}ms`);
           resolve(result);
@@ -176,7 +176,7 @@ export class StreamingExecutor extends EventEmitter {
         this.currentProcess.on('error', (error) => {
           if (timeout) clearTimeout(timeout);
           
-          this.logger.error('Process error:', error);
+          this.logger.error('Process error:', error instanceof Error ? error.message : String(error));
           result.error = error;
           result.summary.hasErrors = true;
           
@@ -190,7 +190,7 @@ export class StreamingExecutor extends EventEmitter {
         if (timeout) clearTimeout(timeout);
         
         const execError = error instanceof Error ? error : new Error(String(error));
-        this.logger.error('Failed to start command:', execError);
+        this.logger.error('Failed to start command:', execError instanceof Error ? execError.message : String(execError));
         
         result.error = execError;
         this.options.onError(execError);
@@ -245,7 +245,7 @@ export class StreamingExecutor extends EventEmitter {
         this.emitProgress(result);
       }
     } catch (error) {
-      this.logger.error('Error processing chunk:', error);
+      this.logger.error('Error processing chunk:', error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -328,7 +328,7 @@ export class StreamingExecutor extends EventEmitter {
       // Force kill after 5 seconds if not terminated
       setTimeout(() => {
         if (this.currentProcess && !this.currentProcess.killed) {
-          this.logger.warn('Force killing process');
+          this.logger.warning('Force killing process');
           this.currentProcess.kill('SIGKILL');
         }
       }, 5000);

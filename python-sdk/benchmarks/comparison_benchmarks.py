@@ -95,10 +95,10 @@ class ComparisonBenchmarkSuite:
     
     def benchmark_basic_queries(self, queries: List[str]) -> Dict[str, Any]:
         """Compare basic query performance between SDK and CLI"""
-        print("📊 Benchmarking Basic Query Performance (SDK vs CLI)...")
+        print("[SUMMARY] Benchmarking Basic Query Performance (SDK vs CLI)...")
         
         if not self.claude_cli_available:
-            print("   ⚠️ Claude CLI not available, skipping CLI comparison")
+            print("   [WARNING] Claude CLI not available, skipping CLI comparison")
             return {'error': 'claude_cli_not_available'}
         
         results = []
@@ -134,8 +134,8 @@ class ComparisonBenchmarkSuite:
             if cli_success:
                 cli_times.append(cli_time)
             
-            print(f"     SDK: {sdk_time:.2f}s ({'✅' if sdk_success else '❌'})")
-            print(f"     CLI: {cli_time:.2f}s ({'✅' if cli_success else '❌'})")
+            print(f"     SDK: {sdk_time:.2f}s ({'[SUCCESS]' if sdk_success else '[ERROR]'})")
+            print(f"     CLI: {cli_time:.2f}s ({'[SUCCESS]' if cli_success else '[ERROR]'})")
         
         # Calculate statistics
         summary = {
@@ -155,7 +155,7 @@ class ComparisonBenchmarkSuite:
     
     def benchmark_model_performance(self, query: str = "What is 2+2?") -> Dict[str, Any]:
         """Compare performance across different Claude models"""
-        print("🤖 Benchmarking Model Performance...")
+        print("[MODEL] Benchmarking Model Performance...")
         
         models = ['sonnet', 'haiku']  # 'opus' may not be available for all users
         results = {}
@@ -174,7 +174,7 @@ class ComparisonBenchmarkSuite:
                     'error': None if success else output
                 }
                 
-                print(f"     {model}: {duration:.2f}s ({'✅' if success else '❌'})")
+                print(f"     {model}: {duration:.2f}s ({'[SUCCESS]' if success else '[ERROR]'})")
                 
             except Exception as e:
                 results[model] = {
@@ -182,7 +182,7 @@ class ComparisonBenchmarkSuite:
                     'duration': 0,
                     'error': str(e)
                 }
-                print(f"     {model}: ❌ {str(e)}")
+                print(f"     {model}: [ERROR] {str(e)}")
         
         # Find fastest model
         successful_models = {k: v for k, v in results.items() if v['success']}
@@ -196,7 +196,7 @@ class ComparisonBenchmarkSuite:
     
     def benchmark_timeout_configurations(self, timeouts: List[int]) -> Dict[str, Any]:
         """Test performance with different timeout configurations"""
-        print("⏱️ Benchmarking Timeout Configurations...")
+        print("[TIMER] Benchmarking Timeout Configurations...")
         
         # Use a query that might take some time
         query = "Explain quantum computing in detail with examples"
@@ -218,7 +218,7 @@ class ComparisonBenchmarkSuite:
                     'efficiency_ratio': duration / timeout if timeout > 0 else 0
                 }
                 
-                status = '✅' if success else ('⏰' if duration >= timeout * 0.95 else '❌')
+                status = '[SUCCESS]' if success else ('⏰' if duration >= timeout * 0.95 else '[ERROR]')
                 print(f"     {timeout}s: {duration:.2f}s {status}")
                 
             except Exception as e:
@@ -227,13 +227,13 @@ class ComparisonBenchmarkSuite:
                     'success': False,
                     'error': str(e)
                 }
-                print(f"     {timeout}s: ❌ {str(e)}")
+                print(f"     {timeout}s: [ERROR] {str(e)}")
         
         return results
     
     def benchmark_streaming_vs_blocking_detailed(self, queries: List[str]) -> Dict[str, Any]:
         """Detailed comparison of streaming vs blocking execution"""
-        print("🔄 Benchmarking Streaming vs Blocking (Detailed)...")
+        print("[STREAM] Benchmarking Streaming vs Blocking (Detailed)...")
         
         results = {
             'streaming': [],
@@ -284,8 +284,8 @@ class ComparisonBenchmarkSuite:
                 'messages_received': messages_received
             })
             
-            print(f"     Blocking: {blocking_time:.2f}s ({'✅' if blocking_success else '❌'})")
-            print(f"     Streaming: {streaming_time:.2f}s ({'✅' if streaming_success else '❌'}) "
+            print(f"     Blocking: {blocking_time:.2f}s ({'[SUCCESS]' if blocking_success else '[ERROR]'})")
+            print(f"     Streaming: {streaming_time:.2f}s ({'[SUCCESS]' if streaming_success else '[ERROR]'}) "
                   f"({messages_received} msgs)")
         
         # Calculate comparison statistics
@@ -308,7 +308,7 @@ class ComparisonBenchmarkSuite:
     
     def benchmark_initialization_overhead(self, iterations: int = 20) -> Dict[str, Any]:
         """Compare initialization overhead between different approaches"""
-        print(f"🚀 Benchmarking Initialization Overhead ({iterations} iterations)...")
+        print(f"[INIT] Benchmarking Initialization Overhead ({iterations} iterations)...")
         
         results = {
             'cold_start_times': [],
@@ -375,7 +375,7 @@ class ComparisonBenchmarkSuite:
     
     def run_all_comparison_benchmarks(self) -> Dict[str, Any]:
         """Run all comparison benchmarks"""
-        print("⚖️ Starting Comparison Benchmarks")
+        print("[BALANCE] Starting Comparison Benchmarks")
         print("=" * 60)
         
         all_results = {}
@@ -405,7 +405,7 @@ class ComparisonBenchmarkSuite:
         all_results['initialization_overhead'] = self.benchmark_initialization_overhead(15)
         
         print("\n" + "=" * 60)
-        print("🎯 Comparison Benchmark Suite Completed")
+        print("[TARGET] Comparison Benchmark Suite Completed")
         
         return all_results
 
@@ -415,47 +415,47 @@ def main():
     results = suite.run_all_comparison_benchmarks()
     
     # Generate summary report
-    print("\n📊 COMPARISON BENCHMARK SUMMARY")
+    print("\n[SUMMARY] COMPARISON BENCHMARK SUMMARY")
     print("=" * 60)
     
     for benchmark_name, result in results.items():
         print(f"\n{benchmark_name.upper().replace('_', ' ')}")
         
         if 'error' in result:
-            print(f"   ❌ ERROR: {result['error']}")
+            print(f"   [ERROR] ERROR: {result['error']}")
             continue
         
         # Handle different result structures
         if benchmark_name == 'basic_queries' and 'summary' in result:
             summary = result['summary']
-            print(f"   📈 SDK Success Rate: {summary.get('sdk_success_rate', 0):.1f}%")
-            print(f"   📈 CLI Success Rate: {summary.get('cli_success_rate', 0):.1f}%")
-            print(f"   ⏱️ SDK Avg Time: {summary.get('sdk_avg_time', 0):.3f}s")
-            print(f"   ⏱️ CLI Avg Time: {summary.get('cli_avg_time', 0):.3f}s")
+            print(f"   [METRICS] SDK Success Rate: {summary.get('sdk_success_rate', 0):.1f}%")
+            print(f"   [METRICS] CLI Success Rate: {summary.get('cli_success_rate', 0):.1f}%")
+            print(f"   [TIMER] SDK Avg Time: {summary.get('sdk_avg_time', 0):.3f}s")
+            print(f"   [TIMER] CLI Avg Time: {summary.get('cli_avg_time', 0):.3f}s")
             
         elif benchmark_name == 'model_performance':
             successful_models = {k: v for k, v in result.items() 
                                if isinstance(v, dict) and v.get('success', False)}
             if successful_models:
-                print(f"   🏆 Fastest Model: {result.get('fastest_model', 'N/A')} "
+                print(f"   [BEST] Fastest Model: {result.get('fastest_model', 'N/A')} "
                       f"({result.get('fastest_time', 0):.3f}s)")
                 for model, data in successful_models.items():
-                    print(f"   🤖 {model}: {data['duration']:.3f}s")
+                    print(f"   [MODEL] {model}: {data['duration']:.3f}s")
                     
         elif benchmark_name == 'streaming_vs_blocking' and 'comparison' in result:
             comp = result['comparison']
             blocking_faster = not comp.get('streaming_faster', False)
             winner = 'Blocking' if blocking_faster else 'Streaming'
-            print(f"   🏆 Winner: {winner}")
-            print(f"   📊 Blocking Avg: {comp.get('blocking_avg_time', 0):.3f}s")
-            print(f"   📊 Streaming Avg: {comp.get('streaming_avg_time', 0):.3f}s")
-            print(f"   📬 Avg Messages/Query: {comp.get('avg_messages_per_query', 0):.1f}")
+            print(f"   [BEST] Winner: {winner}")
+            print(f"   [SUMMARY] Blocking Avg: {comp.get('blocking_avg_time', 0):.3f}s")
+            print(f"   [SUMMARY] Streaming Avg: {comp.get('streaming_avg_time', 0):.3f}s")
+            print(f"   [MESSAGES] Avg Messages/Query: {comp.get('avg_messages_per_query', 0):.1f}")
             
         elif benchmark_name == 'initialization_overhead' and 'summary' in result:
             summary = result['summary']
-            print(f"   ❄️ Cold Start: {summary.get('cold_start_avg', 0):.3f}s")
-            print(f"   🔥 Warm Start: {summary.get('warm_start_avg', 0):.3f}s")
-            print(f"   📊 Init Overhead: {summary.get('initialization_overhead', 0):.3f}s")
+            print(f"   [COLD] Cold Start: {summary.get('cold_start_avg', 0):.3f}s")
+            print(f"   [WARM] Warm Start: {summary.get('warm_start_avg', 0):.3f}s")
+            print(f"   [SUMMARY] Init Overhead: {summary.get('initialization_overhead', 0):.3f}s")
     
     return results
 

@@ -85,7 +85,7 @@ class PerformanceBenchmarkSuite:
     
     def benchmark_initialization(self, iterations: int = 10) -> Dict[str, float]:
         """Benchmark SDK initialization times"""
-        print("🚀 Benchmarking SDK Initialization...")
+        print("[INIT] Benchmarking SDK Initialization...")
         
         init_times = []
         
@@ -97,12 +97,12 @@ class PerformanceBenchmarkSuite:
                     _ = client.claude_cli_path
                     init_times.append(self.results[-1].duration)
                 except Exception as e:
-                    print(f"   ❌ Initialization failed: {e}")
+                    print(f"   [ERROR] Initialization failed: {e}")
                     break
         
         if init_times:
             avg_init = statistics.mean(init_times)
-            print(f"   ✅ Average initialization: {avg_init:.3f}s")
+            print(f"   [SUCCESS] Average initialization: {avg_init:.3f}s")
             return {
                 'average': avg_init,
                 'min': min(init_times),
@@ -110,17 +110,17 @@ class PerformanceBenchmarkSuite:
                 'std_dev': statistics.stdev(init_times) if len(init_times) > 1 else 0
             }
         else:
-            print("   ❌ No successful initializations")
+            print("   [ERROR] No successful initializations")
             return {'error': 'initialization_failed'}
     
     def benchmark_single_query(self, queries: List[str]) -> Dict[str, Any]:
         """Benchmark single query response times"""
-        print("📝 Benchmarking Single Query Performance...")
+        print("[QUERY] Benchmarking Single Query Performance...")
         
         try:
             client = ClaudeCodeClient(ClaudeSessionOptions(timeout=60))
         except Exception as e:
-            print(f"   ❌ Client initialization failed: {e}")
+            print(f"   [ERROR] Client initialization failed: {e}")
             return {'error': f'client_init_failed: {e}'}
         
         query_times = []
@@ -135,11 +135,11 @@ class PerformanceBenchmarkSuite:
                     if result.success:
                         successful_queries += 1
                         query_times.append(self.results[-1].duration)
-                        print(f"   ✅ Query completed in {self.results[-1].duration:.2f}s")
+                        print(f"   [SUCCESS] Query completed in {self.results[-1].duration:.2f}s")
                     else:
-                        print(f"   ❌ Query failed: {result.final_message}")
+                        print(f"   [ERROR] Query failed: {result.final_message}")
                 except Exception as e:
-                    print(f"   ❌ Query execution error: {e}")
+                    print(f"   [ERROR] Query execution error: {e}")
         
         if query_times:
             return {
@@ -155,12 +155,12 @@ class PerformanceBenchmarkSuite:
     
     def benchmark_streaming_vs_blocking(self, query: str = "List files in current directory") -> Dict[str, Any]:
         """Compare streaming vs blocking performance"""
-        print("🔄 Benchmarking Streaming vs Blocking...")
+        print("[STREAM] Benchmarking Streaming vs Blocking...")
         
         try:
             client = ClaudeCodeClient(ClaudeSessionOptions(timeout=60))
         except Exception as e:
-            print(f"   ❌ Client initialization failed: {e}")
+            print(f"   [ERROR] Client initialization failed: {e}")
             return {'error': f'client_init_failed: {e}'}
         
         results = {}
@@ -174,10 +174,10 @@ class PerformanceBenchmarkSuite:
                     'success': result.success,
                     'memory_delta': self.results[-1].memory_usage
                 }
-                print(f"   ✅ Blocking: {self.results[-1].duration:.2f}s")
+                print(f"   [SUCCESS] Blocking: {self.results[-1].duration:.2f}s")
             except Exception as e:
                 results['blocking'] = {'error': str(e)}
-                print(f"   ❌ Blocking failed: {e}")
+                print(f"   [ERROR] Blocking failed: {e}")
         
         # Test streaming
         messages_received = 0
@@ -194,16 +194,16 @@ class PerformanceBenchmarkSuite:
                     'messages_received': messages_received,
                     'memory_delta': self.results[-1].memory_usage
                 }
-                print(f"   ✅ Streaming: {self.results[-1].duration:.2f}s ({messages_received} messages)")
+                print(f"   [SUCCESS] Streaming: {self.results[-1].duration:.2f}s ({messages_received} messages)")
             except Exception as e:
                 results['streaming'] = {'error': str(e)}
-                print(f"   ❌ Streaming failed: {e}")
+                print(f"   [ERROR] Streaming failed: {e}")
         
         return results
     
     def benchmark_concurrent_requests(self, num_concurrent: int, query: str = "What is 2+2?") -> Dict[str, Any]:
         """Test concurrent request handling"""
-        print(f"⚡ Benchmarking {num_concurrent} Concurrent Requests...")
+        print(f"[CONCURRENT] Benchmarking {num_concurrent} Concurrent Requests...")
         
         def execute_query(query_id: int):
             try:
@@ -257,10 +257,10 @@ class PerformanceBenchmarkSuite:
     @profile
     def benchmark_memory_usage(self, operations: int = 50) -> Dict[str, Any]:
         """Benchmark memory usage with memory_profiler"""
-        print(f"🧠 Benchmarking Memory Usage ({operations} operations)...")
+        print(f"[MEMORY] Benchmarking Memory Usage ({operations} operations)...")
         
         if not MEMORY_PROFILER_AVAILABLE:
-            print("   ⚠️ memory_profiler not available, skipping detailed memory profiling")
+            print("   [WARNING] memory_profiler not available, skipping detailed memory profiling")
         
         initial_memory = self.get_memory_usage()
         
@@ -287,7 +287,7 @@ class PerformanceBenchmarkSuite:
                     print(f"   Completed {i+1}/{operations} operations...")
                     
             except Exception as e:
-                print(f"   ❌ Operation {i} failed: {e}")
+                print(f"   [ERROR] Operation {i} failed: {e}")
                 break
         
         final_memory = self.get_memory_usage()
@@ -310,7 +310,7 @@ class PerformanceBenchmarkSuite:
     
     def benchmark_cli_comparison(self, query: str = "What is the current directory?") -> Dict[str, Any]:
         """Compare SDK performance vs direct CLI calls"""
-        print("🆚 Benchmarking SDK vs Direct CLI Performance...")
+        print("[COMPARE] Benchmarking SDK vs Direct CLI Performance...")
         
         results = {}
         
@@ -324,10 +324,10 @@ class PerformanceBenchmarkSuite:
                     'success': result.success,
                     'memory_delta': self.results[-1].memory_usage
                 }
-                print(f"   ✅ SDK: {self.results[-1].duration:.2f}s")
+                print(f"   [SUCCESS] SDK: {self.results[-1].duration:.2f}s")
             except Exception as e:
                 results['sdk'] = {'error': str(e)}
-                print(f"   ❌ SDK failed: {e}")
+                print(f"   [ERROR] SDK failed: {e}")
         
         # Test direct CLI (if available)
         with self.benchmark_timer("cli_call"):
@@ -350,26 +350,26 @@ class PerformanceBenchmarkSuite:
                         'success': True,
                         'stdout': process.stdout.strip()
                     }
-                    print(f"   ✅ CLI: {end_time - start_time:.2f}s")
+                    print(f"   [SUCCESS] CLI: {end_time - start_time:.2f}s")
                 else:
                     results['cli'] = {'error': f'CLI exit code: {process.returncode}'}
-                    print(f"   ❌ CLI failed with exit code: {process.returncode}")
+                    print(f"   [ERROR] CLI failed with exit code: {process.returncode}")
                     
             except subprocess.TimeoutExpired:
                 results['cli'] = {'error': 'CLI timeout'}
-                print("   ❌ CLI timed out")
+                print("   [ERROR] CLI timed out")
             except FileNotFoundError:
                 results['cli'] = {'error': 'CLI not found'}
-                print("   ❌ Claude CLI not found")
+                print("   [ERROR] Claude CLI not found")
             except Exception as e:
                 results['cli'] = {'error': str(e)}
-                print(f"   ❌ CLI error: {e}")
+                print(f"   [ERROR] CLI error: {e}")
         
         return results
     
     def run_all_benchmarks(self) -> Dict[str, Any]:
         """Run all benchmarks and return comprehensive results"""
-        print("🏁 Starting Comprehensive Performance Benchmarks")
+        print("[COMPLETE] Starting Comprehensive Performance Benchmarks")
         print("=" * 60)
         
         all_results = {}
@@ -399,7 +399,7 @@ class PerformanceBenchmarkSuite:
         all_results['cli_comparison'] = self.benchmark_cli_comparison()
         
         print("\n" + "=" * 60)
-        print("🎯 Benchmark Suite Completed")
+        print("[TARGET] Benchmark Suite Completed")
         
         return all_results
 
@@ -409,24 +409,24 @@ def main():
     results = suite.run_all_benchmarks()
     
     # Generate summary report
-    print("\n📊 PERFORMANCE SUMMARY")
+    print("\n[SUMMARY] PERFORMANCE SUMMARY")
     print("=" * 60)
     
     for benchmark_name, result in results.items():
         print(f"\n{benchmark_name.upper().replace('_', ' ')}")
         if 'error' in result:
-            print(f"   ❌ ERROR: {result['error']}")
+            print(f"   [ERROR] ERROR: {result['error']}")
         else:
             if 'average' in result or 'average_time' in result:
                 avg_time = result.get('average', result.get('average_time', 0))
-                print(f"   ⏱️  Average time: {avg_time:.3f}s")
+                print(f"   [TIMER]  Average time: {avg_time:.3f}s")
             if 'successful_queries' in result:
                 success_rate = (result['successful_queries'] / result['total_queries']) * 100
-                print(f"   ✅ Success rate: {success_rate:.1f}%")
+                print(f"   [SUCCESS] Success rate: {success_rate:.1f}%")
             if 'requests_per_second' in result:
-                print(f"   🚀 Throughput: {result['requests_per_second']:.1f} req/s")
+                print(f"   [INIT] Throughput: {result['requests_per_second']:.1f} req/s")
             if 'total_memory_delta_mb' in result and result['total_memory_delta_mb']:
-                print(f"   🧠 Memory delta: {result['total_memory_delta_mb']:.1f} MB")
+                print(f"   [MEMORY] Memory delta: {result['total_memory_delta_mb']:.1f} MB")
     
     return results
 

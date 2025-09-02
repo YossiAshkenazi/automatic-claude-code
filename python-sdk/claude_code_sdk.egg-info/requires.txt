@@ -1,6 +1,7 @@
+aiohttp>=3.8.0
 
 [all]
-claude-code-sdk[dev,docs,test]
+claude-code-sdk[dev,docs,error-reporting,metrics,test]
 
 [dev]
 pytest>=7.0.0
@@ -19,6 +20,14 @@ sphinx>=5.0.0
 sphinx-rtd-theme>=1.0.0
 sphinx-autodoc-typehints>=1.19.0
 myst-parser>=0.18.0
+
+[error-reporting]
+sentry-sdk[logging]>=1.32.0
+
+[metrics]
+streamlit>=1.28.0
+plotly>=5.15.0
+pandas>=2.0.0
 
 [test]
 pytest>=7.0.0

@@ -85,7 +85,7 @@ class MemoryBenchmarkSuite:
     
     def benchmark_client_initialization_memory(self, iterations: int = 50) -> Dict[str, Any]:
         """Test memory usage during client initialization"""
-        print(f"🚀 Benchmarking Client Initialization Memory ({iterations} iterations)...")
+        print(f"[INIT] Benchmarking Client Initialization Memory ({iterations} iterations)...")
         
         with self.memory_monitor("client_initialization") as initial_memory:
             clients = []
@@ -107,7 +107,7 @@ class MemoryBenchmarkSuite:
                         print(f"     Created {i + 1}/{iterations} clients...")
                         
                 except Exception as e:
-                    print(f"     ❌ Failed to create client {i}: {e}")
+                    print(f"     [ERROR] Failed to create client {i}: {e}")
                     break
             
             # Clean up clients
@@ -117,7 +117,7 @@ class MemoryBenchmarkSuite:
                     client.kill_all_processes()
                     del client
                 except Exception as e:
-                    print(f"     ⚠️ Cleanup warning: {e}")
+                    print(f"     [WARNING] Cleanup warning: {e}")
             
             clients.clear()
             gc.collect()
@@ -138,7 +138,7 @@ class MemoryBenchmarkSuite:
     
     def benchmark_session_memory_usage(self, num_sessions: int = 20) -> Dict[str, Any]:
         """Test memory usage with multiple sessions"""
-        print(f"📝 Benchmarking Session Memory Usage ({num_sessions} sessions)...")
+        print(f"[QUERY] Benchmarking Session Memory Usage ({num_sessions} sessions)...")
         
         with self.memory_monitor("session_management") as initial_memory:
             sessions = []
@@ -164,7 +164,7 @@ class MemoryBenchmarkSuite:
                     memory_samples.append(memory_delta)
                     
                 except Exception as e:
-                    print(f"     ❌ Failed to create session {i}: {e}")
+                    print(f"     [ERROR] Failed to create session {i}: {e}")
             
             # Test session operations
             operations_memory = []
@@ -187,7 +187,7 @@ class MemoryBenchmarkSuite:
                     operations_memory.append(op_memory_delta)
                     
                 except Exception as e:
-                    print(f"     ⚠️ Session operation failed: {e}")
+                    print(f"     [WARNING] Session operation failed: {e}")
             
             # Clean up
             for session in sessions:
@@ -210,7 +210,7 @@ class MemoryBenchmarkSuite:
     
     def benchmark_long_running_memory(self, duration_seconds: int = 60) -> Dict[str, Any]:
         """Test memory usage over a long-running period"""
-        print(f"⏳ Benchmarking Long-Running Memory Usage ({duration_seconds}s)...")
+        print(f"[RATE-LIMIT] Benchmarking Long-Running Memory Usage ({duration_seconds}s)...")
         
         with self.memory_monitor("long_running_test") as initial_memory:
             memory_snapshots = []
@@ -245,7 +245,7 @@ class MemoryBenchmarkSuite:
                         time.sleep(0.1)
                         
                     except Exception as e:
-                        print(f"     ⚠️ Operation {operation_count} failed: {e}")
+                        print(f"     [WARNING] Operation {operation_count} failed: {e}")
                         break
                 
                 # Final cleanup
@@ -288,12 +288,12 @@ class MemoryBenchmarkSuite:
                         client.kill_all_processes()
                         del client
                     except Exception as e:
-                        print(f"     ⚠️ Final cleanup warning: {e}")
+                        print(f"     [WARNING] Final cleanup warning: {e}")
                 gc.collect()
     
     def benchmark_concurrent_memory_usage(self, num_threads: int = 10) -> Dict[str, Any]:
         """Test memory usage under concurrent operations"""
-        print(f"🔄 Benchmarking Concurrent Memory Usage ({num_threads} threads)...")
+        print(f"[STREAM] Benchmarking Concurrent Memory Usage ({num_threads} threads)...")
         
         with self.memory_monitor("concurrent_operations") as initial_memory:
             thread_results = []
@@ -366,7 +366,7 @@ class MemoryBenchmarkSuite:
     
     def run_all_memory_benchmarks(self) -> Dict[str, Any]:
         """Run all memory benchmarks"""
-        print("🧠 Starting Memory Usage Benchmarks")
+        print("[MEMORY] Starting Memory Usage Benchmarks")
         print("=" * 60)
         
         all_results = {}
@@ -384,14 +384,14 @@ class MemoryBenchmarkSuite:
         all_results['concurrent_memory'] = self.benchmark_concurrent_memory_usage(5)
         
         print("\n" + "=" * 60)
-        print("🎯 Memory Benchmark Suite Completed")
+        print("[TARGET] Memory Benchmark Suite Completed")
         
         return all_results
 
 def main():
     """Run the memory benchmark suite"""
     if not MEMORY_TOOLS_AVAILABLE:
-        print("⚠️ Warning: memory_profiler and tracemalloc not fully available")
+        print("[WARNING] Warning: memory_profiler and tracemalloc not fully available")
         print("   Install with: pip install memory_profiler")
         print("   Some detailed memory analysis may be limited\n")
     
@@ -399,28 +399,28 @@ def main():
     results = suite.run_all_memory_benchmarks()
     
     # Generate summary report
-    print("\n📊 MEMORY USAGE SUMMARY")
+    print("\n[SUMMARY] MEMORY USAGE SUMMARY")
     print("=" * 60)
     
     for benchmark_name, result in results.items():
         print(f"\n{benchmark_name.upper().replace('_', ' ')}")
         if 'error' in result:
-            print(f"   ❌ ERROR: {result['error']}")
+            print(f"   [ERROR] ERROR: {result['error']}")
         else:
             if 'avg_memory_per_client_mb' in result:
-                print(f"   💾 Avg memory per client: {result['avg_memory_per_client_mb']:.2f} MB")
+                print(f"   [DISK] Avg memory per client: {result['avg_memory_per_client_mb']:.2f} MB")
             if 'total_memory_delta_mb' in result:
                 delta = result['total_memory_delta_mb']
-                print(f"   📊 Total memory delta: {delta:+.1f} MB")
+                print(f"   [SUMMARY] Total memory delta: {delta:+.1f} MB")
             if 'memory_leak_detected' in result:
                 leak_status = "DETECTED" if result['memory_leak_detected'] else "None"
-                print(f"   🔍 Memory leaks: {leak_status}")
+                print(f"   [SEARCH] Memory leaks: {leak_status}")
             if 'growth_rate_mb_per_minute' in result:
                 rate = result['growth_rate_mb_per_minute']
-                print(f"   📈 Growth rate: {rate:+.2f} MB/minute")
+                print(f"   [METRICS] Growth rate: {rate:+.2f} MB/minute")
             if 'memory_stable' in result:
                 stability = "STABLE" if result['memory_stable'] else "UNSTABLE"
-                print(f"   ⚖️ Memory stability: {stability}")
+                print(f"   [BALANCE] Memory stability: {stability}")
     
     return results
 

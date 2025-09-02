@@ -60,7 +60,7 @@ class AsyncBenchmarkSuite:
     
     async def benchmark_async_batch_processing(self, batch_sizes: List[int]) -> Dict[str, Any]:
         """Test async batch processing with different batch sizes"""
-        print("📦 Benchmarking Async Batch Processing...")
+        print("[BATCH] Benchmarking Async Batch Processing...")
         
         results = {}
         base_query = "Calculate {} + {}"
@@ -95,14 +95,14 @@ class AsyncBenchmarkSuite:
                 'avg_operation_time': total_duration / batch_size if batch_size > 0 else 0
             }
             
-            print(f"   ✅ Batch {batch_size}: {successful}/{batch_size} success, "
+            print(f"   [SUCCESS] Batch {batch_size}: {successful}/{batch_size} success, "
                   f"{results[f'batch_{batch_size}']['throughput_ops_per_sec']:.1f} ops/sec")
         
         return results
     
     async def benchmark_concurrent_vs_sequential(self, num_operations: int = 20) -> Dict[str, Any]:
         """Compare concurrent vs sequential execution"""
-        print(f"🔄 Benchmarking Concurrent vs Sequential ({num_operations} operations)...")
+        print(f"[STREAM] Benchmarking Concurrent vs Sequential ({num_operations} operations)...")
         
         queries = [f"What is {i} multiplied by 2?" for i in range(num_operations)]
         options = ClaudeSessionOptions(timeout=30)
@@ -131,7 +131,7 @@ class AsyncBenchmarkSuite:
             'success_rate': (sequential_success / num_operations) * 100
         }
         
-        print(f"   ✅ Sequential: {sequential_duration:.2f}s, {results['sequential']['throughput_ops_per_sec']:.1f} ops/sec")
+        print(f"   [SUCCESS] Sequential: {sequential_duration:.2f}s, {results['sequential']['throughput_ops_per_sec']:.1f} ops/sec")
         
         # Concurrent execution
         print("   Running concurrent execution...")
@@ -150,7 +150,7 @@ class AsyncBenchmarkSuite:
             'success_rate': (concurrent_success / num_operations) * 100
         }
         
-        print(f"   ✅ Concurrent: {concurrent_duration:.2f}s, {results['concurrent']['throughput_ops_per_sec']:.1f} ops/sec")
+        print(f"   [SUCCESS] Concurrent: {concurrent_duration:.2f}s, {results['concurrent']['throughput_ops_per_sec']:.1f} ops/sec")
         
         # Calculate speedup
         if sequential_duration > 0 and concurrent_duration > 0:
@@ -160,13 +160,13 @@ class AsyncBenchmarkSuite:
                 'throughput_improvement': (results['concurrent']['throughput_ops_per_sec'] / 
                                          results['sequential']['throughput_ops_per_sec']) - 1
             }
-            print(f"   🚀 Speedup: {speedup:.1f}x faster")
+            print(f"   [INIT] Speedup: {speedup:.1f}x faster")
         
         return results
     
     async def benchmark_async_streaming_simulation(self, queries: List[str]) -> Dict[str, Any]:
         """Simulate async streaming with callbacks"""
-        print("📡 Benchmarking Async Streaming Simulation...")
+        print("[STREAMING] Benchmarking Async Streaming Simulation...")
         
         results = {
             'queries_processed': 0,
@@ -225,18 +225,18 @@ class AsyncBenchmarkSuite:
                 'success_rate': (len(successful_results) / len(queries)) * 100
             })
             
-            print(f"   ✅ Processed {len(successful_results)}/{len(queries)} queries")
-            print(f"   📬 Received {sum(messages)} total messages")
-            print(f"   ⏱️ Average response time: {results['avg_response_time']:.2f}s")
+            print(f"   [SUCCESS] Processed {len(successful_results)}/{len(queries)} queries")
+            print(f"   [MESSAGES] Received {sum(messages)} total messages")
+            print(f"   [TIMER] Average response time: {results['avg_response_time']:.2f}s")
         else:
             results['error'] = 'no_successful_queries'
-            print("   ❌ No successful streaming queries")
+            print("   [ERROR] No successful streaming queries")
         
         return results
     
     async def benchmark_rate_limiting_simulation(self, requests_per_second: List[int]) -> Dict[str, Any]:
         """Test performance under different rate limiting scenarios"""
-        print("⏳ Benchmarking Rate Limiting Scenarios...")
+        print("[RATE-LIMIT] Benchmarking Rate Limiting Scenarios...")
         
         results = {}
         base_query = "What is the square root of {}?"
@@ -289,13 +289,13 @@ class AsyncBenchmarkSuite:
                 'success_rate': (successful / num_requests) * 100 if num_requests > 0 else 0
             }
             
-            print(f"   ✅ Target: {rps} RPS, Actual: {results[f'rps_{rps}']['actual_rps']:.1f} RPS")
+            print(f"   [SUCCESS] Target: {rps} RPS, Actual: {results[f'rps_{rps}']['actual_rps']:.1f} RPS")
         
         return results
     
     async def run_all_async_benchmarks(self) -> Dict[str, Any]:
         """Run all async benchmarks"""
-        print("🚀 Starting Async Performance Benchmarks")
+        print("[INIT] Starting Async Performance Benchmarks")
         print("=" * 60)
         
         all_results = {}
@@ -318,7 +318,7 @@ class AsyncBenchmarkSuite:
         all_results['rate_limiting'] = await self.benchmark_rate_limiting_simulation([1, 5, 10])
         
         print("\n" + "=" * 60)
-        print("🎯 Async Benchmark Suite Completed")
+        print("[TARGET] Async Benchmark Suite Completed")
         
         return all_results
 
@@ -328,19 +328,19 @@ async def main():
     results = await suite.run_all_async_benchmarks()
     
     # Generate summary report
-    print("\n📊 ASYNC PERFORMANCE SUMMARY")
+    print("\n[SUMMARY] ASYNC PERFORMANCE SUMMARY")
     print("=" * 60)
     
     for benchmark_name, result in results.items():
         print(f"\n{benchmark_name.upper().replace('_', ' ')}")
         if 'error' in result:
-            print(f"   ❌ ERROR: {result['error']}")
+            print(f"   [ERROR] ERROR: {result['error']}")
         elif isinstance(result, dict):
             # Handle different result structures
             if 'speedup' in result:
                 speedup_data = result['speedup']
-                print(f"   🚀 Time speedup: {speedup_data.get('time_speedup', 0):.1f}x")
-                print(f"   📈 Throughput improvement: {speedup_data.get('throughput_improvement', 0)*100:.1f}%")
+                print(f"   [INIT] Time speedup: {speedup_data.get('time_speedup', 0):.1f}x")
+                print(f"   [METRICS] Throughput improvement: {speedup_data.get('throughput_improvement', 0)*100:.1f}%")
             
             # Show throughput metrics
             for key, value in result.items():

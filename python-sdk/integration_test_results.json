@@ -1,0 +1,9 @@
+{
+  "python_version": "PASS",
+  "package_build": "PASS",
+  "dependencies": "PASS",
+  "import_syntax": "PASS",
+  "examples": "PASS",
+  "documentation": "PASS",
+  "acc_available": "WARNING - Not found"
+}

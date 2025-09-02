@@ -265,9 +265,9 @@ acc run --sdk-status "test"
 ## 📚 Next Steps
 
 ### Explore Advanced Features
-- Read the [full documentation](./docs/)
-- Check out the [Migration Guide](./MIGRATION_GUIDE.md) if upgrading
-- Review the [Phase 3 Roadmap](./PHASE3_ROADMAP.md) for upcoming features
+- Read the [full documentation](../)
+- Check out the [Migration Guide](../migration/MIGRATION_GUIDE.md) if upgrading
+- Review the [Phase 3 Roadmap](../development/PHASE3_ROADMAP.md) for upcoming features
 
 ### Join the Community
 - Report issues on [GitHub](https://github.com/yossiashkenazi/automatic-claude-code/issues)
@@ -282,4 +282,4 @@ You now have everything you need to start using Automatic Claude Code. Begin wit
 
 ---
 
-*Need help? Run `acc --help` or check our [comprehensive documentation](./docs/).*
+*Need help? Run `acc --help` or check our [comprehensive documentation](../).*

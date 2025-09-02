@@ -30,8 +30,7 @@ RUN pnpm install --production
 
 # Copy built application
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/CLAUDE.md ./
-COPY --from=build /app/README.md ./
+COPY --from=build /app/docs/ ./docs/
 
 # Create non-root user and necessary directories
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001

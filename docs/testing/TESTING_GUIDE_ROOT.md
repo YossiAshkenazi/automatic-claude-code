@@ -473,4 +473,4 @@ Run all tests to verify:
 
 ---
 
-*For additional help, run `acc --help` or check the [documentation](./docs/).*
+*For additional help, run `acc --help` or check the [documentation](../).*

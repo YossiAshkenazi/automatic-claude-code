@@ -5,13 +5,13 @@ on:
     branches: [ main ]
     paths:
       - 'python-sdk/**'
-      - 'docs/**'
+      - 'python-sdk/docs/**'
       - '.github/workflows/python-sdk-docs.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'python-sdk/**'
-      - 'docs/**'
+      - 'python-sdk/docs/**'
   workflow_dispatch:
   schedule:
     # Rebuild docs daily at 2 AM UTC

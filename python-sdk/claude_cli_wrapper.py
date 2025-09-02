@@ -1082,7 +1082,36 @@ class ClaudeCliWrapper:
         try:
             data = json.loads(line)
             
-            # Handle Claude CLI structured JSON responses
+            # Handle both dict and list JSON responses from Claude CLI
+            if isinstance(data, list):
+                # If it's a list, process each item or treat as stream content
+                if len(data) == 0:
+                    return CliMessage(
+                        type="stream",
+                        content="",
+                        metadata={"is_stderr": is_stderr, "json_array": True, "empty_array": True}
+                    )
+                elif len(data) == 1 and isinstance(data[0], dict):
+                    # Single dict in array, extract it
+                    data = data[0]
+                else:
+                    # Multiple items or non-dict items, treat as stream content
+                    return CliMessage(
+                        type="stream",
+                        content=str(data),
+                        metadata={"is_stderr": is_stderr, "json_array": True, "array_length": len(data)}
+                    )
+            
+            # At this point, data should be a dict (either originally or extracted from single-item array)
+            if not isinstance(data, dict):
+                # Non-dict, non-list JSON (string, number, etc.)
+                return CliMessage(
+                    type="stream",
+                    content=str(data),
+                    metadata={"is_stderr": is_stderr, "json_primitive": True}
+                )
+            
+            # Handle Claude CLI structured JSON responses (dict only)
             message_type = data.get("type", "stream")
             
             # Handle different Claude CLI JSON types

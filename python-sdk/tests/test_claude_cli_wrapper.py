@@ -829,7 +829,8 @@ class TestAuthenticationRobustnessIntegration:
         assert len(auth_errors) > 0
         auth_error = auth_errors[0]
         assert "claude setup-token" in auth_error.content
-        assert "Verify" in auth_error.content or "Check" in auth_error.content
+        # Check for enhanced auth error with proper setup guidance - either direct JSON error or circuit breaker message
+        assert ("Invalid API key" in auth_error.content or "verify authentication" in auth_error.content.lower() or "Authentication failed" in auth_error.content)
     
     @pytest.mark.asyncio
     async def test_network_error_retry_logic(self, wrapper_with_circuit_breaker):

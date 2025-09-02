@@ -10,12 +10,44 @@ import { SessionReplayManager } from './replay/SessionReplayManager.js';
 import { MLService } from './ml/MLService.js';
 import { v4 as uuidv4 } from 'uuid';
 
+// Utility function to safely handle strings with unicode issues
+function safeStringify(obj: any, replacer?: any, space?: number): string {
+  try {
+    return JSON.stringify(obj, (key, value) => {
+      if (typeof value === 'string') {
+        // Remove or replace problematic unicode characters
+        return value.replace(/[\u{D800}-\u{DFFF}]/gu, '');
+      }
+      return value;
+    }, space);
+  } catch (error) {
+    console.error('JSON stringify error:', error);
+    return '[Object with invalid unicode]';
+  }
+}
+
 const app = express();
 app.use(cors({
   origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:6012', 'http://localhost:6013', 'http://localhost:6014', 'http://localhost:6015', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4001'],
   credentials: true
 }));
-app.use(express.json());
+// Enhanced JSON parsing with better error handling
+app.use(express.json({
+  limit: '50mb'
+}));
+
+// Custom error handler for JSON parsing errors
+app.use((error: any, req: any, res: any, next: any) => {
+  if (error instanceof SyntaxError && 'body' in error) {
+    console.error('JSON parsing error for request:', req.method, req.path);
+    console.error('Error details:', error.message);
+    return res.status(400).json({ 
+      error: 'Invalid JSON in request body',
+      details: error.message 
+    });
+  }
+  next(error);
+});
 
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
@@ -401,7 +433,7 @@ wss.on('connection', (ws) => {
 
 // Broadcast to all connected clients
 function broadcast(message: any) {
-  const messageStr = JSON.stringify(message);
+  const messageStr = safeStringify(message);
   clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(messageStr);
@@ -444,22 +476,42 @@ app.get('/api/health', async (req, res) => {
 // Monitoring data endpoint for automatic-claude-code integration
 app.post('/api/monitoring', async (req, res) => {
   try {
+    // Validate request body exists
+    if (!req.body || typeof req.body !== 'object') {
+      console.error('❌ Invalid or missing request body');
+      return res.status(400).json({ error: 'Request body must be a valid JSON object' });
+    }
+    
     const data = req.body;
+    
+    // Safe JSON stringification to avoid unicode issues
+    console.log('🔍 Monitoring data received:', safeStringify(data, null, 2));
+    
+    console.log('📊 Current session exists:', !!currentSession, currentSession?.id);
     
     // Handle dual-agent monitoring data
     if (data.agentType && data.message) {
+      console.log('✅ Valid agent data received');
       // Create or update current session if needed
       if (!currentSession && data.sessionInfo) {
+        console.log('🆕 Creating new session with data:', data.sessionInfo);
         const sessionId = await dbService.createSession({
           startTime: new Date(),
           status: 'running',
           initialTask: data.sessionInfo.task || 'Dual-agent task',
           workDir: data.sessionInfo.workDir || process.cwd()
         });
+        console.log('📝 Session created with ID:', sessionId);
         currentSession = await dbService.getSession(sessionId);
+        console.log('✅ Current session set:', currentSession?.id);
+      } else if (!currentSession) {
+        console.log('⚠️ No session info provided for new session');
+      } else {
+        console.log('📍 Using existing session:', currentSession.id);
       }
 
       if (currentSession) {
+        console.log('📝 Adding message to session:', currentSession.id);
         const agentMessage: AgentMessage = {
           id: uuidv4(),
           sessionId: currentSession.id,
@@ -471,6 +523,7 @@ app.post('/api/monitoring', async (req, res) => {
         };
         
         await dbService.addMessage(agentMessage);
+        console.log('✅ Message added:', agentMessage.id);
         
         // Collect analytics metrics
         await analyticsService.collectMetricsFromMessage(agentMessage, currentSession);

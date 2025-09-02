@@ -577,16 +577,16 @@ class AutomaticClaudeCode {
     try {
       // Use the SDK Autopilot Engine for comprehensive browser checking
       const healthMetrics = await this.sdkAutopilotEngine.getHealthMetrics();
-      const browserStatus = healthMetrics.browserHealth || {};
+      const browserStatus = healthMetrics.browserHealth || { available: false, authStatus: 'unknown' };
       
       console.log(chalk.cyan('📊 SDK Health Metrics:'));
       console.log(chalk.cyan(`  • Total Executions: ${healthMetrics.totalExecutions}`));
       console.log(chalk.cyan(`  • Success Rate: ${healthMetrics.successRate}%`));
-      console.log(chalk.cyan(`  • Preferred Method: ${healthMetrics.preferredMethod.toUpperCase()}`));
+      console.log(chalk.cyan(`  • Preferred Method: ${healthMetrics.preferredMethod?.toUpperCase() || 'SDK'}`));
       
-      if (browserStatus.available || browserStatus.authStatus === 'authenticated') {
+      if (browserStatus.available || (browserStatus as any).authStatus === 'authenticated') {
         console.log(chalk.green('\n✅ SDK browser authentication available!'));
-        console.log(chalk.cyan(`📊 Authentication Status: ${browserStatus.authStatus || 'ready'}`));
+        console.log(chalk.cyan(`📊 Authentication Status: ${(browserStatus as any).authStatus || 'ready'}`));
         
         console.log(chalk.green.bold('\n🚀 Ready for SDK Execution!'));
         console.log(chalk.gray('   Try: acc run "your task" --use-sdk-only'));
@@ -600,7 +600,7 @@ class AutomaticClaudeCode {
         console.log(chalk.white('  4. Run this command again to verify'));
       }
       
-      process.exit((browserStatus.available || browserStatus.authStatus === 'authenticated') ? 0 : 1);
+      process.exit((browserStatus.available || (browserStatus as any).authStatus === 'authenticated') ? 0 : 1);
       
     } catch (error) {
       console.error(chalk.red('❌ Error checking SDK browser sessions:'), error);

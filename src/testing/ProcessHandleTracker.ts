@@ -194,7 +194,7 @@ export class ProcessHandleTracker extends EventEmitter {
 
     // Check for handle limit
     if (this.options.enableLeakDetection && this.trackedHandles.size > this.options.handleLimit) {
-      this.logger.warn(`Handle limit exceeded: ${this.trackedHandles.size}/${this.options.handleLimit}`);
+      this.logger.warning(`Handle limit exceeded: ${this.trackedHandles.size}/${this.options.handleLimit}`);
       this.emit('handle_limit_exceeded', { count: this.trackedHandles.size });
     }
 
@@ -296,7 +296,7 @@ export class ProcessHandleTracker extends EventEmitter {
 
       // Phase 2: Force cleanup remaining handles
       if (this.trackedHandles.size > 0 && opts.logCleanupProgress) {
-        this.logger.warn(`Phase 2: Force cleaning ${this.trackedHandles.size} remaining handles...`);
+        this.logger.warning(`Phase 2: Force cleaning ${this.trackedHandles.size} remaining handles...`);
         
         for (const [id, handle] of this.trackedHandles) {
           try {
@@ -372,7 +372,7 @@ export class ProcessHandleTracker extends EventEmitter {
       
       // Set termination timeout
       this.terminationTimeout = setTimeout(() => {
-        this.logger.warn(`Process termination timeout (${opts.maxWaitTime}ms) - forcing exit`);
+        this.logger.warning(`Process termination timeout (${opts.maxWaitTime}ms) - forcing exit`);
         this.forceProcessExit(opts.enableSigkillFallback);
       }, opts.maxWaitTime);
 
@@ -383,10 +383,10 @@ export class ProcessHandleTracker extends EventEmitter {
         process.exit(0);
       } else {
         // Some handles failed to cleanup - wait for timeout or force exit
-        this.logger.warn(`${cleanupResult.failedHandles} handles failed to cleanup - waiting for timeout`);
+        this.logger.warning(`${cleanupResult.failedHandles} handles failed to cleanup - waiting for timeout`);
         
         setTimeout(() => {
-          this.logger.warn(`Force kill timeout (${opts.forceKillAfter}ms) - terminating process`);
+          this.logger.warning(`Force kill timeout (${opts.forceKillAfter}ms) - terminating process`);
           this.forceProcessExit(opts.enableSigkillFallback);
         }, opts.forceKillAfter);
       }
@@ -511,7 +511,7 @@ export class ProcessHandleTracker extends EventEmitter {
     try {
       for (const [key, original] of this.originalMethods) {
         const [objName, methodName] = key.split('.');
-        let obj = global;
+        let obj: any = global;
         
         if (objName === 'EventEmitter.prototype') {
           obj = require('events').prototype;
@@ -732,7 +732,7 @@ export class ProcessHandleTracker extends EventEmitter {
    * Force process exit as last resort
    */
   private forceProcessExit(enableSigkill: boolean = true): void {
-    this.logger.warn('Forcing process exit');
+    this.logger.warning('Forcing process exit');
     this.clearTerminationTimeout();
     
     if (enableSigkill) {

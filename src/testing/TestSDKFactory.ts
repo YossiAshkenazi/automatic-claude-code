@@ -151,7 +151,7 @@ export class TestSDKFactory {
 
     // Create handle statistics function
     const getHandleStatistics = () => {
-      return handleTracker ? handleTracker.getStatistics() : null;
+      return handleTracker ? handleTracker.getStatistics() : undefined;
     };
 
     const instance: TestSDKInstance = {
@@ -425,7 +425,7 @@ export class TestSDKFactory {
     const stats = {
       totalInstances: this.instances.size,
       instanceStats: new Map(),
-      globalTrackerStats: null
+      globalTrackerStats: null as any
     };
 
     // Collect stats from each instance
@@ -485,14 +485,17 @@ export class TestSDKClaudeExecutor extends SDKClaudeExecutor {
   private executionContext: ExecutionContext;
   private sessionDetector: EnhancedSessionDetector;
   private mockLayer?: MockSDKLayer;
+  protected testLogger?: Logger; // Our own reference to the logger
 
   constructor(testOptions: TestSDKOptions, context: ExecutionContext, logger?: Logger) {
-    super(logger || new Logger('test-sdk', { essentialMode: true, enableFileLogging: false }));
+    const effectiveLogger = logger || new Logger('test-sdk', { essentialMode: true, enableFileLogging: false });
+    super(effectiveLogger);
     this.testOptions = testOptions;
     this.executionContext = context;
+    this.testLogger = effectiveLogger; // Store our own reference
     this.sessionDetector = new EnhancedSessionDetector(
       context,
-      logger,
+      effectiveLogger,
       testOptions.sessionDetectionOptions
     );
   }
@@ -500,11 +503,11 @@ export class TestSDKClaudeExecutor extends SDKClaudeExecutor {
   /**
    * Override session detection for tests
    */
-  protected detectNestedSession(): boolean {
+  private detectNestedSessionOverride(): boolean {
     const result = this.sessionDetector.detectNestedSession();
     
-    if (this.logger && this.testOptions.enableLogging) {
-      this.logger.debug('Test SDK session detection', {
+    if (this.testLogger && this.testOptions.enableLogging) {
+      this.testLogger.debug('Test SDK session detection', {
         isNested: result.isNested,
         reason: result.reason,
         confidence: result.confidence,
@@ -530,15 +533,15 @@ export class TestSDKClaudeExecutor extends SDKClaudeExecutor {
    */
   async checkBrowserAuthentication(): Promise<boolean> {
     if (this.testOptions.authentication === 'mock') {
-      if (this.logger && this.testOptions.enableLogging) {
-        this.logger.debug('Mock authentication enabled - returning true');
+      if (this.testLogger && this.testOptions.enableLogging) {
+        this.testLogger.debug('Mock authentication enabled - returning true');
       }
       return true; // Mock successful authentication
     }
 
     if (this.testOptions.authentication === 'bypass') {
-      if (this.logger && this.testOptions.enableLogging) {
-        this.logger.debug('Authentication bypass enabled - returning true');
+      if (this.testLogger && this.testOptions.enableLogging) {
+        this.testLogger.debug('Authentication bypass enabled - returning true');
       }
       return true; // Bypass authentication checks
     }
@@ -585,13 +588,13 @@ export class TestSDKClaudeExecutor extends SDKClaudeExecutor {
       }
 
       // Close logger if it exists
-      if (this.logger && typeof this.logger.close === 'function') {
-        this.logger.close();
+      if (this.testLogger && typeof this.testLogger.close === 'function') {
+        this.testLogger.close();
       }
 
-    } catch (error) {
-      if (this.logger) {
-        this.logger.error('Failed to cleanup test SDK executor', { error: error.message });
+    } catch (error: any) {
+      if (this.testLogger) {
+        this.testLogger.error('Failed to cleanup test SDK executor', { error: error.message });
       }
     }
   }

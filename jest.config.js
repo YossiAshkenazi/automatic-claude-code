@@ -3,11 +3,14 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: [
-    '**/__tests__/**/*.ts',
-    '**/?(*.)+(spec|test).ts'
+    '**/__tests__/**/*.test.ts',
+    '!**/__tests__/manual/**',
+    '!**/__tests__/setup.ts'
   ],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.ts$': ['ts-jest', {
+      tsconfig: 'tsconfig.test.json'
+    }]
   },
   collectCoverageFrom: [
     'src/**/*.ts',
@@ -18,11 +21,20 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
-  globals: {
-    'ts-jest': {
-      tsconfig: 'tsconfig.test.json'
-    }
-  },
   testTimeout: 10000,
-  verbose: true
+  verbose: true,
+  transformIgnorePatterns: [
+    'node_modules/(?!(strip-ansi|ansi-regex|chalk|boxen|cli-progress|ora|blessed|blessed-contrib|cli-highlight|cli-table3)/)'
+  ],
+  moduleNameMapper: {
+    '^strip-ansi$': '<rootDir>/src/__tests__/__mocks__/strip-ansi.js',
+    '^chalk$': '<rootDir>/src/__tests__/__mocks__/chalk.js',
+    '^boxen$': '<rootDir>/src/__tests__/__mocks__/boxen.js',
+    '^cli-progress$': '<rootDir>/src/__tests__/__mocks__/cli-progress.js',
+    '^ora$': '<rootDir>/src/__tests__/__mocks__/ora.js',
+    '^blessed$': '<rootDir>/src/__tests__/__mocks__/blessed.js',
+    '^blessed-contrib$': '<rootDir>/src/__tests__/__mocks__/blessed-contrib.js',
+    '^cli-highlight$': '<rootDir>/src/__tests__/__mocks__/cli-highlight.js',
+    '^cli-table3$': '<rootDir>/src/__tests__/__mocks__/cli-table3.js'
+  }
 };

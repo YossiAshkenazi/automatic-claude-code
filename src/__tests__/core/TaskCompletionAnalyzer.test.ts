@@ -21,7 +21,7 @@ describe('TaskCompletionAnalyzer', () => {
   let mockExecutionContext: ExecutionContext;
 
   beforeEach(() => {
-    logger = new Logger({ level: 'debug' });
+    logger = new Logger() as jest.Mocked<Logger>;
     analyzer = new TaskCompletionAnalyzer(logger);
     
     mockTaskContext = {

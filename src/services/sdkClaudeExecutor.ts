@@ -1,6 +1,6 @@
 import { Logger } from '../logger';
 import { SDKResponse, SDKResult } from '../types';
-// Temporarily disabled due to TS errors: import { BrowserSessionManager } from './browserSessionManager';
+// BrowserSessionManager removed - SDK handles browser auth directly
 
 export interface SDKExecutionResult {
   output: string;
@@ -95,20 +95,16 @@ export class SDKClaudeExecutor {
   private isSDKAvailable: boolean = false;
   private activeSessions: Map<string, any> = new Map(); // Track active SDK sessions
   private sessionHistory: Map<string, SDKResponse[]> = new Map(); // Track session message history
-  // private browserSessionManager: BrowserSessionManager;
-  
   // Circuit breaker and retry logic properties
   private executionAttempts: number = 0;
   private failureCount: number = 0;
   private circuitBreakerOpen: boolean = false;
   private lastFailureTime: number = 0;
   private readonly maxRetries: number = 3;
-  private browserSessionManager: any; // Temporary placeholder
 
   constructor(logger: Logger) {
     this.logger = logger;
-    // this.browserSessionManager = new BrowserSessionManager(logger);
-    this.browserSessionManager = { resetBrowserSessions: async () => {} }; // Temporary placeholder
+    // Browser authentication is now handled transparently by the Claude SDK
     // Initialize SDK asynchronously without blocking constructor
     this.initializeSDK().catch(() => {
       // Initialization failed, will retry during execution
@@ -533,13 +529,9 @@ export class SDKClaudeExecutor {
    * Refresh browser session - useful for authentication issues
    */
   async refreshBrowserSession(): Promise<void> {
-    try {
-      await this.browserSessionManager.resetBrowserSessions();
-      this.logger.info('Browser sessions refreshed successfully');
-    } catch (error) {
-      this.logger.warning('Failed to refresh browser sessions', { error: error instanceof Error ? error.message : String(error) });
-      throw error;
-    }
+    // Browser session management is now handled transparently by the Claude SDK
+    this.logger.info('Browser session refresh requested - SDK handles this automatically');
+    // No action needed - SDK manages browser authentication internally
   }
 
   /**

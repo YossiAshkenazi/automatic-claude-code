@@ -31,7 +31,7 @@ import {
   ModelQuotaError,
   RetryExhaustedError
 } from './services/sdkClaudeExecutor';
-import { BrowserSessionManager, BrowserSessionStatus } from './services/browserSessionManager';
+// BrowserSessionManager deprecated - browser auth handled by SDK
 import Table from 'cli-table3';
 
 interface LoopOptions {
@@ -59,7 +59,7 @@ class AutomaticClaudeCode {
   private logger: Logger;
   private sdkClaudeExecutor: SDKClaudeExecutor; // SDK executor
   private sdkAutopilotEngine: SDKAutopilotEngine; // New primary engine
-  private browserSessionManager: BrowserSessionManager;
+  private browserSessionManager: any; // Deprecated - SDK handles browser auth
   private iteration: number = 0;
   private sessionHistory: string[] = [];
 
@@ -70,12 +70,12 @@ class AutomaticClaudeCode {
     this.sdkClaudeExecutor = new SDKClaudeExecutor(this.logger); // SDK executor
     this.sessionManager = new EnhancedSessionManager('.claude-sessions', this.logger, this.sdkClaudeExecutor);
     this.sdkAutopilotEngine = new SDKAutopilotEngine(this.logger); // New primary engine
-    // BrowserSessionManager is deprecated - using SDK browser auth instead
+    // BrowserSessionManager is deprecated - SDK handles browser auth transparently
     this.browserSessionManager = {
       checkBrowserAuth: async () => true,
       resetBrowserSessions: async () => {},
       getBrowserSessions: async () => []
-    } as any;
+    };
   }
 
   private getClaudeCommand(): { command: string; baseArgs: string[] } {

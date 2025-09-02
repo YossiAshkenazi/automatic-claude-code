@@ -57,24 +57,31 @@ Dynamic: requires-python
 
 # Claude Code Python SDK
 
-A comprehensive Python SDK for Claude Code CLI interactions with full integration support for the automatic-claude-code system.
+[![PyPI version](https://badge.fury.io/py/claude-code-sdk.svg)](https://pypi.org/project/claude-code-sdk/)
+[![Python Support](https://img.shields.io/pypi/pyversions/claude-code-sdk.svg)](https://pypi.org/project/claude-code-sdk/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 🚀 Features
+A comprehensive Python SDK for Claude Code CLI interactions with full integration support for dual-agent architectures and real-time monitoring.
 
-- **Async/await support** with context managers
-- **Streaming and non-streaming** execution modes
-- **Comprehensive error handling** and classification
-- **Integration with dual-agent architecture**
-- **Real-time monitoring** and observability
-- **Cross-platform compatibility** (Windows, macOS, Linux)
-- **Type hints** for full IDE support
-- **Official SDK compatibility** for easy migration
+## 🚀 Key Features
+
+- **🔄 Async/await support** with automatic resource management
+- **📡 Streaming & non-streaming** execution modes  
+- **🛡️ Comprehensive error handling** with intelligent classification
+- **🤖 Dual-agent architecture** integration for complex workflows
+- **📊 Real-time monitoring** and observability dashboard
+- **🌐 Cross-platform compatibility** (Windows, macOS, Linux)
+- **📝 Full type hints** for enhanced IDE support and development experience
 
 ## 📦 Installation
 
-### Development Installation (Current)
+### From PyPI (Recommended)
 
-Since the package is not yet published to PyPI, install from source:
+```bash
+pip install claude-code-sdk
+```
+
+### Development Installation
 
 ```bash
 # Clone the repository
@@ -83,30 +90,34 @@ cd automatic-claude-code/python-sdk
 
 # Install in development mode
 pip install -e .
-
-# Or install dependencies manually
-pip install -r requirements.txt
 ```
 
 ### Prerequisites
 
 - **Python 3.8+** (tested with 3.8-3.13)
-- **Claude Code CLI** must be installed and accessible
-- **Valid Anthropic API key** or Claude CLI authentication setup
+- **Claude Code CLI** installed and authenticated
+- **Valid Anthropic API key** or Claude CLI session
+
+#### Install Claude CLI
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude auth  # Follow authentication prompts
+```
 
 ### Verify Installation
 
 ```bash
-# Check if Claude CLI is accessible
-python -c "from claude_code_sdk.utils import CLIDetector; import asyncio; print(asyncio.run(CLIDetector().detect_claude_cli()))"
+# Verify SDK installation
+python -c "from claude_code_sdk import __version__; print(f'SDK v{__version__} ready!')"
 
-# Test basic SDK functionality
-python -c "from claude_code_sdk import ClaudeCodeOptions; print('SDK installed successfully')"
+# Check Claude CLI accessibility  
+python -c "from claude_code_sdk.utils import CLIDetector; import asyncio; print('CLI found:', asyncio.run(CLIDetector().detect_claude_cli()))"
 ```
 
-## 🏃 Quick Start
+## ⚡ Quick Start
 
-### Simple Query
+### Simple Query Function
 
 ```python
 import asyncio
@@ -124,17 +135,17 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from claude_code_sdk import ClaudeCodeClient, ClaudeCodeOptions
+from claude_code_sdk import ClaudeSDKClient, ClaudeCodeOptions
 
 async def main():
     options = ClaudeCodeOptions(
-        model="opus",
+        model="sonnet",
         allowed_tools=["Read", "Write", "Edit"],
         max_turns=20,
         verbose=True
     )
     
-    async with ClaudeCodeClient(options) as client:
+    async with ClaudeSDKClient(options) as client:
         async for message in client.query("Implement a REST API with FastAPI"):
             print(f"[{message.type}] {message.content}")
 
@@ -192,12 +203,12 @@ asyncio.run(main())
 
 ### Core Classes
 
-#### `ClaudeCodeClient`
+#### `ClaudeSDKClient`
 
 The main async client class with context manager support.
 
 ```python
-async with ClaudeCodeClient(options) as client:
+async with ClaudeSDKClient(options) as client:
     async for message in client.query("prompt"):
         # Handle messages
 ```

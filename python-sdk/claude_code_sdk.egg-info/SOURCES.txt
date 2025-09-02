@@ -1,3 +1,4 @@
+.pre-commit-config.yaml
 CHANGELOG.md
 MANIFEST.in
 README.md
@@ -32,9 +33,17 @@ claude_code_sdk/interfaces/streaming.py
 claude_code_sdk/utils/__init__.py
 claude_code_sdk/utils/cli_detector.py
 claude_code_sdk/utils/process_manager.py
+docs/VERSION_STRATEGY.md
 docs/api.md
+docs/architecture.md
 docs/release_process.md
 docs/troubleshooting.md
 examples/advanced_streaming.py
 examples/basic_usage.py
+examples/error_handling_retry.py
 examples/integration_with_automatic_claude.py
+examples/multi_turn_conversation.py
+tests/__init__.py
+tests/conftest.py
+tests/integration/test_claude_cli_integration.py
+tests/unit/test_client.py

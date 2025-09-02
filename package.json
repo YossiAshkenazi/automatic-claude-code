@@ -75,6 +75,8 @@
     "strip-ansi": "^7.1.0"
   },
   "devDependencies": {
+    "@types/blessed": "^0.1.25",
+    "@types/cli-progress": "^3.11.6",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",

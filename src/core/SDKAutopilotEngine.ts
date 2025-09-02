@@ -16,9 +16,17 @@ export interface AutopilotOptions {
   model?: 'sonnet' | 'opus';
   sessionId?: string;
   
+  // Browser and SDK options
+  browser?: string;
+  refreshBrowserSession?: boolean;
+  headless?: boolean;
+  useSDKOnly?: boolean;
+  
   // Compatibility with existing code
   enableHooks?: boolean;
   enableMonitoring?: boolean;
+  qualityGate?: boolean;
+  agentRole?: 'single' | 'manager' | 'worker';
   
   // Dual-agent specific options
   dualAgent?: boolean;
@@ -534,30 +542,64 @@ Please continue working on this task. If you believe the task is complete, clear
   }
 
   /**
+   * Alias for runAutopilotLoop for CLI compatibility
+   */
+  async runAutopilot(task: string, options: AutopilotOptions = {}): Promise<AutopilotResult> {
+    return this.runAutopilotLoop(task, options);
+  }
+
+  /**
    * Get health metrics for monitoring
    */
-  getHealthMetrics(): {
+  async getHealthMetrics(): Promise<{
     isRunning: boolean;
     sessionId: string | undefined;
     lastActivity: Date;
     status: string;
-    browserHealth?: any;
-    totalExecutions?: number;
-    successRate?: number;
-    preferredMethod?: string;
-    sdkHealth?: any;
-    averageDuration?: number;
-  } {
+    browserHealth: {
+      available: boolean;
+      authStatus: string;
+      hasActiveSessions?: boolean;
+      authenticatedSessions?: number;
+      claudeTabsOpen?: number;
+      recommendedBrowser?: string;
+    };
+    totalExecutions: number;
+    successRate: number;
+    preferredMethod: string;
+    sdkHealth: {
+      available: boolean;
+      status: string;
+      sdkAvailable?: boolean;
+      circuitBreakerOpen?: boolean;
+    };
+    averageDuration: number;
+  }> {
+    // Get SDK status from executor
+    const sdkStatus = await this.sdkExecutor.getSDKStatus();
+    
     return {
       isRunning: this.isRunning,
       sessionId: this.currentSessionId,
       lastActivity: new Date(),
       status: this.isRunning ? 'active' : 'idle',
-      browserHealth: { available: true, authStatus: 'authenticated' },
-      totalExecutions: 1,
-      successRate: 85,
+      browserHealth: {
+        available: Boolean(sdkStatus.browserAuth),
+        authStatus: sdkStatus.browserAuth ? 'authenticated' : 'unauthenticated',
+        hasActiveSessions: Boolean(sdkStatus.browserAuth),
+        authenticatedSessions: sdkStatus.browserAuth ? 1 : 0,
+        claudeTabsOpen: sdkStatus.browserAuth ? 1 : 0,
+        recommendedBrowser: 'chrome'
+      },
+      totalExecutions: sdkStatus.executionStats.attempts,
+      successRate: sdkStatus.executionStats.successRate,
       preferredMethod: 'SDK',
-      sdkHealth: { available: this.sdkExecutor.isAvailable(), status: 'ready' },
+      sdkHealth: {
+        available: sdkStatus.sdkAvailable,
+        status: sdkStatus.sdkAvailable ? 'ready' : 'unavailable',
+        sdkAvailable: sdkStatus.sdkAvailable,
+        circuitBreakerOpen: sdkStatus.circuitBreakerOpen
+      },
       averageDuration: 30000
     };
   }

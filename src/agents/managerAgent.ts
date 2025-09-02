@@ -84,11 +84,11 @@ export class ManagerAgent extends EventEmitter {
     
     // Initialize PTY session if enabled
     if (config.usePTY && this.claudeExecutor) {
-      this.ptySessionId = await this.claudeExecutor.getOrCreatePTYSession(
-        'manager',
-        config.workDir,
-        this.currentSession
+      const ptySession = await this.claudeExecutor.getOrCreatePTYSession(
+        this.currentSession || 'manager',
+        config.workDir
       );
+      this.ptySessionId = ptySession.sessionId || this.currentSession || 'manager';
       
       this.logger.info('Manager agent initialized with PTY', {
         model: config.model,

@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@anthropic-ai/claude-code':
         specifier: ^1.0.98
-        version: 1.0.98
+        version: 1.0.100
       '@stoneagebr/windows-credman':
         specifier: ^1.1.1
         version: 1.1.1
@@ -41,9 +41,6 @@ importers:
       keytar:
         specifier: ^7.9.0
         version: 7.9.0
-      node-pty:
-        specifier: ^1.0.0
-        version: 1.0.0
       node-windows:
         specifier: ^1.0.0-beta.8
         version: 1.0.0-beta.8
@@ -53,19 +50,19 @@ importers:
       strip-ansi:
         specifier: ^7.1.0
         version: 7.1.0
-      ws:
-        specifier: ^8.18.0
-        version: 8.18.3
     devDependencies:
+      '@types/blessed':
+        specifier: ^0.1.25
+        version: 0.1.25
+      '@types/cli-progress':
+        specifier: ^3.11.6
+        version: 3.11.6
       '@types/jest':
         specifier: ^29.5.12
         version: 29.5.14
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.11
-      '@types/ws':
-        specifier: ^8.5.12
-        version: 8.18.1
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.0.0
         version: 8.41.0(@typescript-eslint/parser@8.41.0(eslint@9.34.0)(typescript@5.9.2))(eslint@9.34.0)(typescript@5.9.2)
@@ -97,8 +94,8 @@ packages:
     resolution: {integrity: sha512-30iZtAPgz+LTIYoeivqYo853f02jBYSd5uGnGpkFV0M3xOt9aN73erkgYAmZU43x4VfqcnLxW9Kpg3R5LC4YYw==}
     engines: {node: '>=6.0.0'}
 
-  '@anthropic-ai/claude-code@1.0.98':
-    resolution: {integrity: sha512-IV193Eh8STdRcN3VkNcojPIlLnQPch+doBVrDSEV1rPPePISy7pzHFZL0Eg7zIPj9gHkHV1D2s0RMMwzVXJThA==}
+  '@anthropic-ai/claude-code@1.0.100':
+    resolution: {integrity: sha512-b4FRo3t46kPawzE8pT7nxtDc9NdYPTFaPoGGns/ZNqsqRu2jKMiSjjt5DiFvfaBZA8Tnt2qXbv4nd1vqR9Ru8Q==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -678,6 +675,12 @@ packages:
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
+  '@types/blessed@0.1.25':
+    resolution: {integrity: sha512-kQsjBgtsbJLmG6CJA+Z6Nujj+tq1fcSE3UIowbDvzQI4wWmoTV7djUDhSo5lDjgwpIN0oRvks0SA5mMdKE5eFg==}
+
+  '@types/cli-progress@3.11.6':
+    resolution: {integrity: sha512-cE3+jb9WRlu+uOSAugewNpITJDt1VF8dHOopPO4IABFc3SXYL5WE/+PTz/FCdZRRfIujiWW3n3aMbv1eIGVRWA==}
+
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
@@ -704,9 +707,6 @@ packages:
 
   '@types/stack-utils@2.0.3':
     resolution: {integrity: sha512-9aEbYZ3TbYMznPdcdr3SmIrLXwC/AKZXQeCf9Pgao5CKb8CyHuEX5jzWPTkvregvhRJHcpRO6BFoGW9ycaOkYw==}
-
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
@@ -1783,9 +1783,6 @@ packages:
   node-int64@0.4.0:
     resolution: {integrity: sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==}
 
-  node-pty@1.0.0:
-    resolution: {integrity: sha512-wtBMWWS7dFZm/VgqElrTvtfMq4GzJ6+edFI0Y0zyzygUSZMgZdraDUMUhCIvkjhJjme15qWmbyJbtAx4ot4uZA==}
-
   node-releases@2.0.19:
     resolution: {integrity: sha512-xxOWJsBKtzAq7DY0J+DTzuz58K8e7sJbdgwkbMWQe8UYB6ekmsQ45q0M/tJDsGaZmbC+l7n57UV8Hl5tHxO9uw==}
 
@@ -2297,18 +2294,6 @@ packages:
     resolution: {integrity: sha512-7KxauUdBmSdWnmpaGFg+ppNjKF8uNLry8LyzjauQDOVONfFLNKrKvQOxZ/VuTIcS/gge/YNahf5RIIQWTSarlg==}
     engines: {node: ^12.13.0 || ^14.15.0 || >=16.0.0}
 
-  ws@8.18.3:
-    resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: '>=5.0.2'
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
   x256@0.0.2:
     resolution: {integrity: sha512-ZsIH+sheoF8YG9YG+QKEEIdtqpHRA9FYuD7MqhfyB1kayXU43RUNBFSxBEnF8ywSUxdg+8no4+bPr5qLbyxKgA==}
     engines: {node: '>=0.4.0'}
@@ -2358,7 +2343,7 @@ snapshots:
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.30
 
-  '@anthropic-ai/claude-code@1.0.98':
+  '@anthropic-ai/claude-code@1.0.100':
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5
@@ -2983,6 +2968,14 @@ snapshots:
     dependencies:
       '@babel/types': 7.28.2
 
+  '@types/blessed@0.1.25':
+    dependencies:
+      '@types/node': 20.19.11
+
+  '@types/cli-progress@3.11.6':
+    dependencies:
+      '@types/node': 20.19.11
+
   '@types/estree@1.0.8': {}
 
   '@types/graceful-fs@4.1.9':
@@ -3011,10 +3004,6 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/stack-utils@2.0.3': {}
-
-  '@types/ws@8.18.1':
-    dependencies:
-      '@types/node': 20.19.11
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -4327,10 +4316,6 @@ snapshots:
 
   node-int64@0.4.0: {}
 
-  node-pty@1.0.0:
-    dependencies:
-      nan: 2.23.0
-
   node-releases@2.0.19: {}
 
   node-windows@1.0.0-beta.8:
@@ -4829,8 +4814,6 @@ snapshots:
     dependencies:
       imurmurhash: 0.1.4
       signal-exit: 3.0.7
-
-  ws@8.18.3: {}
 
   x256@0.0.2: {}
 

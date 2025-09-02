@@ -162,19 +162,20 @@ export class AgentCoordinator extends EventEmitter {
 
     // Create PTY sessions for agents if enabled
     if (options.usePTY) {
-      await this.claudeExecutor.getOrCreatePTYSession(
-        'manager',
-        options.workDir,
-        `manager-${this.executionContext.sessionId}`
+      const managerSession = await this.claudeExecutor.getOrCreatePTYSession(
+        `manager-${this.executionContext.sessionId}`,
+        options.workDir
       );
       
-      await this.claudeExecutor.getOrCreatePTYSession(
-        'worker',
-        options.workDir,
-        `worker-${this.executionContext.sessionId}`
+      const workerSession = await this.claudeExecutor.getOrCreatePTYSession(
+        `worker-${this.executionContext.sessionId}`,
+        options.workDir
       );
       
-      this.logger.info('PTY sessions created for both agents');
+      this.logger.info('PTY sessions created for both agents', { 
+        managerSessionId: managerSession.sessionId,
+        workerSessionId: workerSession.sessionId
+      });
     }
 
     // Initialize manager agent

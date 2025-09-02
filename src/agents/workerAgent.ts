@@ -88,11 +88,11 @@ export class WorkerAgent extends EventEmitter {
     
     // Initialize PTY session if enabled
     if (config.usePTY && this.claudeExecutor) {
-      this.ptySessionId = await this.claudeExecutor.getOrCreatePTYSession(
-        'worker',
-        config.workDir,
-        this.currentSession
+      const ptySession = await this.claudeExecutor.getOrCreatePTYSession(
+        this.currentSession || 'worker',
+        config.workDir
       );
+      this.ptySessionId = ptySession.sessionId || this.currentSession || 'worker';
       
       this.logger.info('Worker agent initialized with PTY', {
         model: config.model,

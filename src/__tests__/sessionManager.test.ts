@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { SessionManager, EnhancedSessionManager, SessionState, SessionLimitError } from '../sessionManager';
-import { ACCPTYManager } from '../services/ptyController';
+import { SDKClaudeExecutor } from '../services/sdkClaudeExecutor';
 import { Logger } from '../logger';
 import { createTempDir, cleanupDir } from './setup';
 
@@ -182,16 +182,16 @@ describe('EnhancedSessionManager', () => {
   let enhancedManager: EnhancedSessionManager;
   let tempDir: string;
   let logger: Logger;
-  let ptyManager: ACCPTYManager;
+  let sdkExecutor: SDKClaudeExecutor;
 
   beforeEach(() => {
     tempDir = createTempDir();
     logger = new Logger();
-    ptyManager = new ACCPTYManager(logger);
+    sdkExecutor = new SDKClaudeExecutor(logger);
     enhancedManager = new EnhancedSessionManager(
       path.join(tempDir, 'sessions'), 
       logger,
-      ptyManager
+      sdkExecutor
     );
   });
 

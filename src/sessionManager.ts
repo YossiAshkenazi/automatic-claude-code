@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { ParsedOutput } from './outputParser';
 import { Logger } from './logger';
-import { ACCPTYManager } from './services/ptyController';
+import { SDKClaudeExecutor } from './services/sdkClaudeExecutor';
 
 interface SessionIteration {
   iteration: number;
@@ -521,11 +521,11 @@ export class SessionManager {
 }
 
 /**
- * Enhanced session manager with PTY integration and state tracking
+ * Enhanced session manager with SDK integration and state tracking
  */
 export class EnhancedSessionManager extends SessionManager {
   private logger: Logger;
-  private ptyManager: ACCPTYManager;
+  private sdkExecutor: SDKClaudeExecutor;
   private sessionStates: Map<string, SessionState> = new Map();
   private maxConcurrentSessions: number = 28;
   private cleanupInterval?: NodeJS.Timeout;
@@ -534,11 +534,11 @@ export class EnhancedSessionManager extends SessionManager {
   constructor(
     baseDir: string = '.claude-sessions',
     logger?: Logger,
-    ptyManager?: ACCPTYManager
+    sdkExecutor?: SDKClaudeExecutor
   ) {
     super(baseDir);
     this.logger = logger || new Logger();
-    this.ptyManager = ptyManager || new ACCPTYManager(this.logger);
+    this.sdkExecutor = sdkExecutor || new SDKClaudeExecutor(this.logger);
     
     // Start automatic cleanup every hour
     this.cleanupInterval = setInterval(() => {
@@ -598,13 +598,17 @@ export class EnhancedSessionManager extends SessionManager {
     // Create log directory
     await fs.mkdir(paths.logDir, { recursive: true });
     
-    // Initialize PTY controller (optional, may fail gracefully)
+    // Initialize SDK session (replaces PTY)
     try {
-      await this.ptyManager.createSession(workDir, sessionId);
-      sessionState.processInfo.hasActiveController = true;
-      sessionState.processInfo.pid = process.pid; // Approximate
+      // Check if SDK is available for this session
+      const sdkAvailable = this.sdkExecutor.isAvailable();
+      sessionState.processInfo.hasActiveController = sdkAvailable;
+      sessionState.processInfo.pid = process.pid;
+      if (!sdkAvailable) {
+        sessionState.processInfo.error = 'SDK not available';
+      }
     } catch (error) {
-      this.logger.debug(`Failed to create PTY session ${sessionId}: ${error}`);
+      this.logger.debug(`Failed to initialize SDK session ${sessionId}: ${error}`);
       sessionState.processInfo.error = error instanceof Error ? error.message : String(error);
     }
     
@@ -668,12 +672,16 @@ export class EnhancedSessionManager extends SessionManager {
           });
         }
         
-        // Reinitialize PTY if needed
+        // Check SDK availability if needed
         if (!state.processInfo.hasActiveController) {
           try {
-            await this.ptyManager.createSession(session.workDir, sessionId);
-            state.processInfo.hasActiveController = true;
-            delete state.processInfo.error;
+            const sdkAvailable = this.sdkExecutor.isAvailable();
+            state.processInfo.hasActiveController = sdkAvailable;
+            if (!sdkAvailable) {
+              state.processInfo.error = 'SDK not available';
+            } else {
+              delete state.processInfo.error;
+            }
           } catch (error) {
             state.processInfo.error = error instanceof Error ? error.message : String(error);
           }
@@ -701,8 +709,8 @@ export class EnhancedSessionManager extends SessionManager {
         state.status = status;
         state.processInfo.lastActivity = new Date();
         
-        // Close PTY controller
-        this.ptyManager.closeSession(sessionId);
+        // Clear SDK session
+        this.sdkExecutor.clearSession(sessionId);
         state.processInfo.hasActiveController = false;
       }
       
@@ -716,9 +724,9 @@ export class EnhancedSessionManager extends SessionManager {
   getSessionState(sessionId: string): SessionState | undefined {
     const state = this.sessionStates.get(sessionId);
     if (state) {
-      // Update controller status
-      const controller = this.ptyManager.getController(sessionId);
-      state.processInfo.hasActiveController = !!controller;
+      // Update SDK session status
+      const isActive = this.sdkExecutor.isSessionActive(sessionId);
+      state.processInfo.hasActiveController = isActive;
     }
     return state;
   }
@@ -801,25 +809,24 @@ export class EnhancedSessionManager extends SessionManager {
   }
 
   /**
-   * Clean up orphaned PTY processes
+   * Clean up orphaned SDK sessions
    */
   async cleanupOrphanedProcesses(): Promise<void> {
-    const activeControllers = new Set(
+    const activeSessions = new Set(
       Array.from(this.sessionStates.keys())
         .filter(id => this.sessionStates.get(id)?.status === 'running')
     );
     
-    // Get all PTY controllers
-    const allControllers = (this.ptyManager as any).controllers as Map<string, any>;
+    // Get all SDK session IDs
+    const allSdkSessions = this.sdkExecutor.getActiveSessionIds();
     
-    for (const [controllerId, controller] of allControllers) {
-      if (!activeControllers.has(controllerId)) {
-        this.logger.info(`Cleaning up orphaned PTY process: ${controllerId}`);
+    for (const sessionId of allSdkSessions) {
+      if (!activeSessions.has(sessionId)) {
+        this.logger.info(`Cleaning up orphaned SDK session: ${sessionId}`);
         try {
-          controller.close();
-          allControllers.delete(controllerId);
+          this.sdkExecutor.clearSession(sessionId);
         } catch (error) {
-          this.logger.error(`Failed to close orphaned controller ${controllerId}: ${String(error)}`);
+          this.logger.error(`Failed to clear orphaned session ${sessionId}: ${String(error)}`);
         }
       }
     }
@@ -852,11 +859,11 @@ export class EnhancedSessionManager extends SessionManager {
             // Mark as potentially stale
             this.logger.debug(`Session ${sessionId} inactive for ${Math.round(timeSinceActivity / 60000)} minutes`);
             
-            // Check if PTY controller is still responsive
-            const controller = this.ptyManager.getController(sessionId);
-            if (!controller) {
+            // Check if SDK session is still active
+            const isActive = this.sdkExecutor.isSessionActive(sessionId);
+            if (!isActive) {
               state.processInfo.hasActiveController = false;
-              state.processInfo.error = 'Controller lost';
+              state.processInfo.error = 'SDK session lost';
             }
           }
         }
@@ -889,8 +896,8 @@ export class EnhancedSessionManager extends SessionManager {
       this.logger.error('Failed to complete session during shutdown:', String(error));
     }
     
-    // Close all PTY controllers
-    this.ptyManager.closeAllSessions();
+    // Close all SDK sessions
+    await this.sdkExecutor.shutdown();
     
     // Final cleanup
     await this.cleanupOrphanedProcesses();
@@ -964,8 +971,8 @@ export class EnhancedSessionManager extends SessionManager {
       throw new Error(`Session ${sessionId} not found`);
     }
     
-    // Close PTY controller forcefully
-    this.ptyManager.closeSession(sessionId);
+    // Close SDK session
+    this.sdkExecutor.clearSession(sessionId);
     
     // Update state
     state.status = 'failed';

@@ -230,51 +230,99 @@ class ProcessError(ClaudeCodeError):
             self.context['command'] = command
 
 # Error classification helpers
-def classify_error(error_text: str, stderr: str = "", exit_code: Optional[int] = None) -> ClaudeCodeError:
+def classify_error(error_text, stderr: str = "", exit_code: Optional[int] = None) -> dict:
     """
     Classify a generic error into the appropriate exception type
     
     Args:
-        error_text: Primary error message
+        error_text: Primary error message (str or Exception object)
         stderr: Standard error output
         exit_code: Process exit code
     
     Returns:
-        Appropriate ClaudeCodeError subclass instance
+        Dictionary with error classification information
     """
-    error_lower = error_text.lower()
+    # Handle Exception objects
+    if isinstance(error_text, Exception):
+        error_str = str(error_text)
+        error_type = type(error_text).__name__
+    else:
+        error_str = str(error_text)
+        error_type = "GenericError"
+    
+    error_lower = error_str.lower()
     stderr_lower = stderr.lower()
     
     # Authentication errors
     if any(keyword in error_lower for keyword in ['auth', 'unauthorized', 'login', 'credential']):
-        return ClaudeAuthError(error_text, context={'stderr': stderr, 'exit_code': exit_code})
+        return {
+            'error_type': 'Authentication Error',
+            'recoverable': False,
+            'suggested_action': 'Check API key or login credentials'
+        }
     
     # Rate limiting
     if any(keyword in error_lower for keyword in ['rate limit', 'too many requests', 'throttle']):
-        return RateLimitError(error_text, context={'stderr': stderr, 'exit_code': exit_code})
+        return {
+            'error_type': 'Rate Limit Error',
+            'recoverable': True,
+            'suggested_action': 'Wait and retry with exponential backoff'
+        }
     
     # Quota issues
     if any(keyword in error_lower for keyword in ['quota', 'usage limit', 'billing']):
-        return QuotaExceededError(error_text, context={'stderr': stderr, 'exit_code': exit_code})
+        return {
+            'error_type': 'Quota Exceeded',
+            'recoverable': False,
+            'suggested_action': 'Check usage limits and billing status'
+        }
+    
+    # Timeout errors
+    if any(keyword in error_lower for keyword in ['timeout', 'timed out']) or error_type == 'ClaudeTimeoutError':
+        return {
+            'error_type': 'Timeout Error',
+            'recoverable': True,
+            'suggested_action': 'Retry with increased timeout or simpler request'
+        }
     
     # Network issues
-    if any(keyword in error_lower for keyword in ['network', 'connection', 'timeout', 'dns']):
-        return NetworkError(error_text, context={'stderr': stderr, 'exit_code': exit_code})
+    if any(keyword in error_lower for keyword in ['network', 'connection', 'dns']):
+        return {
+            'error_type': 'Network Error',
+            'recoverable': True,
+            'suggested_action': 'Check network connectivity and retry'
+        }
     
     # Model issues
     if any(keyword in error_lower for keyword in ['model', 'invalid model', 'unsupported model']):
-        return InvalidModelError(error_text, context={'stderr': stderr, 'exit_code': exit_code})
+        return {
+            'error_type': 'Invalid Model Error',
+            'recoverable': False,
+            'suggested_action': 'Use a valid model name (e.g., claude-3-opus)'
+        }
     
     # CLI not found
     if any(keyword in error_lower for keyword in ['not found', 'command not found', 'no such file']):
-        return ClaudeNotFoundError(error_text, context={'stderr': stderr, 'exit_code': exit_code})
+        return {
+            'error_type': 'Claude CLI Not Found',
+            'recoverable': False,
+            'suggested_action': 'Install Claude CLI: npm install -g @anthropic-ai/claude-code'
+        }
     
     # Process errors
     if exit_code is not None and exit_code != 0:
-        return ProcessError(error_text, exit_code=exit_code, stderr=stderr)
+        return {
+            'error_type': 'Process Error',
+            'recoverable': False,
+            'suggested_action': f'Process exited with code {exit_code}. Check logs for details.'
+        }
     
     # Default to generic error
-    return ClaudeCodeError(error_text, context={'stderr': stderr, 'exit_code': exit_code})
+    return {
+        'error_type': error_type,
+        'recoverable': False,
+        'suggested_action': 'Check error details and retry if appropriate'
+    }
 
 def is_recoverable_error(error: Exception) -> bool:
     """Check if an error is potentially recoverable with retry"""

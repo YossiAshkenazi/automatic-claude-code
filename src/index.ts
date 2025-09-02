@@ -650,7 +650,7 @@ class AutomaticClaudeCode {
     
     console.log(chalk.cyan(`Iterations: ${result.iterations}`));
     console.log(chalk.cyan(`Duration: ${(result.totalDuration / 1000).toFixed(2)}s`));
-    console.log(chalk.cyan(`Method: ${result.executionMethod?.toUpperCase() || 'SDK'}`));
+    console.log(chalk.cyan(`Method: ${result.executionMethod ? result.executionMethod.toUpperCase() : 'SDK'}`));
     console.log(chalk.cyan(`Success Rate: ${result.successRate || 0}%`));
     
     if (result.browserUsed) {
@@ -661,7 +661,7 @@ class AutomaticClaudeCode {
       console.log(chalk.cyan(`Model: ${result.modelUsed}`));
     }
     
-    if (result.totalTokens && result.totalTokens > 0) {
+    if (result.totalTokens != null && result.totalTokens > 0) {
       console.log(chalk.cyan(`Tokens Used: ${result.totalTokens}`));
     }
     

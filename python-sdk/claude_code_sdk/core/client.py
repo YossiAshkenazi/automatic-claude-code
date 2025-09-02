@@ -395,3 +395,30 @@ class ClaudeCodeClient:
     def claude_cli_path(self) -> Optional[str]:
         """Get the path to Claude CLI being used"""
         return self._claude_cli_path
+    
+    def execute(self, prompt: str, **kwargs) -> str:
+        """
+        Synchronous execute method for compatibility
+        
+        Args:
+            prompt: The prompt to send to Claude
+            **kwargs: Additional options
+        
+        Returns:
+            str: Final result from Claude
+        """
+        import asyncio
+        
+        async def _async_execute():
+            if not self._is_ready:
+                await self._initialize()
+            
+            result = ""
+            async for message in self.query(prompt, **kwargs):
+                if hasattr(message, 'result') and message.result:
+                    result = message.result
+                elif hasattr(message, 'content') and message.content:
+                    result = message.content
+            return result
+        
+        return asyncio.run(_async_execute())

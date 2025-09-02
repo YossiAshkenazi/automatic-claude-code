@@ -11,6 +11,11 @@ import { SDKClaudeExecutor } from '../services/sdkClaudeExecutor';
 import { ContextDetector, ExecutionContext } from './ContextDetector';
 import { EnhancedSessionDetector, SessionDetectionOptions } from './EnhancedSessionDetector';
 import { MockSDKLayer } from './MockSDKLayer';
+import ProcessHandleTracker, { 
+  HandleTrackingOptions, 
+  ProcessTerminationOptions, 
+  HandleCleanupResult 
+} from './ProcessHandleTracker';
 
 export interface TestSDKOptions {
   mockLevel: 'none' | 'session_only' | 'full_mock';
@@ -22,6 +27,10 @@ export interface TestSDKOptions {
   logLevel?: 'debug' | 'info' | 'warning' | 'error';
   sessionDetectionOptions?: SessionDetectionOptions;
   mockResponses?: Map<string, any>;
+  // Process handle tracking options
+  enableHandleTracking?: boolean;
+  handleTrackingOptions?: HandleTrackingOptions;
+  terminationOptions?: ProcessTerminationOptions;
 }
 
 export interface TestSDKInstance {
@@ -29,6 +38,10 @@ export interface TestSDKInstance {
   sessionId: string;
   cleanup: () => Promise<void>;
   getMockLayer?: () => MockSDKLayer;
+  // Process handle management
+  handleTracker?: ProcessHandleTracker;
+  forceTermination?: (options?: ProcessTerminationOptions) => Promise<void>;
+  getHandleStatistics?: () => any;
 }
 
 /**
@@ -37,6 +50,7 @@ export interface TestSDKInstance {
 export class TestSDKFactory {
   private static instances: Map<string, TestSDKInstance> = new Map();
   private static instanceCounter = 0;
+  private static globalHandleTracker?: ProcessHandleTracker;
 
   /**
    * Create an isolated SDK instance for testing
@@ -49,6 +63,7 @@ export class TestSDKFactory {
       processIsolation: true,
       enableLogging: false,
       logLevel: 'error',
+      enableHandleTracking: true, // Enable handle tracking by default for tests
       ...overrides
     };
 
@@ -65,6 +80,7 @@ export class TestSDKFactory {
       authentication: 'mock',
       processIsolation: true,
       enableLogging: false,
+      enableHandleTracking: true, // Enable handle tracking for mocked tests
       mockResponses
     };
 
@@ -83,6 +99,7 @@ export class TestSDKFactory {
       enableLogging: true,
       logLevel: 'info',
       timeoutMs: 30000, // 30 second timeout for real operations
+      enableHandleTracking: true, // Critical for integration tests to prevent hanging
       ...overrides
     };
 
@@ -102,6 +119,12 @@ export class TestSDKFactory {
     // Create logger
     const logger = this.createTestLogger(options, instanceId);
     
+    // Initialize handle tracking if enabled
+    let handleTracker: ProcessHandleTracker | undefined;
+    if (options.enableHandleTracking) {
+      handleTracker = this.initializeHandleTracking(options, logger, instanceId);
+    }
+    
     // Create SDK with test configuration
     const sdk = new TestSDKClaudeExecutor(options, context, logger);
     
@@ -111,16 +134,34 @@ export class TestSDKFactory {
       mockLayer = this.configureMockLayer(sdk, options);
     }
 
-    // Create cleanup function
+    // Create enhanced cleanup function with handle tracking
     const cleanup = async () => {
       await this.cleanupInstance(instanceId);
+    };
+
+    // Create force termination function
+    const forceTermination = async (terminationOptions?: ProcessTerminationOptions) => {
+      if (handleTracker) {
+        await handleTracker.enforceProcessTermination({
+          ...options.terminationOptions,
+          ...terminationOptions
+        });
+      }
+    };
+
+    // Create handle statistics function
+    const getHandleStatistics = () => {
+      return handleTracker ? handleTracker.getStatistics() : null;
     };
 
     const instance: TestSDKInstance = {
       sdk,
       sessionId: instanceId,
       cleanup,
-      getMockLayer: mockLayer ? () => mockLayer! : undefined
+      getMockLayer: mockLayer ? () => mockLayer! : undefined,
+      handleTracker,
+      forceTermination,
+      getHandleStatistics
     };
 
     // Register instance for tracking
@@ -190,6 +231,46 @@ export class TestSDKFactory {
   }
 
   /**
+   * Initialize handle tracking for an instance
+   */
+  private static initializeHandleTracking(
+    options: TestSDKOptions, 
+    logger: Logger | undefined, 
+    instanceId: string
+  ): ProcessHandleTracker {
+    // Use global tracker or create instance-specific tracker
+    const effectiveLogger = logger || new Logger(`handle-tracker-${instanceId}`, { 
+      essentialMode: true, 
+      enableFileLogging: false 
+    });
+
+    const tracker = ProcessHandleTracker.getInstance(effectiveLogger, {
+      enableAutomaticRegistration: true,
+      trackPromises: true,
+      trackStreams: true,
+      trackChildProcesses: true,
+      maxHandleAge: 60000, // 1 minute for tests
+      enableLeakDetection: true,
+      handleLimit: 500, // Lower limit for tests
+      ...options.handleTrackingOptions
+    });
+
+    // Start tracking for this test instance
+    tracker.startTracking();
+
+    // Register a custom cleanup handle for this test instance
+    tracker.registerHandle('custom', {
+      instanceId,
+      cleanup: async () => {
+        effectiveLogger?.debug(`Cleaning up test instance ${instanceId}`);
+      }
+    }, `test-instance-${instanceId}`, { testInstance: true });
+
+    effectiveLogger?.debug('Handle tracking initialized for test instance', { instanceId });
+    return tracker;
+  }
+
+  /**
    * Generate unique instance ID
    */
   private static generateInstanceId(): string {
@@ -209,9 +290,38 @@ export class TestSDKFactory {
     }
 
     try {
+      // Cleanup handle tracker first (most critical for preventing hangs)
+      if (instance.handleTracker) {
+        try {
+          const cleanupResult = await instance.handleTracker.forceCleanupAll({
+            maxWaitTime: 3000,
+            forceKillAfter: 2000,
+            enableSigkillFallback: false, // Don't kill process during test cleanup
+            logCleanupProgress: false
+          });
+
+          if (cleanupResult.failedHandles > 0) {
+            console.warn(`Handle cleanup for instance ${instanceId} had ${cleanupResult.failedHandles} failures`);
+          }
+
+          // Stop tracking
+          instance.handleTracker.stopTracking();
+        } catch (error: any) {
+          console.warn(`Handle tracker cleanup failed for instance ${instanceId}:`, error.message);
+        }
+      }
+
       // Cleanup SDK resources
       if (instance.sdk.cleanup) {
         await instance.sdk.cleanup();
+      }
+
+      // Cleanup mock layer
+      if (instance.getMockLayer) {
+        const mockLayer = instance.getMockLayer();
+        if (mockLayer && mockLayer.clearHistory) {
+          mockLayer.clearHistory();
+        }
       }
 
       // Clear test environment variables for this instance
@@ -223,8 +333,8 @@ export class TestSDKFactory {
       // Remove from tracking
       this.instances.delete(instanceId);
 
-    } catch (error) {
-      console.warn(`Failed to cleanup test SDK instance ${instanceId}:`, error);
+    } catch (error: any) {
+      console.warn(`Failed to cleanup test SDK instance ${instanceId}:`, error.message);
     }
   }
 
@@ -238,6 +348,23 @@ export class TestSDKFactory {
 
     await Promise.all(cleanupPromises);
     this.instances.clear();
+
+    // Cleanup global handle tracker
+    if (this.globalHandleTracker) {
+      try {
+        await this.globalHandleTracker.forceCleanupAll({
+          maxWaitTime: 5000,
+          forceKillAfter: 3000,
+          enableSigkillFallback: false, // Don't kill during test cleanup
+          logCleanupProgress: true
+        });
+        this.globalHandleTracker.stopTracking();
+        ProcessHandleTracker.destroy();
+        this.globalHandleTracker = undefined;
+      } catch (error: any) {
+        console.warn('Global handle tracker cleanup failed:', error.message);
+      }
+    }
 
     // Clear global test environment
     delete process.env.ACC_TEST_MODE;
@@ -258,6 +385,95 @@ export class TestSDKFactory {
    */
   static forceRemoveInstance(instanceId: string): void {
     this.instances.delete(instanceId);
+  }
+
+  /**
+   * Force terminate all processes and cleanup handles (emergency use)
+   */
+  static async emergencyShutdown(): Promise<void> {
+    console.warn('Emergency shutdown initiated - forcing cleanup of all instances');
+    
+    // Force cleanup all instances without waiting
+    for (const [instanceId, instance] of this.instances) {
+      try {
+        if (instance.handleTracker) {
+          await instance.handleTracker.enforceProcessTermination({
+            maxWaitTime: 2000,
+            forceKillAfter: 1000,
+            enableSigkillFallback: true,
+            logCleanupProgress: false
+          });
+        }
+      } catch (error: any) {
+        console.error(`Emergency cleanup failed for instance ${instanceId}:`, error.message);
+      }
+    }
+
+    this.instances.clear();
+    
+    // Destroy global tracker
+    if (this.globalHandleTracker) {
+      ProcessHandleTracker.destroy();
+      this.globalHandleTracker = undefined;
+    }
+  }
+
+  /**
+   * Get comprehensive handle statistics across all instances
+   */
+  static getGlobalHandleStatistics(): any {
+    const stats = {
+      totalInstances: this.instances.size,
+      instanceStats: new Map(),
+      globalTrackerStats: null
+    };
+
+    // Collect stats from each instance
+    for (const [instanceId, instance] of this.instances) {
+      if (instance.getHandleStatistics) {
+        stats.instanceStats.set(instanceId, instance.getHandleStatistics());
+      }
+    }
+
+    // Global tracker stats
+    if (this.globalHandleTracker) {
+      stats.globalTrackerStats = this.globalHandleTracker.getStatistics();
+    }
+
+    return stats;
+  }
+
+  /**
+   * Check for leaked handles across all instances
+   */
+  static getLeakedHandles(): any[] {
+    const leakedHandles: any[] = [];
+
+    for (const [instanceId, instance] of this.instances) {
+      if (instance.handleTracker) {
+        const leaked = instance.handleTracker.getLeakedHandles();
+        leakedHandles.push(...leaked.map(handle => ({ 
+          ...handle, 
+          instanceId 
+        })));
+      }
+    }
+
+    return leakedHandles;
+  }
+
+  /**
+   * Enable process termination timeout for tests (safety net)
+   */
+  static enableTestTerminationTimeout(timeoutMs: number = 30000): void {
+    setTimeout(() => {
+      console.error('Test termination timeout reached - forcing emergency shutdown');
+      this.emergencyShutdown().then(() => {
+        process.exit(1);
+      }).catch(() => {
+        process.exit(1);
+      });
+    }, timeoutMs);
   }
 }
 

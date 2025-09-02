@@ -23,6 +23,14 @@ export {
   SDKCall, 
   MockResponse 
 } from './MockSDKLayer';
+export { 
+  default as ProcessHandleTracker, 
+  TrackedHandle,
+  HandleType,
+  ProcessTerminationOptions,
+  HandleCleanupResult,
+  HandleTrackingOptions
+} from './ProcessHandleTracker';
 
 // Note: Convenience functions available as TestSDKFactory.createIsolated, etc.
 // to avoid circular dependency issues

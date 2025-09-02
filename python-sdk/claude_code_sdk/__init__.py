@@ -182,6 +182,8 @@ __all__ = [
     'claude_code_query',
     'claude_code_stream',
     'claude_code_conversation',
+    'quick_query',
+    'quick_check',
     
     # Streaming support
     'StreamingHandler',

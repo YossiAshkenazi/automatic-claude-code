@@ -1,0 +1,114 @@
+# Claude Code Python SDK - Analytics Configuration
+# Privacy-first metrics tracking for the claude-code-sdk
+
+analytics:
+  enabled: true
+  opt_in_required: true
+  data_retention_days: 90
+  anonymization: true
+  
+  # PyPI Download Tracking
+  pypi_metrics:
+    enabled: true
+    endpoint: "https://pypistats.org/api/packages/claude-code-sdk/recent"
+    collection_interval: "1h"
+    metrics:
+      - daily_downloads
+      - monthly_downloads
+      - version_breakdown
+      - country_distribution
+      - python_version_stats
+    
+  # GitHub Repository Insights
+  github_metrics:
+    enabled: true
+    repository: "yossiashkenazi/automatic-claude-code"
+    api_endpoint: "https://api.github.com"
+    collection_interval: "6h"
+    metrics:
+      - stars
+      - forks
+      - issues
+      - pull_requests
+      - releases
+      - traffic_views
+      - traffic_clones
+      - referrers
+
+  # Usage Analytics (Opt-in)
+  usage_analytics:
+    enabled: true
+    opt_in_required: true
+    anonymous_id_generation: true
+    data_collection:
+      - sdk_version
+      - python_version
+      - platform_info
+      - feature_usage
+      - error_frequency
+      - performance_metrics
+    exclude_pii:
+      - user_paths
+      - file_contents
+      - environment_variables
+      - network_info
+
+  # Error Reporting (Opt-in)
+  error_reporting:
+    enabled: true
+    opt_in_required: true
+    service: "sentry"
+    dsn: "${SENTRY_DSN}"
+    environment: "${DEPLOY_ENV:-development}"
+    sample_rate: 0.1
+    attach_stacktrace: true
+    send_default_pii: false
+    before_send_filters:
+      - sanitize_paths
+      - remove_credentials
+      - anonymize_user_data
+
+  # Privacy Controls
+  privacy:
+    anonymize_user_id: true
+    hash_machine_id: true
+    exclude_system_info: false
+    gdpr_compliant: true
+    data_export_enabled: true
+    data_deletion_enabled: true
+    consent_banner_required: true
+
+  # Dashboard Configuration
+  dashboard:
+    enabled: true
+    refresh_interval: "5m"
+    retention_period: "30d"
+    real_time_updates: true
+    public_stats: true
+    
+  # Alerting
+  alerts:
+    enabled: true
+    channels:
+      - type: "slack"
+        webhook_url: "${SLACK_WEBHOOK_URL}"
+        threshold_conditions:
+          - metric: "error_rate"
+            condition: "> 5%"
+            window: "1h"
+          - metric: "download_drop"
+            condition: "> 50%"
+            window: "24h"
+      - type: "email"
+        recipients: ["sdk-team@example.com"]
+        threshold_conditions:
+          - metric: "critical_errors"
+            condition: "> 10"
+            window: "1h"
+
+  # Data Export
+  export:
+    formats: ["json", "csv", "parquet"]
+    schedule: "daily"
+    s3_bucket: "${METRICS_S3_BUCKET}"
+    encryption: true

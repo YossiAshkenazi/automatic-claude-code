@@ -44,7 +44,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    # Core dependencies for monitoring integration
+    # Core dependencies for monitoring integration and metrics
     "aiohttp>=3.8.0",
 ]
 
@@ -74,8 +74,16 @@ docs = [
     "sphinx-autodoc-typehints>=1.19.0",
     "myst-parser>=0.18.0",
 ]
+metrics = [
+    "streamlit>=1.28.0",
+    "plotly>=5.15.0",
+    "pandas>=2.0.0",
+]
+error-reporting = [
+    "sentry-sdk[logging]>=1.32.0",
+]
 all = [
-    "claude-code-sdk[dev,test,docs]"
+    "claude-code-sdk[dev,test,docs,metrics,error-reporting]"
 ]
 
 [project.urls]

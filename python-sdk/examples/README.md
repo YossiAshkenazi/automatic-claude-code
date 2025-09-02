@@ -19,7 +19,95 @@ pip install -e ../
 pip install claude-code-sdk
 ```
 
-## Examples Overview
+## CLI Wrapper Examples (NEW)
+
+### 01_simple_query.py - Basic CLI Usage
+**What it demonstrates:**
+- Simple prompt execution with CLI wrapper
+- Synchronous response handling  
+- Basic error checking
+- Interactive query mode
+
+**Key concepts:**
+- `ClaudeCliOptions` configuration
+- `execute_sync()` method
+- CLI availability checking
+- Basic cleanup patterns
+
+**Run with:** `python 01_simple_query.py`
+
+---
+
+### 02_streaming_example.py - Real-time Responses
+**What it demonstrates:**
+- Streaming responses with real-time output
+- Progress indicators and formatting
+- Multiple streaming queries
+- Message type handling
+
+**Key concepts:**
+- `execute()` async generator
+- `CliMessage` types (content, tool_use, thinking, error)
+- Real-time progress display
+- Stream processing patterns
+
+**Run with:** `python 02_streaming_example.py`
+
+---
+
+### 03_multi_model_comparison.py - Model Selection
+**What it demonstrates:**
+- Comparing responses from different models
+- Unified interface usage
+- Side-by-side async execution
+- Interactive model selection
+
+**Key concepts:**
+- `UnifiedCliWrapper` usage
+- Model availability detection
+- Concurrent execution with `asyncio.gather()`
+- Performance comparison metrics
+
+**Run with:** `python 03_multi_model_comparison.py`
+
+---
+
+### 04_tool_usage_example.py - AI Tool Integration
+**What it demonstrates:**
+- Claude using Read, Write, Edit tools
+- Bash command execution
+- Code analysis and improvement
+- MCP (Model Context Protocol) tools
+
+**Key concepts:**
+- Tool configuration with `allowed_tools`
+- File operations in temp directories
+- Code generation and modification
+- System command execution
+- MCP integration patterns
+
+**Run with:** `python 04_tool_usage_example.py`
+
+---
+
+### 05_error_handling_example.py - Robust Operations
+**What it demonstrates:**
+- Comprehensive error handling strategies
+- Retry logic with exponential backoff
+- Graceful degradation with fallback models
+- Logging and monitoring patterns
+
+**Key concepts:**
+- Exception handling patterns
+- Timeout management
+- Retry mechanisms
+- Fallback strategies
+- Performance monitoring
+- Custom logging integration
+
+**Run with:** `python 05_error_handling_example.py`
+
+## SDK Examples Overview
 
 ### 1. Basic Usage (`basic_usage.py`)
 Fundamental usage patterns including:

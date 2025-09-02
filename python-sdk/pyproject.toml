@@ -44,7 +44,8 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    # No external dependencies - uses only stdlib for maximum compatibility
+    # Core dependencies for monitoring integration
+    "aiohttp>=3.8.0",
 ]
 
 [project.optional-dependencies]

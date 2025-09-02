@@ -847,9 +847,13 @@ class ClaudeCliWrapper:
                 logger.error(f"Error running Claude CLI (attempt {attempt + 1}): {e}")
                 
                 # Check if this is a transient error worth retrying
-                is_transient = any(keyword in str(e).lower() for keyword in [
+                # Check both exception type and message content
+                # Check both exception type and message for transient errors
+                is_transient_type = isinstance(e, (ConnectionError, TimeoutError)) or "ConnectionError" in type(e).__name__
+                is_transient_message = any(keyword in str(e).lower() for keyword in [
                     "connection", "network", "timeout", "temporary", "unavailable"
                 ])
+                is_transient = is_transient_type or is_transient_message
                 
                 if is_transient and attempt < max_attempts - 1:
                     delay = self.retry_strategy.base_delay * (2 ** attempt)

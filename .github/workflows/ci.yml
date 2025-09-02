@@ -196,11 +196,11 @@ jobs:
 
     - name: Test monitoring health endpoint
       run: |
-        curl -f http://localhost:6007/health || echo "Health check failed"
+        curl -f http://localhost:4005/health || echo "Health check failed"
 
     - name: Test monitoring API
       run: |
-        curl -f http://localhost:6007/api/status || echo "API status check failed"
+        curl -f http://localhost:4005/api/status || echo "API status check failed"
 
   # Security scan
   security-scan:

@@ -1,0 +1,49 @@
+{
+  "description": "Standardized port configuration for Automatic Claude Code",
+  "version": "2.1.0",
+  "ports": {
+    "api": {
+      "development": 4005,
+      "production": 4005,
+      "description": "Main API server and WebSocket endpoint"
+    },
+    "dashboard": {
+      "development": 6011,
+      "production": 6011,
+      "description": "Monitoring dashboard frontend"
+    },
+    "monitoring": {
+      "persistent": 6007,
+      "description": "Persistent monitoring server (always running)"
+    },
+    "database": {
+      "postgres": 5432,
+      "redis": 6379,
+      "description": "Database services"
+    },
+    "nginx": {
+      "http": 80,
+      "https": 443,
+      "description": "Reverse proxy (production only)"
+    }
+  },
+  "environments": {
+    "development": {
+      "api_url": "http://localhost:4005",
+      "dashboard_url": "http://localhost:6011",
+      "monitoring_url": "http://localhost:6007",
+      "websocket_url": "ws://localhost:4005"
+    },
+    "production": {
+      "api_url": "http://localhost:4005",
+      "dashboard_url": "http://localhost:6011",
+      "monitoring_url": "http://localhost:6007",
+      "websocket_url": "ws://localhost:4005"
+    }
+  },
+  "migration_notes": {
+    "from_4001": "Migrated API from port 4001 to 4005 for standardization",
+    "from_6001": "Migrated dashboard from port 6001 to 6011 for consistency",
+    "conflicts_resolved": "All port conflicts resolved as of 2025-09-02"
+  }
+}

@@ -14,6 +14,7 @@ class TestRunner {
     this.results = {
       unit: null,
       integration: null,
+      validation: null,
       e2e: null,
       load: null
     };

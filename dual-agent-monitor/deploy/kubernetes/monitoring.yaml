@@ -22,7 +22,7 @@ data:
     scrape_configs:
     - job_name: 'dual-agent-monitor'
       static_configs:
-      - targets: ['dual-agent-monitor-service:8080']
+      - targets: ['dual-agent-monitor-service:4005']
       metrics_path: '/metrics'
       scrape_interval: 30s
 

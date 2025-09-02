@@ -16,6 +16,8 @@ services:
       - acc_config:/home/nodejs/.automatic-claude-code
       # Claude config (read-only if available)
       - ~/.claude:/home/nodejs/.claude:ro
+      # Mount centralized config
+      - ./config:/workspace/config:ro
     environment:
       - NODE_ENV=production
       - ACC_WORKSPACE=/workspace

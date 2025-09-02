@@ -146,11 +146,25 @@ export class ClaudeCodeClient extends EventEmitter {
         console.log('Running Claude CLI:', claudePath, args);
       }
 
-      // Spawn Claude process
+      // Spawn Claude process with filtered environment to prevent authentication conflicts
+      const filteredEnv = { ...process.env };
+      
+      // Remove conflicting environment variables that cause nested session issues
+      delete filteredEnv.CLAUDECODE;
+      delete filteredEnv.CLAUDE_CODE_ENTRYPOINT;
+      
+      // Remove potentially invalid API keys that cause authentication failures
+      if (filteredEnv.ANTHROPIC_API_KEY && (
+        filteredEnv.ANTHROPIC_API_KEY === 'invalid-key-placeholder' ||
+        filteredEnv.ANTHROPIC_API_KEY.length < 10
+      )) {
+        delete filteredEnv.ANTHROPIC_API_KEY;
+      }
+      
       const claudeProcess = spawn(claudePath, args, {
         cwd: this.options.working_directory,
         env: { 
-          ...process.env, 
+          ...filteredEnv, 
           ...this.options.environment 
         },
         stdio: ['pipe', 'pipe', 'pipe']

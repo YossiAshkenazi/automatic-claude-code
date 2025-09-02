@@ -159,6 +159,30 @@ export class SDKClaudeExecutor extends EventEmitter {
   }
 
   /**
+   * Centralized nested session detection logic
+   * Checks multiple indicators to determine if we're running inside Claude Code
+   */
+  private detectNestedSession(): boolean {
+    const isNestedEnv = process.env.CLAUDECODE === '1';
+    const isNestedEntryPoint = process.env.CLAUDE_CODE_ENTRYPOINT === 'cli';
+    const hasClaudeInArgv = process.argv.some(arg => arg.includes('claude'));
+    const hasClaudeInTitle = process.title?.includes('claude') || false;
+    
+    const isNested = isNestedEnv || isNestedEntryPoint || hasClaudeInArgv || hasClaudeInTitle;
+    
+    if (isNested) {
+      this.logger.debug('Nested session detected', {
+        CLAUDECODE: process.env.CLAUDECODE,
+        CLAUDE_CODE_ENTRYPOINT: process.env.CLAUDE_CODE_ENTRYPOINT,
+        argv_has_claude: hasClaudeInArgv,
+        title_has_claude: hasClaudeInTitle
+      });
+    }
+    
+    return isNested;
+  }
+
+  /**
    * Get dynamic search paths for Claude Code SDK
    */
   private getSDKSearchPaths(): string[] {
@@ -511,8 +535,8 @@ export class SDKClaudeExecutor extends EventEmitter {
    * TODO: Re-enable when browser session manager TS errors are fixed
    */
   async checkBrowserAuthentication(): Promise<boolean> {
-    // Check if we're running within Claude Code (nested session)
-    const isNestedSession = process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT === 'cli';
+    // Check if we're running within Claude Code using centralized detection
+    const isNestedSession = this.detectNestedSession();
     
     if (isNestedSession) {
       this.logger.debug('Detected nested Claude Code session - bypassing authentication check');
@@ -570,13 +594,8 @@ The v2.0 SDK architecture is operational, but nested execution requires this dir
     const executionId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const startTime = Date.now();
     
-    // Check if we're running in a nested Claude Code session - this is the primary entry point
-    const isNestedSession = process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT === 'cli';
-    
-    // Debug: Log nested session detection for troubleshooting
-    if (isNestedSession) {
-      this.logger.debug(`Nested session detected [${executionId}]: Using direct execution mode to avoid authentication conflicts`);
-    }
+    // Check if we're running in a nested Claude Code session using centralized detection
+    const isNestedSession = this.detectNestedSession();
     
     if (isNestedSession) {
       this.logger.debug(`Detected nested session at entry point - using direct execution mode [${executionId}]`);
@@ -1247,8 +1266,8 @@ The v2.0 SDK architecture is operational, but nested execution requires this dir
     attempt: number,
     executionId: string
   ): Promise<SDKResult> {
-    // Check if we're running in a nested Claude Code session
-    const isNestedSession = process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT === 'cli';
+    // Check if we're running in a nested Claude Code session using centralized detection
+    const isNestedSession = this.detectNestedSession();
     
     if (isNestedSession) {
       this.logger.debug(`Detected nested session - using direct execution mode [${executionId}]`);

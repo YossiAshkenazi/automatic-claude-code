@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="claude-code-sdk",
-    version="0.1.0",
+    version="2.1.0",
     author="Claude Code SDK Team",
     author_email="sdk@example.com",
     description="Official Python SDK for Claude Code CLI with dual-agent support",

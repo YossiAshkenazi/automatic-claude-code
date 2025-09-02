@@ -137,7 +137,7 @@ export function validateDualAgentConfig(
 /**
  * Version information for the dual-agent system
  */
-export const DUAL_AGENT_VERSION = '1.0.0';
+export const DUAL_AGENT_VERSION = '2.1.0';
 export const DUAL_AGENT_SYSTEM_NAME = 'Automatic Claude Code - Dual Agent Architecture';
 
 /**

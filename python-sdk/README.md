@@ -1,8 +1,12 @@
 # Claude Code Python SDK
 
 [![PyPI version](https://badge.fury.io/py/claude-code-sdk.svg)](https://pypi.org/project/claude-code-sdk/)
+[![Downloads](https://img.shields.io/pypi/dm/claude-code-sdk.svg)](https://pypi.org/project/claude-code-sdk/)
 [![Python Support](https://img.shields.io/pypi/pyversions/claude-code-sdk.svg)](https://pypi.org/project/claude-code-sdk/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/yossiashkenazi/automatic-claude-code/ci.yml?branch=main)](https://github.com/yossiashkenazi/automatic-claude-code/actions)
+[![codecov](https://codecov.io/gh/yossiashkenazi/automatic-claude-code/branch/main/graph/badge.svg)](https://codecov.io/gh/yossiashkenazi/automatic-claude-code)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 A comprehensive Python SDK for Claude Code CLI interactions with full integration support for dual-agent architectures and real-time monitoring.
 

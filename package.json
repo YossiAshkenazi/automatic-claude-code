@@ -1,6 +1,6 @@
 {
   "name": "automatic-claude-code",
-  "version": "1.2.0",
+  "version": "2.1.0",
   "description": "Automated loop runner for Claude Code - enables continuous AI-assisted development",
   "main": "dist/index.js",
   "bin": {

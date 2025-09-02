@@ -777,6 +777,11 @@ class ClaudeCliWrapper:
                             )
                         else:
                             logger.info(f"Claude CLI completed successfully (messages: {message_count})")
+                            # Perform cleanup after successful execution
+                            try:
+                                await self._enhanced_cleanup_with_tracking()
+                            except Exception as cleanup_error:
+                                logger.error(f"Error during post-execution cleanup: {cleanup_error}")
                     
                     except asyncio.TimeoutError:
                         logger.warning("Process did not complete within timeout")
@@ -1295,6 +1300,9 @@ class ClaudeCliWrapper:
             
             cleanup_duration = time.time() - cleanup_start_time
             logger.info(f"Enhanced cleanup completed in {cleanup_duration:.2f}s")
+            
+            # Reset to IDLE after successful cleanup
+            self.process_state = ProcessState.IDLE
             
         except Exception as e:
             self.process_state = ProcessState.FAILED

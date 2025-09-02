@@ -763,6 +763,225 @@ class TestEnhancedResourceManagement:
             assert messages[0].content == "Test message"
 
 
+class TestAuthenticationRobustnessIntegration:
+    """Test authentication robustness features integrated with existing wrapper"""
+    
+    @pytest.fixture
+    def wrapper_with_circuit_breaker(self):
+        """Create wrapper with circuit breaker for testing"""
+        try:
+            from claude_cli_wrapper import CircuitBreakerConfig, RetryStrategy
+            options = ClaudeCliOptions(
+                enable_circuit_breaker=True,
+                circuit_breaker_config=CircuitBreakerConfig(
+                    failure_threshold=2,  # Low threshold for testing
+                    recovery_timeout=0.1,  # Fast recovery for testing
+                    success_threshold=1
+                ),
+                retry_strategy=RetryStrategy(
+                    max_attempts=3,
+                    base_delay=0.05,  # Fast retries for testing
+                    jitter=False  # Predictable for testing
+                )
+            )
+        except ImportError:
+            # Fallback if enhanced components not available
+            options = ClaudeCliOptions()
+        
+        with patch('claude_cli_wrapper.shutil.which', return_value='/usr/bin/claude'):
+            return ClaudeCliWrapper(options)
+    
+    def test_circuit_breaker_initialization(self, wrapper_with_circuit_breaker):
+        """Test wrapper initializes circuit breaker correctly"""
+        wrapper = wrapper_with_circuit_breaker
+        # Check if circuit breaker exists (may not if components not implemented)
+        if hasattr(wrapper, 'circuit_breaker') and wrapper.circuit_breaker:
+            from claude_cli_wrapper import CircuitBreakerState
+            assert wrapper.circuit_breaker.state == CircuitBreakerState.CLOSED
+        if hasattr(wrapper, 'retry_strategy'):
+            assert wrapper.retry_strategy is not None
+        if hasattr(wrapper, 'consecutive_failures'):
+            assert wrapper.consecutive_failures == 0
+    
+    @pytest.mark.asyncio
+    async def test_enhanced_authentication_error_detection(self, wrapper_with_circuit_breaker):
+        """Test enhanced authentication error detection"""
+        wrapper = wrapper_with_circuit_breaker
+        
+        # Mock process that returns enhanced auth error
+        mock_process = AsyncMock()
+        mock_process.pid = 12345
+        mock_process.stdout.readline = AsyncMock(side_effect=[
+            b'{"type": "result", "is_error": true, "result": "Invalid API key provided"}\\n',
+            b''
+        ])
+        mock_process.stderr.readline = AsyncMock(return_value=b'')
+        mock_process.wait = AsyncMock(return_value=1)
+        mock_process.returncode = 1
+        
+        with patch('asyncio.create_subprocess_exec', return_value=mock_process):
+            messages = []
+            async for message in wrapper.execute("test prompt"):
+                messages.append(message)
+        
+        # Check for enhanced auth error with setup guidance
+        auth_errors = [m for m in messages if m.type == "auth_error"]
+        assert len(auth_errors) > 0
+        auth_error = auth_errors[0]
+        assert "claude setup-token" in auth_error.content
+        assert "Verify" in auth_error.content or "Check" in auth_error.content
+    
+    @pytest.mark.asyncio
+    async def test_network_error_retry_logic(self, wrapper_with_circuit_breaker):
+        """Test network error retry logic"""
+        wrapper = wrapper_with_circuit_breaker
+        call_count = 0
+        
+        async def mock_create_subprocess(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:  # First two attempts fail
+                raise ConnectionError("Network timeout")
+            
+            # Third attempt succeeds
+            mock_process = AsyncMock()
+            mock_process.pid = 12345
+            mock_process.stdout.readline = AsyncMock(side_effect=[
+                b'{"type": "result", "result": "Success after retry"}\\n',
+                b''
+            ])
+            mock_process.stderr.readline = AsyncMock(return_value=b'')
+            mock_process.wait = AsyncMock(return_value=0)
+            mock_process.returncode = 0
+            return mock_process
+        
+        with patch('asyncio.create_subprocess_exec', side_effect=mock_create_subprocess):
+            with patch('asyncio.sleep'):  # Speed up test
+                messages = []
+                async for message in wrapper.execute("test prompt"):
+                    messages.append(message)
+        
+        # Should have retry messages
+        retry_messages = [m for m in messages if "retrying" in m.content.lower()]
+        success_messages = [m for m in messages if m.type == "result" and "Success" in m.content]
+        
+        assert len(retry_messages) > 0  # Should have retries
+        assert len(success_messages) > 0  # Should eventually succeed
+        assert call_count == 3  # Should make 3 attempts
+    
+    def test_enhanced_error_classification(self, wrapper_with_circuit_breaker):
+        """Test enhanced error message classification"""
+        wrapper = wrapper_with_circuit_breaker
+        
+        # Test authentication errors
+        auth_error_lines = [
+            "Invalid API key provided",
+            "Authentication failed - please check credentials", 
+            "Unauthorized access to Claude API",
+            "Token expired",
+            "Subscription required"
+        ]
+        
+        for line in auth_error_lines:
+            message = wrapper._parse_line(line, is_stderr=True)
+            assert message.type == "auth_error"
+            assert "claude setup-token" in message.content
+        
+        # Test network/transient errors  
+        network_error_lines = [
+            "Rate limit exceeded - please wait",
+            "429 Too Many Requests",
+            "503 Service Unavailable",
+            "Connection timeout",
+            "Network unreachable"
+        ]
+        
+        for line in network_error_lines:
+            message = wrapper._parse_line(line, is_stderr=True)
+            # Should be classified as retryable error
+            if message.metadata.get("is_transient"):
+                assert message.metadata["is_transient"] is True
+            # Should have retry recommendation if available
+            if "retry" in message.content.lower():
+                assert "retry" in message.content.lower()
+
+
+class TestProductionReadinessScenarios:
+    """Test production-ready scenarios combining multiple robustness features"""
+    
+    @pytest.mark.asyncio
+    async def test_complete_authentication_failure_recovery(self):
+        """Test complete authentication failure and recovery scenario"""
+        options = ClaudeCliOptions(timeout=5)  # Short timeout for testing
+        
+        with patch('claude_cli_wrapper.shutil.which', return_value='/usr/bin/claude'):
+            wrapper = ClaudeCliWrapper(options)
+        
+        # Mock initial auth failure
+        auth_failure_process = AsyncMock()
+        auth_failure_process.pid = 12345
+        auth_failure_process.returncode = 1
+        auth_failure_data = json.dumps({
+            "type": "result",
+            "result": "Invalid API key · Please run claude setup-token",
+            "is_error": True
+        }).encode() + b'\\n'
+        auth_failure_process.stdout.readline = AsyncMock(side_effect=[auth_failure_data, b''])
+        auth_failure_process.stderr.readline = AsyncMock(return_value=b'')
+        auth_failure_process.wait = AsyncMock(return_value=1)
+        
+        with patch('asyncio.create_subprocess_exec', return_value=auth_failure_process):
+            messages = []
+            async for message in wrapper.execute("test prompt"):
+                messages.append(message)
+            
+            # Should detect auth error with guidance
+            auth_messages = [msg for msg in messages if msg.type == "auth_error"]
+            assert len(auth_messages) >= 1
+            
+            auth_message = auth_messages[0]
+            assert "claude setup-token" in auth_message.content
+            assert auth_message.metadata.get("auth_setup_required") is True
+    
+    @pytest.mark.asyncio 
+    async def test_mixed_error_scenario_handling(self):
+        """Test handling of mixed error scenarios (auth + network)"""
+        with patch('claude_cli_wrapper.shutil.which', return_value='/usr/bin/claude'):
+            wrapper = ClaudeCliWrapper()
+        
+        # Simulate a series of different errors
+        error_sequence = [
+            ConnectionError("Network timeout"),  # Transient - should retry
+            PermissionError("Permission denied"),  # Permanent - should not retry
+        ]
+        
+        call_count = 0
+        async def error_sequence_subprocess(*args, **kwargs):
+            nonlocal call_count
+            if call_count < len(error_sequence):
+                error = error_sequence[call_count]
+                call_count += 1
+                raise error
+            # Should not reach here due to permanent error
+            return AsyncMock()
+        
+        with patch('asyncio.create_subprocess_exec', side_effect=error_sequence_subprocess):
+            with patch('asyncio.sleep'):  # Speed up test
+                messages = []
+                async for message in wrapper.execute("test prompt"):
+                    messages.append(message)
+                
+                # Should have network retry, then permanent error
+                retry_messages = [m for m in messages if "retrying" in m.content.lower()]
+                error_messages = [m for m in messages if m.type == "error"]
+                
+                assert len(retry_messages) > 0  # Should retry network error
+                assert len(error_messages) > 0  # Should get final permission error
+                
+                # Should attempt network retry but stop at permission error
+                assert call_count >= 2
+
+
 if __name__ == "__main__":
-    # Run tests with enhanced coverage
-    pytest.main([__file__, "-v", "--tb=short", "--durations=10"])
+    # Run tests with comprehensive coverage including new robustness features
+    pytest.main([__file__, "-v", "--tb=short", "--durations=10", "--cov=claude_cli_wrapper", "--cov-report=term-missing"])

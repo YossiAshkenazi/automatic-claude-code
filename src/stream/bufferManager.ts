@@ -201,11 +201,13 @@ export class BufferManager {
    */
   private processAnsiSequences(text: string): string {
     if (this.options.preserveAnsi) {
-      // Only strip color codes and formatting, preserve cursor movements
+      // Only strip color codes and formatting, preserve cursor movements but be more selective
       return text
         .replace(this.ansiPatterns.color, '')
         .replace(/\x1b\[[0-9]*m/g, '') // Additional color cleanup
-        .replace(/\x1b\[0m/g, ''); // Reset codes
+        .replace(/\x1b\[0m/g, '') // Reset codes
+        .replace(/\x1b\[[0-2]J/g, '') // Clear screen sequences
+        .replace(/\x1b\[H/g, ''); // Home cursor (but not specific positioning)
     } else {
       // Strip all ANSI sequences
       return stripAnsi(text);

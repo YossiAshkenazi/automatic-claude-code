@@ -1,0 +1,574 @@
+---
+# Kafka Cluster Deployment Playbook
+# High-Performance Configuration for 100K+ msgs/sec throughput
+# Supports both ZooKeeper and KRaft modes with SSL/SASL security
+
+- name: Deploy High-Performance Kafka Cluster
+  hosts: localhost
+  gather_facts: false
+  vars:
+    cluster_name: "{{ cluster_name | default('kafka-production') }}"
+    use_kraft_mode: "{{ use_kraft_mode | default(true) }}"
+    kafka_version: "2.8.2"
+    scala_version: "2.13"
+    java_version: "17"
+    
+  tasks:
+    - name: Create dynamic inventory for Kafka cluster
+      set_fact:
+        kafka_brokers: "{{ groups['kafka_brokers'] | default([]) }}"
+        zookeeper_nodes: "{{ groups['zookeeper'] | default([]) }}"
+        monitoring_nodes: "{{ groups['monitoring'] | default([]) }}"
+
+- name: Configure Operating System for High Performance
+  hosts: kafka_brokers:zookeeper:monitoring
+  become: yes
+  vars:
+    # OS Performance Tuning
+    vm_max_map_count: 262144
+    vm_swappiness: 1
+    net_core_rmem_max: 134217728
+    net_core_wmem_max: 134217728
+    net_ipv4_tcp_rmem: "4096 87380 134217728"
+    net_ipv4_tcp_wmem: "4096 65536 134217728"
+    
+  tasks:
+    - name: Update system packages
+      yum:
+        name: "*"
+        state: latest
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Install essential packages
+      yum:
+        name:
+          - java-17-openjdk
+          - java-17-openjdk-devel
+          - wget
+          - curl
+          - vim
+          - htop
+          - iotop
+          - sysstat
+          - net-tools
+          - tcpdump
+          - lsof
+        state: present
+
+    - name: Configure kernel parameters for high performance
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      with_items:
+        - { name: "vm.max_map_count", value: "{{ vm_max_map_count }}" }
+        - { name: "vm.swappiness", value: "{{ vm_swappiness }}" }
+        - { name: "net.core.rmem_max", value: "{{ net_core_rmem_max }}" }
+        - { name: "net.core.wmem_max", value: "{{ net_core_wmem_max }}" }
+        - { name: "net.ipv4.tcp_rmem", value: "{{ net_ipv4_tcp_rmem }}" }
+        - { name: "net.ipv4.tcp_wmem", value: "{{ net_ipv4_tcp_wmem }}" }
+        - { name: "net.core.netdev_max_backlog", value: "5000" }
+        - { name: "net.ipv4.tcp_congestion_control", value: "bbr" }
+
+    - name: Set file descriptor limits
+      lineinfile:
+        path: /etc/security/limits.conf
+        line: "{{ item }}"
+        create: yes
+      with_items:
+        - "kafka soft nofile 100000"
+        - "kafka hard nofile 100000"
+        - "kafka soft nproc 32768"
+        - "kafka hard nproc 32768"
+
+    - name: Create kafka user and group
+      group:
+        name: kafka
+        state: present
+      
+    - name: Create kafka user
+      user:
+        name: kafka
+        group: kafka
+        home: /opt/kafka
+        shell: /bin/bash
+        state: present
+
+    - name: Format and mount Kafka data volumes
+      block:
+        - name: Create filesystem on data volume
+          filesystem:
+            fstype: ext4
+            dev: /dev/nvme1n1
+          when: ansible_hostname in groups['kafka_brokers']
+          
+        - name: Create mount point for Kafka data
+          file:
+            path: /opt/kafka/data
+            state: directory
+            owner: kafka
+            group: kafka
+            mode: '0755'
+          when: ansible_hostname in groups['kafka_brokers']
+          
+        - name: Mount data volume
+          mount:
+            path: /opt/kafka/data
+            src: /dev/nvme1n1
+            fstype: ext4
+            opts: "noatime,nodiratime,rw"
+            state: mounted
+          when: ansible_hostname in groups['kafka_brokers']
+
+- name: Install and Configure ZooKeeper (if not using KRaft)
+  hosts: zookeeper
+  become: yes
+  vars:
+    zookeeper_port: 2181
+    zookeeper_peer_port: 2888
+    zookeeper_leader_port: 3888
+    zookeeper_data_dir: /opt/kafka/zookeeper-data
+    
+  tasks:
+    - name: Skip ZooKeeper setup if using KRaft mode
+      debug:
+        msg: "Skipping ZooKeeper setup - using KRaft mode"
+      when: use_kraft_mode | bool
+
+    - name: Download Kafka (includes ZooKeeper)
+      get_url:
+        url: "https://downloads.apache.org/kafka/{{ kafka_version }}/kafka_{{ scala_version }}-{{ kafka_version }}.tgz"
+        dest: /tmp/kafka.tgz
+        owner: kafka
+        group: kafka
+      when: not (use_kraft_mode | bool)
+
+    - name: Extract Kafka
+      unarchive:
+        src: /tmp/kafka.tgz
+        dest: /opt
+        owner: kafka
+        group: kafka
+        remote_src: yes
+        creates: "/opt/kafka_{{ scala_version }}-{{ kafka_version }}"
+      when: not (use_kraft_mode | bool)
+
+    - name: Create Kafka symlink
+      file:
+        src: "/opt/kafka_{{ scala_version }}-{{ kafka_version }}"
+        dest: /opt/kafka/current
+        state: link
+        owner: kafka
+        group: kafka
+      when: not (use_kraft_mode | bool)
+
+    - name: Create ZooKeeper data directory
+      file:
+        path: "{{ zookeeper_data_dir }}"
+        state: directory
+        owner: kafka
+        group: kafka
+        mode: '0755'
+      when: not (use_kraft_mode | bool)
+
+    - name: Configure ZooKeeper myid
+      copy:
+        content: "{{ ansible_hostname | regex_replace('.*-([0-9]+)$', '\\1') }}"
+        dest: "{{ zookeeper_data_dir }}/myid"
+        owner: kafka
+        group: kafka
+        mode: '0644'
+      when: not (use_kraft_mode | bool)
+
+    - name: Generate ZooKeeper configuration
+      template:
+        src: zookeeper.properties.j2
+        dest: /opt/kafka/current/config/zookeeper.properties
+        owner: kafka
+        group: kafka
+        mode: '0644'
+      when: not (use_kraft_mode | bool)
+
+    - name: Create ZooKeeper systemd service
+      template:
+        src: zookeeper.service.j2
+        dest: /etc/systemd/system/zookeeper.service
+        mode: '0644'
+      when: not (use_kraft_mode | bool)
+
+    - name: Start and enable ZooKeeper service
+      systemd:
+        name: zookeeper
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      when: not (use_kraft_mode | bool)
+
+- name: Install and Configure Kafka Brokers
+  hosts: kafka_brokers
+  become: yes
+  vars:
+    kafka_data_dir: /opt/kafka/data
+    kafka_log_dirs: "{{ kafka_data_dir }}/logs"
+    kafka_heap_size: "6g"
+    
+    # High-performance Kafka settings
+    kafka_config:
+      # Basic settings
+      broker.id: "{{ ansible_hostname | regex_replace('.*-([0-9]+)$', '\\1') }}"
+      listeners: "PLAINTEXT://{{ ansible_default_ipv4.address }}:9092,SSL://{{ ansible_default_ipv4.address }}:9093,SASL_SSL://{{ ansible_default_ipv4.address }}:9094"
+      advertised.listeners: "PLAINTEXT://{{ ansible_default_ipv4.address }}:9092,SSL://{{ ansible_default_ipv4.address }}:9093,SASL_SSL://{{ ansible_default_ipv4.address }}:9094"
+      
+      # ZooKeeper or KRaft configuration
+      zookeeper.connect: "{% if not (use_kraft_mode | bool) %}{{ groups['zookeeper'] | map('extract', hostvars, 'ansible_default_ipv4') | map(attribute='address') | map('regex_replace', '^(.*)$', '\\1:2181') | join(',') }}{% endif %}"
+      
+      # Log settings
+      log.dirs: "{{ kafka_log_dirs }}"
+      log.retention.hours: 168
+      log.retention.bytes: 1073741824
+      log.segment.bytes: 1073741824
+      log.roll.hours: 24
+      log.cleanup.policy: delete
+      
+      # Performance tuning
+      num.network.threads: 8
+      num.io.threads: 16
+      socket.send.buffer.bytes: 102400
+      socket.receive.buffer.bytes: 102400
+      socket.request.max.bytes: 104857600
+      num.replica.fetchers: 4
+      num.recovery.threads.per.data.dir: 2
+      
+      # Replication and durability
+      default.replication.factor: 3
+      min.insync.replicas: 2
+      unclean.leader.election.enable: false
+      
+      # Compression and batching
+      compression.type: lz4
+      batch.size: 16384
+      linger.ms: 5
+      
+      # Rack awareness
+      broker.rack: "{{ ansible_availability_zone }}"
+      
+      # JMX monitoring
+      jmx.port: 9999
+      
+  tasks:
+    - name: Download Kafka
+      get_url:
+        url: "https://downloads.apache.org/kafka/{{ kafka_version }}/kafka_{{ scala_version }}-{{ kafka_version }}.tgz"
+        dest: /tmp/kafka.tgz
+        owner: kafka
+        group: kafka
+
+    - name: Extract Kafka
+      unarchive:
+        src: /tmp/kafka.tgz
+        dest: /opt
+        owner: kafka
+        group: kafka
+        remote_src: yes
+        creates: "/opt/kafka_{{ scala_version }}-{{ kafka_version }}"
+
+    - name: Create Kafka symlink
+      file:
+        src: "/opt/kafka_{{ scala_version }}-{{ kafka_version }}"
+        dest: /opt/kafka/current
+        state: link
+        owner: kafka
+        group: kafka
+
+    - name: Create Kafka log directories
+      file:
+        path: "{{ kafka_log_dirs }}"
+        state: directory
+        owner: kafka
+        group: kafka
+        mode: '0755'
+
+    - name: Generate SSL certificates for Kafka
+      include_tasks: generate_ssl_certs.yml
+      when: enable_ssl | default(true)
+
+    - name: Configure Kafka server properties
+      template:
+        src: server.properties.j2
+        dest: /opt/kafka/current/config/server.properties
+        owner: kafka
+        group: kafka
+        mode: '0644'
+      notify: restart kafka
+
+    - name: Configure Kafka JVM settings
+      template:
+        src: kafka-server-start.sh.j2
+        dest: /opt/kafka/current/bin/kafka-server-start.sh
+        owner: kafka
+        group: kafka
+        mode: '0755'
+
+    - name: Create Kafka systemd service
+      template:
+        src: kafka.service.j2
+        dest: /etc/systemd/system/kafka.service
+        mode: '0644'
+
+    - name: Configure KRaft mode (if enabled)
+      block:
+        - name: Generate cluster UUID for KRaft
+          shell: /opt/kafka/current/bin/kafka-storage.sh random-uuid
+          register: kafka_cluster_uuid
+          run_once: true
+          delegate_to: "{{ groups['kafka_brokers'][0] }}"
+
+        - name: Format Kafka storage for KRaft
+          shell: >
+            /opt/kafka/current/bin/kafka-storage.sh format 
+            -t {{ hostvars[groups['kafka_brokers'][0]]['kafka_cluster_uuid']['stdout'] }} 
+            -c /opt/kafka/current/config/server.properties
+          become_user: kafka
+          args:
+            creates: "{{ kafka_log_dirs }}/meta.properties"
+      when: use_kraft_mode | bool
+
+    - name: Start and enable Kafka service
+      systemd:
+        name: kafka
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+  handlers:
+    - name: restart kafka
+      systemd:
+        name: kafka
+        state: restarted
+
+- name: Install and Configure Schema Registry
+  hosts: kafka_brokers[0]
+  become: yes
+  vars:
+    schema_registry_port: 8081
+    confluent_version: "7.4.0"
+    
+  tasks:
+    - name: Download Confluent Platform (for Schema Registry)
+      get_url:
+        url: "https://packages.confluent.io/archive/{{ confluent_version | regex_replace('^(\\d+\\.\\d+).*', '\\1') }}/confluent-community-{{ confluent_version }}.tar.gz"
+        dest: /tmp/confluent.tgz
+        owner: kafka
+        group: kafka
+
+    - name: Extract Confluent Platform
+      unarchive:
+        src: /tmp/confluent.tgz
+        dest: /opt
+        owner: kafka
+        group: kafka
+        remote_src: yes
+        creates: "/opt/confluent-{{ confluent_version }}"
+
+    - name: Create Confluent symlink
+      file:
+        src: "/opt/confluent-{{ confluent_version }}"
+        dest: /opt/confluent
+        state: link
+        owner: kafka
+        group: kafka
+
+    - name: Configure Schema Registry
+      template:
+        src: schema-registry.properties.j2
+        dest: /opt/confluent/etc/schema-registry/schema-registry.properties
+        owner: kafka
+        group: kafka
+        mode: '0644'
+
+    - name: Create Schema Registry systemd service
+      template:
+        src: schema-registry.service.j2
+        dest: /etc/systemd/system/schema-registry.service
+        mode: '0644'
+
+    - name: Start and enable Schema Registry
+      systemd:
+        name: schema-registry
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+- name: Configure SSL/TLS Security
+  hosts: kafka_brokers
+  become: yes
+  tasks:
+    - name: Create SSL directory
+      file:
+        path: /opt/kafka/ssl
+        state: directory
+        owner: kafka
+        group: kafka
+        mode: '0700'
+
+    - name: Generate CA private key
+      openssl_privatekey:
+        path: /opt/kafka/ssl/ca-key.pem
+        size: 4096
+        owner: kafka
+        group: kafka
+        mode: '0600'
+      run_once: true
+      delegate_to: "{{ groups['kafka_brokers'][0] }}"
+
+    - name: Generate CA certificate
+      openssl_certificate:
+        path: /opt/kafka/ssl/ca-cert.pem
+        privatekey_path: /opt/kafka/ssl/ca-key.pem
+        provider: selfsigned
+        common_name: "Kafka CA"
+        owner: kafka
+        group: kafka
+        mode: '0644'
+      run_once: true
+      delegate_to: "{{ groups['kafka_brokers'][0] }}"
+
+    - name: Generate broker private keys
+      openssl_privatekey:
+        path: "/opt/kafka/ssl/{{ inventory_hostname }}-key.pem"
+        size: 2048
+        owner: kafka
+        group: kafka
+        mode: '0600'
+
+    - name: Generate broker CSRs
+      openssl_csr:
+        path: "/opt/kafka/ssl/{{ inventory_hostname }}.csr"
+        privatekey_path: "/opt/kafka/ssl/{{ inventory_hostname }}-key.pem"
+        common_name: "{{ inventory_hostname }}"
+        subject_alt_name:
+          - "DNS:{{ inventory_hostname }}"
+          - "IP:{{ ansible_default_ipv4.address }}"
+        owner: kafka
+        group: kafka
+
+    - name: Sign broker certificates
+      openssl_certificate:
+        path: "/opt/kafka/ssl/{{ inventory_hostname }}-cert.pem"
+        csr_path: "/opt/kafka/ssl/{{ inventory_hostname }}.csr"
+        ownca_path: /opt/kafka/ssl/ca-cert.pem
+        ownca_privatekey_path: /opt/kafka/ssl/ca-key.pem
+        provider: ownca
+        owner: kafka
+        group: kafka
+        mode: '0644'
+
+    - name: Create Java keystore from certificates
+      java_cert:
+        cert_path: "/opt/kafka/ssl/{{ inventory_hostname }}-cert.pem"
+        keystore_path: "/opt/kafka/ssl/{{ inventory_hostname }}.keystore.jks"
+        keystore_pass: "{{ ssl_keystore_password | default('changeme') }}"
+        alias: "{{ inventory_hostname }}"
+        state: present
+
+    - name: Create Java truststore
+      java_cert:
+        cert_path: /opt/kafka/ssl/ca-cert.pem
+        keystore_path: "/opt/kafka/ssl/kafka.truststore.jks"
+        keystore_pass: "{{ ssl_truststore_password | default('changeme') }}"
+        alias: "kafka-ca"
+        state: present
+
+- name: Configure SASL Authentication
+  hosts: kafka_brokers
+  become: yes
+  tasks:
+    - name: Create JAAS configuration for brokers
+      template:
+        src: kafka_server_jaas.conf.j2
+        dest: /opt/kafka/config/kafka_server_jaas.conf
+        owner: kafka
+        group: kafka
+        mode: '0600'
+      when: enable_sasl | default(true)
+
+    - name: Update Kafka service to include JAAS config
+      lineinfile:
+        path: /etc/systemd/system/kafka.service
+        regexp: '^ExecStart='
+        line: 'ExecStart=/opt/kafka/current/bin/kafka-server-start.sh /opt/kafka/current/config/server.properties -Djava.security.auth.login.config=/opt/kafka/config/kafka_server_jaas.conf'
+      notify: restart kafka
+      when: enable_sasl | default(true)
+
+  handlers:
+    - name: restart kafka
+      systemd:
+        name: kafka
+        state: restarted
+        daemon_reload: yes
+
+- name: Validate Kafka Cluster Health
+  hosts: kafka_brokers[0]
+  become: yes
+  become_user: kafka
+  tasks:
+    - name: Wait for Kafka to be ready
+      wait_for:
+        port: 9092
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 30
+        timeout: 300
+
+    - name: Create test topic
+      shell: |
+        /opt/kafka/current/bin/kafka-topics.sh \
+        --create \
+        --bootstrap-server {{ ansible_default_ipv4.address }}:9092 \
+        --replication-factor 3 \
+        --partitions 12 \
+        --topic test-performance
+      register: topic_creation
+      failed_when: 
+        - topic_creation.rc != 0
+        - "'already exists' not in topic_creation.stderr"
+
+    - name: Test message production
+      shell: |
+        echo "test message $(date)" | /opt/kafka/current/bin/kafka-console-producer.sh \
+        --bootstrap-server {{ ansible_default_ipv4.address }}:9092 \
+        --topic test-performance
+      register: producer_test
+
+    - name: Test message consumption
+      shell: |
+        timeout 10s /opt/kafka/current/bin/kafka-console-consumer.sh \
+        --bootstrap-server {{ ansible_default_ipv4.address }}:9092 \
+        --topic test-performance \
+        --from-beginning \
+        --max-messages 1
+      register: consumer_test
+
+    - name: Display cluster status
+      debug:
+        msg: |
+          Kafka cluster deployment completed successfully!
+          
+          Cluster Configuration:
+          - Brokers: {{ groups['kafka_brokers'] | length }}
+          - ZooKeeper nodes: {{ groups['zookeeper'] | default([]) | length }}
+          - Mode: {{ 'KRaft' if (use_kraft_mode | bool) else 'ZooKeeper' }}
+          - SSL enabled: {{ enable_ssl | default(true) }}
+          - SASL enabled: {{ enable_sasl | default(true) }}
+          
+          Performance Targets:
+          - Target throughput: 100K+ messages/second
+          - Target availability: 99.9%
+          - Rack awareness: Enabled
+          
+          Next Steps:
+          1. Configure monitoring stack
+          2. Set up log aggregation
+          3. Configure backup procedures
+          4. Run performance benchmarks

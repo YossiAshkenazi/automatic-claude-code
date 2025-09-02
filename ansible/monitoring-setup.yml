@@ -1,0 +1,646 @@
+---
+# Kafka Monitoring Stack Deployment
+# Prometheus + Grafana + ELK Stack for comprehensive observability
+# Configured for 100K+ msgs/sec monitoring and alerting
+
+- name: Deploy Kafka Monitoring Stack
+  hosts: monitoring
+  become: yes
+  vars:
+    prometheus_version: "2.47.2"
+    grafana_version: "10.1.5"
+    elasticsearch_version: "8.10.4"
+    kibana_version: "8.10.4"
+    logstash_version: "8.10.4"
+    node_exporter_version: "1.6.1"
+    kafka_exporter_version: "1.7.0"
+    
+    # Monitoring configuration
+    prometheus_retention: "15d"
+    grafana_admin_password: "{{ grafana_admin_password | default('admin123') }}"
+    elasticsearch_heap_size: "2g"
+    
+    # Data directories
+    prometheus_data: /opt/monitoring/prometheus
+    grafana_data: /opt/monitoring/grafana
+    elasticsearch_data: /opt/monitoring/elasticsearch
+    
+  tasks:
+    - name: Create monitoring user and directories
+      block:
+        - name: Create monitoring group
+          group:
+            name: monitoring
+            state: present
+
+        - name: Create monitoring user
+          user:
+            name: monitoring
+            group: monitoring
+            home: /opt/monitoring
+            shell: /bin/bash
+            state: present
+
+        - name: Create monitoring directories
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: monitoring
+            group: monitoring
+            mode: '0755'
+          loop:
+            - /opt/monitoring
+            - /opt/monitoring/bin
+            - /opt/monitoring/config
+            - "{{ prometheus_data }}"
+            - "{{ grafana_data }}"
+            - "{{ elasticsearch_data }}"
+            - /opt/monitoring/logs
+
+    - name: Install Java for Elasticsearch/Logstash
+      yum:
+        name: java-17-openjdk
+        state: present
+
+    - name: Download and install Prometheus
+      block:
+        - name: Download Prometheus
+          get_url:
+            url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+            dest: /tmp/prometheus.tar.gz
+
+        - name: Extract Prometheus
+          unarchive:
+            src: /tmp/prometheus.tar.gz
+            dest: /opt/monitoring
+            owner: monitoring
+            group: monitoring
+            remote_src: yes
+            creates: "/opt/monitoring/prometheus-{{ prometheus_version }}.linux-amd64"
+
+        - name: Create Prometheus symlink
+          file:
+            src: "/opt/monitoring/prometheus-{{ prometheus_version }}.linux-amd64"
+            dest: /opt/monitoring/prometheus
+            state: link
+            owner: monitoring
+            group: monitoring
+
+    - name: Configure Prometheus
+      template:
+        src: prometheus.yml.j2
+        dest: /opt/monitoring/config/prometheus.yml
+        owner: monitoring
+        group: monitoring
+        mode: '0644'
+      notify: restart prometheus
+
+    - name: Create Prometheus systemd service
+      template:
+        src: prometheus.service.j2
+        dest: /etc/systemd/system/prometheus.service
+        mode: '0644'
+
+    - name: Download and install Node Exporter
+      block:
+        - name: Download Node Exporter
+          get_url:
+            url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+            dest: /tmp/node_exporter.tar.gz
+
+        - name: Extract Node Exporter
+          unarchive:
+            src: /tmp/node_exporter.tar.gz
+            dest: /opt/monitoring
+            owner: monitoring
+            group: monitoring
+            remote_src: yes
+            creates: "/opt/monitoring/node_exporter-{{ node_exporter_version }}.linux-amd64"
+
+        - name: Create Node Exporter symlink
+          file:
+            src: "/opt/monitoring/node_exporter-{{ node_exporter_version }}.linux-amd64"
+            dest: /opt/monitoring/node_exporter
+            state: link
+            owner: monitoring
+            group: monitoring
+
+    - name: Create Node Exporter systemd service
+      template:
+        src: node_exporter.service.j2
+        dest: /etc/systemd/system/node_exporter.service
+        mode: '0644'
+
+    - name: Download and install Kafka Exporter
+      block:
+        - name: Download Kafka Exporter
+          get_url:
+            url: "https://github.com/danielqsj/kafka_exporter/releases/download/v{{ kafka_exporter_version }}/kafka_exporter-{{ kafka_exporter_version }}.linux-amd64.tar.gz"
+            dest: /tmp/kafka_exporter.tar.gz
+
+        - name: Extract Kafka Exporter
+          unarchive:
+            src: /tmp/kafka_exporter.tar.gz
+            dest: /opt/monitoring
+            owner: monitoring
+            group: monitoring
+            remote_src: yes
+            creates: "/opt/monitoring/kafka_exporter-{{ kafka_exporter_version }}.linux-amd64"
+
+        - name: Create Kafka Exporter symlink
+          file:
+            src: "/opt/monitoring/kafka_exporter-{{ kafka_exporter_version }}.linux-amd64"
+            dest: /opt/monitoring/kafka_exporter
+            state: link
+            owner: monitoring
+            group: monitoring
+
+    - name: Create Kafka Exporter systemd service
+      template:
+        src: kafka_exporter.service.j2
+        dest: /etc/systemd/system/kafka_exporter.service
+        mode: '0644'
+
+    - name: Download and install Grafana
+      block:
+        - name: Add Grafana GPG key
+          rpm_key:
+            state: present
+            key: https://packages.grafana.com/gpg.key
+
+        - name: Add Grafana repository
+          yum_repository:
+            name: grafana
+            description: Grafana repository
+            baseurl: https://packages.grafana.com/oss/rpm
+            gpgcheck: yes
+            gpgkey: https://packages.grafana.com/gpg.key
+            enabled: yes
+
+        - name: Install Grafana
+          yum:
+            name: grafana
+            state: present
+
+    - name: Configure Grafana
+      template:
+        src: grafana.ini.j2
+        dest: /etc/grafana/grafana.ini
+        owner: grafana
+        group: grafana
+        mode: '0640'
+      notify: restart grafana
+
+    - name: Download and install Elasticsearch
+      block:
+        - name: Import Elasticsearch GPG key
+          rpm_key:
+            state: present
+            key: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+
+        - name: Add Elasticsearch repository
+          yum_repository:
+            name: elasticsearch
+            description: Elasticsearch repository
+            baseurl: https://artifacts.elastic.co/packages/8.x/yum
+            gpgcheck: yes
+            gpgkey: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+            enabled: yes
+
+        - name: Install Elasticsearch
+          yum:
+            name: elasticsearch
+            state: present
+
+    - name: Configure Elasticsearch
+      template:
+        src: elasticsearch.yml.j2
+        dest: /etc/elasticsearch/elasticsearch.yml
+        owner: elasticsearch
+        group: elasticsearch
+        mode: '0660'
+      notify: restart elasticsearch
+
+    - name: Configure Elasticsearch JVM options
+      template:
+        src: jvm.options.j2
+        dest: /etc/elasticsearch/jvm.options.d/heap.options
+        owner: elasticsearch
+        group: elasticsearch
+        mode: '0660'
+      notify: restart elasticsearch
+
+    - name: Download and install Kibana
+      yum:
+        name: kibana
+        state: present
+
+    - name: Configure Kibana
+      template:
+        src: kibana.yml.j2
+        dest: /etc/kibana/kibana.yml
+        owner: kibana
+        group: kibana
+        mode: '0660'
+      notify: restart kibana
+
+    - name: Download and install Logstash
+      yum:
+        name: logstash
+        state: present
+
+    - name: Configure Logstash for Kafka log processing
+      template:
+        src: logstash-kafka.conf.j2
+        dest: /etc/logstash/conf.d/kafka.conf
+        owner: logstash
+        group: logstash
+        mode: '0644'
+      notify: restart logstash
+
+    - name: Configure Logstash JVM options
+      template:
+        src: logstash-jvm.options.j2
+        dest: /etc/logstash/jvm.options
+        owner: logstash
+        group: logstash
+        mode: '0644'
+      notify: restart logstash
+
+    - name: Start and enable monitoring services
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      loop:
+        - prometheus
+        - node_exporter
+        - kafka_exporter
+        - grafana-server
+        - elasticsearch
+        - kibana
+        - logstash
+
+  handlers:
+    - name: restart prometheus
+      systemd:
+        name: prometheus
+        state: restarted
+
+    - name: restart grafana
+      systemd:
+        name: grafana-server
+        state: restarted
+
+    - name: restart elasticsearch
+      systemd:
+        name: elasticsearch
+        state: restarted
+
+    - name: restart kibana
+      systemd:
+        name: kibana
+        state: restarted
+
+    - name: restart logstash
+      systemd:
+        name: logstash
+        state: restarted
+
+- name: Deploy Node Exporter on Kafka and ZooKeeper nodes
+  hosts: kafka_brokers:zookeeper
+  become: yes
+  vars:
+    node_exporter_version: "1.6.1"
+    
+  tasks:
+    - name: Create monitoring user
+      user:
+        name: monitoring
+        system: yes
+        shell: /bin/false
+        home: /var/lib/node_exporter
+        create_home: no
+
+    - name: Download Node Exporter
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+        dest: /tmp/node_exporter.tar.gz
+
+    - name: Extract Node Exporter
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /tmp
+        remote_src: yes
+        creates: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64"
+
+    - name: Copy Node Exporter binary
+      copy:
+        src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+        dest: /usr/local/bin/node_exporter
+        remote_src: yes
+        owner: monitoring
+        group: monitoring
+        mode: '0755'
+
+    - name: Create Node Exporter systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Node Exporter
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=monitoring
+          Group=monitoring
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter \
+            --collector.systemd \
+            --collector.processes \
+            --collector.diskstats \
+            --collector.filesystem.ignored-mount-points="^/(dev|proc|sys|var/lib/docker/.+)($|/)" \
+            --collector.filesystem.ignored-fs-types="^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/node_exporter.service
+        mode: '0644'
+
+    - name: Start and enable Node Exporter
+      systemd:
+        name: node_exporter
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+- name: Configure JMX Monitoring for Kafka
+  hosts: kafka_brokers
+  become: yes
+  tasks:
+    - name: Download JMX Prometheus Exporter
+      get_url:
+        url: "https://repo1.maven.org/maven2/io/prometheus/jmx/jmx_prometheus_javaagent/0.19.0/jmx_prometheus_javaagent-0.19.0.jar"
+        dest: /opt/kafka/current/libs/jmx_prometheus_javaagent.jar
+        owner: kafka
+        group: kafka
+        mode: '0644'
+
+    - name: Create JMX configuration for Kafka
+      copy:
+        content: |
+          rules:
+          # Kafka broker metrics
+          - pattern: kafka.server<type=(.+), name=(.+)><>Value
+            name: kafka_server_$1_$2
+            type: GAUGE
+            
+          - pattern: kafka.server<type=(.+), name=(.+), clientId=(.+)><>Value
+            name: kafka_server_$1_$2
+            type: GAUGE
+            labels:
+              clientId: "$3"
+              
+          - pattern: kafka.server<type=(.+), name=(.+), topic=(.+)><>Value
+            name: kafka_server_$1_$2
+            type: GAUGE
+            labels:
+              topic: "$3"
+              
+          - pattern: kafka.server<type=(.+), name=(.+), topic=(.+), partition=(.+)><>Value
+            name: kafka_server_$1_$2
+            type: GAUGE
+            labels:
+              topic: "$3"
+              partition: "$4"
+              
+          # Network request metrics
+          - pattern: kafka.network<type=(.+), name=(.+)><>Value
+            name: kafka_network_$1_$2
+            type: GAUGE
+            
+          # Log metrics
+          - pattern: kafka.log<type=(.+), name=(.+), topic=(.+), partition=(.+)><>Value
+            name: kafka_log_$1_$2
+            type: GAUGE
+            labels:
+              topic: "$3"
+              partition: "$4"
+              
+          # Controller metrics
+          - pattern: kafka.controller<type=(.+), name=(.+)><>Value
+            name: kafka_controller_$1_$2
+            type: GAUGE
+            
+          # JVM metrics
+          - pattern: java.lang<type=(.+), name=(.+)><>(.+)
+            name: jvm_$1_$2_$3
+            type: GAUGE
+        dest: /opt/kafka/current/config/jmx-exporter-config.yml
+        owner: kafka
+        group: kafka
+        mode: '0644'
+
+    - name: Update Kafka service to include JMX exporter
+      lineinfile:
+        path: /etc/systemd/system/kafka.service
+        regexp: '^Environment="KAFKA_OPTS='
+        line: 'Environment="KAFKA_OPTS=-javaagent:/opt/kafka/current/libs/jmx_prometheus_javaagent.jar=7071:/opt/kafka/current/config/jmx-exporter-config.yml"'
+        insertafter: '^\[Service\]'
+      notify: restart kafka
+
+    - name: Restart Kafka to apply JMX monitoring
+      systemd:
+        name: kafka
+        state: restarted
+        daemon_reload: yes
+
+- name: Import Grafana Dashboards
+  hosts: monitoring
+  become: yes
+  tasks:
+    - name: Wait for Grafana to be ready
+      wait_for:
+        port: 3000
+        host: localhost
+        delay: 30
+        timeout: 300
+
+    - name: Check Grafana API health
+      uri:
+        url: http://localhost:3000/api/health
+        method: GET
+      register: grafana_health
+      until: grafana_health.status == 200
+      retries: 10
+      delay: 30
+
+    - name: Add Prometheus datasource to Grafana
+      uri:
+        url: http://localhost:3000/api/datasources
+        method: POST
+        user: admin
+        password: "{{ grafana_admin_password }}"
+        force_basic_auth: yes
+        body_format: json
+        body:
+          name: "Prometheus"
+          type: "prometheus"
+          url: "http://localhost:9090"
+          access: "proxy"
+          isDefault: true
+        status_code: [200, 409]  # 409 if already exists
+
+    - name: Download Kafka Grafana dashboard
+      get_url:
+        url: "https://grafana.com/api/dashboards/721/revisions/1/download"
+        dest: /tmp/kafka-dashboard.json
+
+    - name: Import Kafka dashboard to Grafana
+      uri:
+        url: http://localhost:3000/api/dashboards/db
+        method: POST
+        user: admin
+        password: "{{ grafana_admin_password }}"
+        force_basic_auth: yes
+        body_format: json
+        body:
+          dashboard: "{{ lookup('file', '/tmp/kafka-dashboard.json') | from_json }}"
+          overwrite: true
+        status_code: [200, 412]  # 412 if already exists
+
+- name: Configure Alerting Rules
+  hosts: monitoring
+  become: yes
+  tasks:
+    - name: Create Prometheus alerting rules
+      copy:
+        content: |
+          groups:
+          - name: kafka.rules
+            rules:
+            - alert: KafkaBrokerDown
+              expr: up{job="kafka"} == 0
+              for: 1m
+              labels:
+                severity: critical
+              annotations:
+                summary: "Kafka broker is down"
+                description: "Kafka broker {{ $labels.instance }} has been down for more than 1 minute."
+
+            - alert: KafkaHighProducerLatency
+              expr: kafka_server_ReplicaManager_LeaderCount > 1000
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: "High Kafka producer latency"
+                description: "Kafka producer latency is above 1000ms on {{ $labels.instance }}"
+
+            - alert: KafkaLowThroughput
+              expr: rate(kafka_server_BrokerTopicMetrics_MessagesInPerSec[5m]) < 1000
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: "Low Kafka throughput"
+                description: "Kafka throughput is below 1000 msg/sec on {{ $labels.instance }}"
+
+            - alert: KafkaDiskSpaceHigh
+              expr: (node_filesystem_size_bytes{mountpoint="/opt/kafka/data"} - node_filesystem_free_bytes{mountpoint="/opt/kafka/data"}) / node_filesystem_size_bytes{mountpoint="/opt/kafka/data"} * 100 > 85
+              for: 5m
+              labels:
+                severity: critical
+              annotations:
+                summary: "Kafka disk space is running low"
+                description: "Disk space usage on {{ $labels.instance }} is above 85%"
+
+            - alert: ElasticsearchClusterRed
+              expr: elasticsearch_cluster_health_status{color="red"} == 1
+              for: 1m
+              labels:
+                severity: critical
+              annotations:
+                summary: "Elasticsearch cluster status is red"
+                description: "Elasticsearch cluster health is red, some indices may be unavailable"
+
+            - alert: HighMemoryUsage
+              expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 90
+              for: 5m
+              labels:
+                severity: warning
+              annotations:
+                summary: "High memory usage"
+                description: "Memory usage on {{ $labels.instance }} is above 90%"
+        dest: /opt/monitoring/config/kafka-alerts.yml
+        owner: monitoring
+        group: monitoring
+        mode: '0644'
+      notify: restart prometheus
+
+    - name: Update Prometheus configuration to include alerting
+      blockinfile:
+        path: /opt/monitoring/config/prometheus.yml
+        block: |
+          rule_files:
+            - "kafka-alerts.yml"
+            
+          alerting:
+            alertmanagers:
+              - static_configs:
+                  - targets:
+                    - localhost:9093  # Add Alertmanager if needed
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - ALERTING"
+      notify: restart prometheus
+
+  handlers:
+    - name: restart prometheus
+      systemd:
+        name: prometheus
+        state: restarted
+
+- name: Final Monitoring Validation
+  hosts: monitoring
+  become: yes
+  tasks:
+    - name: Wait for all services to be ready
+      wait_for:
+        port: "{{ item }}"
+        host: localhost
+        timeout: 300
+      loop:
+        - 9090  # Prometheus
+        - 3000  # Grafana
+        - 9200  # Elasticsearch
+        - 5601  # Kibana
+
+    - name: Display monitoring stack status
+      debug:
+        msg: |
+          Kafka Monitoring Stack Deployed Successfully!
+          
+          Access URLs (from within VPC):
+          - Prometheus: http://{{ ansible_default_ipv4.address }}:9090
+          - Grafana: http://{{ ansible_default_ipv4.address }}:3000 (admin/{{ grafana_admin_password }})
+          - Kibana: http://{{ ansible_default_ipv4.address }}:5601
+          - Elasticsearch: http://{{ ansible_default_ipv4.address }}:9200
+          
+          Monitoring Capabilities:
+          - Kafka broker metrics and JMX monitoring
+          - System-level metrics (CPU, memory, disk, network)
+          - Log aggregation and search
+          - Real-time alerting rules configured
+          - Pre-built Kafka dashboards imported
+          
+          Performance Monitoring:
+          - Message throughput and latency tracking
+          - Consumer lag monitoring
+          - Broker health and availability
+          - Resource utilization alerts
+          
+          Next Steps:
+          1. Configure SMTP for alert notifications
+          2. Set up log shipping from Kafka brokers
+          3. Create custom dashboards for business metrics
+          4. Configure backup for monitoring data

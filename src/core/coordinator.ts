@@ -273,8 +273,8 @@ export class CommandCoordinator {
       const autopilotOptions: AutopilotOptions = {
         dualAgent: true,
         maxIterations: parseInt(options.iterations || '10'),
-        managerModel: options.managerModel || 'opus',
-        workerModel: options.workerModel || 'sonnet',
+        managerModel: (options.managerModel as 'opus' | 'sonnet') || 'opus',
+        workerModel: (options.workerModel as 'opus' | 'sonnet') || 'sonnet',
         workDir: options.dir,
         allowedTools: options.tools,
         continueOnError: options.continueOnError,
@@ -325,7 +325,7 @@ export class CommandCoordinator {
       } else {
         const autopilotOptions = {
           maxIterations: parseInt(options.iterations || '10'),
-          model: options.model,
+          model: (options.model as 'opus' | 'sonnet') || 'sonnet',
           workDir: options.dir,
           allowedTools: options.tools,
           continueOnError: options.continueOnError,

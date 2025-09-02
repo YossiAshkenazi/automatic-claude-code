@@ -319,9 +319,9 @@ export class AgentOrchestrator {
     this.logger.info('Starting single-agent fallback', { currentTask: currentTask.substring(0, 100) });
     
     try {
-      // Import and use the original AutomaticClaudeCode class
-      const { AutomaticClaudeCode } = await import('./index');
-      const fallbackApp = new AutomaticClaudeCode();
+      // Import and use the core AutomaticClaudeCode class
+      const { AutomaticClaudeCodeCore } = await import('./core/application');
+      const fallbackApp = new AutomaticClaudeCodeCore();
       
       const fallbackPrompt = `The dual-agent system encountered issues. Please complete this task in single-agent mode: ${currentTask}`;
       

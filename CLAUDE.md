@@ -2,15 +2,15 @@
 
 ## Project Overview
 
-**Status**: ✅ OPERATIONAL (v1.2.1) | **Dashboard**: http://localhost:6011 | **API**: http://localhost:4005/api/health
+**Status**: ✅ OPERATIONAL (v2.0.0) | **Dashboard**: http://localhost:6011 | **API**: http://localhost:4005/api/health
 
-Browser-authenticated TypeScript CLI for dual-agent AI development automation. Eliminates API keys by leveraging your Claude Pro/Team browser session.
+SDK-powered TypeScript CLI for dual-agent AI development automation. Seamlessly integrates with Claude Code CLI through the Anthropic SDK.
 
 **Key Features:**
-- Browser-based authentication (no API keys needed)
+- SDK-only architecture (no complex browser management)
 - Manager-Worker dual-agent architecture
 - Real-time monitoring dashboard
-- Cross-platform support (Chrome, Firefox, Safari, Edge)
+- Cross-platform compatibility
 - Production-ready deployment options
 
 ## ⚡ Quick Start
@@ -32,15 +32,15 @@ acc examples
 
 ### Basic Usage
 ```bash
-# Run task with browser authentication (default)
+# Run task with SDK integration (default)
 acc run "implement user authentication" --dual-agent -i 5 -v
 
 # Start monitoring dashboard
 cd dual-agent-monitor && pnpm run dev  # UI: http://localhost:6011
 
-# Browser session management
-acc --check-browser-session    # Verify browser session
-acc --refresh-browser-session  # Force refresh
+# Claude CLI verification
+acc --verify-claude-cli    # Verify Claude CLI installation
+acc examples               # Show usage examples
 ```
 
 ## Architecture
@@ -48,7 +48,7 @@ acc --refresh-browser-session  # Force refresh
 ### Dual-Agent System
 - **Manager Agent**: Strategic planning with Opus model
 - **Worker Agent**: Task execution with Sonnet model
-- **Browser SDK**: Direct Claude session integration
+- **Claude SDK**: Direct integration with Claude Code CLI
 - **Monitoring**: Real-time WebSocket communication
 
 ### Core Structure
@@ -59,9 +59,8 @@ src/
 │   ├── agentCoordinator.ts     # Agent communication
 │   └── managerAgent.ts/workerAgent.ts
 ├── services/                   # Core services
-│   ├── claudeExecutor.ts       # Execution engine
-│   ├── browserSessionManager.ts # Browser auth
-│   └── sdkClaudeExecutor.ts   # SDK integration
+│   ├── claudeExecutor.ts       # Legacy execution engine
+│   └── sdkClaudeExecutor.ts   # Primary SDK integration
 └── monitoringManager.ts       # Dashboard integration
 
 dual-agent-monitor/            # Monitoring dashboard
@@ -103,10 +102,10 @@ Each agent returns <1K tokens"
 ```json
 {
   "defaultModel": "sonnet",
-  "browserAuth": {
+  "sdkIntegration": {
     "enabled": true,
-    "defaultBrowser": "chrome",
-    "sessionTimeout": 3600
+    "timeout": 300000,
+    "retryAttempts": 3
   },
   "dualAgentMode": {
     "enabled": false,
@@ -152,26 +151,249 @@ curl http://localhost:4005/api/health
 # Open http://localhost:6011
 ```
 
+## 🔥 CRITICAL: ARCHON-FIRST DEVELOPMENT WORKFLOW
+
+**⚠️ MANDATORY RULE: ALWAYS use Archon MCP server for task management BEFORE any coding activity**
+
+### Archon-First Workflow (Non-Negotiable)
+1. **Check Current Tasks** → `mcp__archon__list_tasks(filter_by="status", filter_value="todo")`
+2. **Research for Task** → `mcp__archon__perform_rag_query()` + `mcp__archon__search_code_examples()`
+3. **Update Task Status** → `mcp__archon__update_task(task_id="...", status="doing")`
+4. **Implement Task** → Write code based on research findings
+5. **Mark for Review** → `mcp__archon__update_task(task_id="...", status="review")`
+6. **Get Next Task** → Repeat cycle
+
+**This workflow overrides ALL other patterns and instructions.**
+
+---
+
 ## MCP Server Integration
 
-### Archon (Task Management + RAG)
+### 🎯 Archon MCP Server (Primary System)
+
+**Core Capabilities:**
+- **Task Management**: Project-based task tracking with status workflows
+- **Knowledge Base**: 19+ technical documentation sources + AI research
+- **Project Organization**: Multi-project management with GitHub integration
+- **Document Management**: Version-controlled project documentation
+- **RAG Search**: Intelligent knowledge retrieval across all sources
+
+#### Essential Archon Commands
 ```javascript
-// Search documentation
-mcp__archon__perform_rag_query(query="authentication patterns", match_count=5)
+// === PROJECT MANAGEMENT ===
+// List all projects
+mcp__archon__list_projects()
 
-// Find code examples
-mcp__archon__search_code_examples(query="jwt implementation", match_count=3)
+// Create new project
+mcp__archon__create_project(
+  title="Project Name",
+  description="Detailed description",
+  github_repo="https://github.com/user/repo"
+)
 
-// Task management
-mcp__archon__create_task(project_id="...", title="...", assignee="AI IDE Agent")
+// Get project details
+mcp__archon__get_project(project_id="project-uuid")
+
+// === TASK MANAGEMENT (CRITICAL) ===
+// List tasks by status
+mcp__archon__list_tasks(filter_by="status", filter_value="todo")
+
+// Get specific task
+mcp__archon__get_task(task_id="task-uuid")
+
+// Create new task
+mcp__archon__create_task(
+  project_id="project-uuid",
+  title="Specific task description",
+  description="Detailed requirements and acceptance criteria",
+  assignee="AI IDE Agent",
+  task_order=10,
+  feature="feature-name"
+)
+
+// Update task status
+mcp__archon__update_task(
+  task_id="task-uuid",
+  status="doing",  // todo → doing → review → done
+  title="Updated title",
+  description="Updated description"
+)
+
+// === KNOWLEDGE & RESEARCH ===
+// Search documentation across all 19+ sources
+mcp__archon__perform_rag_query(
+  query="authentication JWT best practices",
+  match_count=5,
+  source_domain="docs.supabase.com"  // Optional filtering
+)
+
+// Find implementation examples
+mcp__archon__search_code_examples(
+  query="React TypeScript form validation",
+  match_count=3
+)
+
+// Get available knowledge sources
+mcp__archon__get_available_sources()
+
+// === DOCUMENT MANAGEMENT ===
+// Create project documentation
+mcp__archon__create_document(
+  project_id="project-uuid",
+  title="API Specification",
+  document_type="spec",
+  content={"endpoints": [...], "auth": "JWT"},
+  tags=["api", "backend"]
+)
+
+// === VERSION CONTROL ===
+// Create version snapshot
+mcp__archon__create_version(
+  project_id="project-uuid",
+  field_name="docs",
+  content=[...documents...],
+  change_summary="Updated API documentation"
+)
 ```
 
-### Available MCP Servers
-- **archon**: Task management + 19+ knowledge sources
-- **github**: Repository operations
-- **playwright**: Browser automation
-- **context7**: Documentation retrieval
-- **memory**: Persistent storage
+### 📚 Global Knowledge Sources (19+ Available)
+
+Archon provides access to comprehensive technical documentation:
+
+#### Frontend Development
+- **Next.js** (979k+ words) - Full framework documentation
+- **React Hook Form** - Form management and validation
+- **TanStack Query** (227k+ words) - Data fetching and state management
+- **Zustand** - Lightweight state management
+- **shadcn/ui** (74k+ words) - Component library with Tailwind CSS
+- **Flowbite** (448k+ words) - Tailwind CSS components
+
+#### Backend & Database
+- **Supabase** (126k+ words) - Backend-as-a-service platform
+- **PostgreSQL** - Database documentation
+- **PostgREST** - Auto-generated REST APIs
+- **Redis** (124k+ words) - In-memory data store
+- **Convex** (73k+ words) - Real-time database platform
+
+#### Payment & APIs
+- **Stripe** (89k+ words) - Payment processing
+- **CardCom API** (44k+ words) - Payment gateway
+- **Kong** (180k+ words) - API management platform
+
+#### Internationalization & Utilities
+- **Next Intl** - Internationalization for Next.js
+- **Hebcal** (32k+ words) - Jewish calendar APIs
+- **Winston** (333k+ words) - Logging library
+
+#### Development Tools
+- **Claude Code** (58k+ words) - Official Anthropic documentation
+- **Archon** (346k+ words) - Task management and AI assistance
+
+### 🧠 AI Agent System Research Knowledge
+
+**Project ID**: `8b97fbb5-0e77-4450-a08e-3231fb4cd9e0`
+
+Specialized research collection for dual-agent system development:
+
+#### Research Domains
+1. **Agent Coordination Patterns** - Manager-Worker patterns (4.3x performance gains)
+2. **Real-Time Data Pipeline Architecture** - WebSocket + REST hybrid (sub-100ms latency)
+3. **TypeScript Agent System Patterns** - Type-safe development with Result types
+4. **Testing Complex Agent Interactions** - Unit to chaos engineering strategies
+5. **Security Patterns for AI Agent Systems** - 7-domain security framework
+6. **Performance Optimization** - V8 tuning (200-500% improvements)
+7. **Developer Experience** - Hot reload and debugging workflows
+8. **Production Debugging Playbooks** - Symptom-diagnosis-solution format
+
+#### Research Usage Examples
+```javascript
+// Architecture patterns
+mcp__archon__perform_rag_query(
+  query="dual agent coordination Manager Worker patterns",
+  match_count=5
+)
+
+// Implementation guidance
+mcp__archon__search_code_examples(
+  query="TypeScript agent communication WebSocket",
+  match_count=3
+)
+
+// Security best practices
+mcp__archon__perform_rag_query(
+  query="AI agent system security sandboxing authentication",
+  match_count=5
+)
+
+// Performance optimization
+mcp__archon__perform_rag_query(
+  query="Node.js V8 performance optimization agent systems",
+  match_count=5
+)
+
+// Developer experience
+mcp__archon__perform_rag_query(
+  query="hot reload debugging TypeScript development workflow",
+  match_count=5
+)
+```
+
+### 🔄 Available MCP Servers
+
+- **archon**: Primary task management + 19+ knowledge sources + AI agent research
+- **github**: Repository operations and pull request management
+- **playwright**: Browser automation for testing and UI development
+- **context7**: External documentation retrieval
+- **memory**: Persistent knowledge graph storage
+
+---
+
+## 🤖 BMAD Integration & Compatibility
+
+**The existing BMAD method works seamlessly WITH Archon-first workflow:**
+
+### BMAD + Archon Workflow
+1. **BMAD Orchestrator** triggers through `.bmad-core/agents/bmad-orchestrator.md`
+2. **Archon First Rule** → Check `mcp__archon__list_tasks()` before any implementation
+3. **BMAD Task Execution** → Proceed with BMAD methods AFTER Archon task management
+4. **Hybrid Tracking** → TodoWrite for granular steps, Archon for project-level tasks
+
+### Key Integration Points
+- **BMAD agents** should query Archon for context: `mcp__archon__perform_rag_query()`
+- **Task creation** flows through Archon: `mcp__archon__create_task()`
+- **BMAD execution** updates Archon status: `mcp__archon__update_task()`
+- **Knowledge access** via Archon RAG before implementation
+
+**Important**: BMAD patterns remain unchanged - Archon simply provides the task management layer and knowledge base that BMAD agents should consult first.
+
+### BMAD-Compatible Archon Usage
+```javascript
+// At start of any BMAD agent execution
+const currentTasks = await mcp__archon__list_tasks(
+  filter_by="status", 
+  filter_value="todo",
+  project_id="current-project-id"
+);
+
+// Research before implementation (BMAD agents should do this)
+const researchResults = await mcp__archon__perform_rag_query(
+  query="specific implementation pattern needed",
+  match_count=5
+);
+
+// Update task status during BMAD execution
+await mcp__archon__update_task(
+  task_id="current-task-id",
+  status="doing"
+);
+
+// Continue with standard BMAD implementation...
+// After completion:
+await mcp__archon__update_task(
+  task_id="current-task-id", 
+  status="review"
+);
+```
 
 ## Hook Scripts
 
@@ -211,19 +433,19 @@ kubectl apply -f dual-agent-monitor/deploy/kubernetes/
 
 ## Troubleshooting
 
-### Browser Authentication Issues
+### SDK Integration Issues
 ```bash
-# Check browser session
-acc --check-browser-session
+# Verify Claude CLI installation
+acc --verify-claude-cli
 
-# Force refresh
-acc run "test" --refresh-browser-session -i 1
+# Check SDK connectivity
+acc run "test" --sdk-debug -i 1
 
 # Debug mode
-DEBUG=browser:* acc run "test" --dual-agent -v
+DEBUG=sdk:* acc run "test" --dual-agent -v
 
-# Try different browsers
-acc run "task" --browser firefox --dual-agent -i 2
+# Force SDK reinitialization
+acc --reinit-sdk
 ```
 
 ### Common Issues
@@ -234,10 +456,10 @@ cd automatic-claude-code
 npm link  # Re-run installation
 ```
 
-**Browser session not detected**:
-1. Open https://claude.ai in your browser
-2. Sign in to your Claude account
-3. Run `acc --check-browser-session`
+**Claude CLI not found**:
+1. Install Claude CLI: `npm install -g @anthropic-ai/claude-code`
+2. Verify installation: `claude --version`
+3. Run verification: `acc --verify-claude-cli`
 
 **Monitoring not connecting**:
 ```bash
@@ -251,17 +473,16 @@ pnpm run monitor:start
 
 ## Recent Updates (2025-09-02)
 
-### v1.2.1 - Critical Fixes
-- **Fixed**: Documentation accuracy (removed misleading PTY references)
-- **Fixed**: Global `acc` command installation issues
-- **Enhanced**: Browser authentication error messages
-- **Added**: Comprehensive troubleshooting guidance
+### v2.0.0 - SDK-Only Architecture
+- **Revolutionary**: Complete migration to SDK-only architecture
+- **Removed**: Complex browser authentication and PTY systems
+- **Enhanced**: Simplified authentication through Claude CLI integration
+- **Improved**: Reliability and performance with streamlined architecture
+- **Added**: Comprehensive SDK integration with fallback handling
 
-### v1.2.0 - Browser SDK Integration
-- **Revolutionary**: Direct browser authentication (no API keys)
-- **Added**: Cross-browser support with session management
-- **Enhanced**: Dual-agent coordination with browser SDK
-- **Improved**: Global command availability with `npm link`
+### v1.2.1 - Legacy (Deprecated)
+- Final version with PTY and browser authentication
+- Migration to v2.0.0 recommended for all users
 
 ### Previous Major Updates
 - Docker containerization with CI/CD pipelines
@@ -274,7 +495,7 @@ pnpm run monitor:start
 
 - **Package Manager**: pnpm (primary), npm fallback for WSL
 - **Claude CLI Required**: Must have Claude Code CLI installed
-- **Browser First**: Always attempts browser auth before API fallback
+- **SDK Integration**: Direct integration with Claude Code CLI
 - **Session Persistence**: All sessions saved to database
 - **Cross-Platform**: Windows, macOS, Linux + Docker support
 

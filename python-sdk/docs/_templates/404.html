@@ -1,0 +1,178 @@
+{% extends "layout.html" %}
+{% set title = "Page Not Found" %}
+
+{% block body %}
+<div class="section" id="page-not-found">
+    <h1>Page Not Found (404)</h1>
+    
+    <div class="admonition error">
+        <p class="admonition-title">Error</p>
+        <p>The page you're looking for could not be found.</p>
+    </div>
+
+    <h2>What happened?</h2>
+    <p>The page <code>{{ request.url }}</code> doesn't exist or has been moved.</p>
+
+    <h2>What can you do?</h2>
+    <ul>
+        <li><strong>Check the URL</strong> - Make sure the address is correct</li>
+        <li><strong>Use the search</strong> - Try searching for what you're looking for</li>
+        <li><strong>Browse the documentation</strong> - Start from the main sections below</li>
+        <li><strong>Check the changelog</strong> - The page might have been reorganized</li>
+    </ul>
+
+    <h2>Quick Links</h2>
+    <div class="quick-links" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0;">
+        <div class="link-card" style="border: 1px solid #e1e4e5; border-radius: 4px; padding: 15px;">
+            <h3 style="margin-top: 0;"><a href="{{ pathto('index') }}">🏠 Home</a></h3>
+            <p>Return to the main documentation page</p>
+        </div>
+        
+        <div class="link-card" style="border: 1px solid #e1e4e5; border-radius: 4px; padding: 15px;">
+            <h3 style="margin-top: 0;"><a href="{{ pathto('getting-started') }}">🚀 Getting Started</a></h3>
+            <p>Installation and basic setup guide</p>
+        </div>
+        
+        <div class="link-card" style="border: 1px solid #e1e4e5; border-radius: 4px; padding: 15px;">
+            <h3 style="margin-top: 0;"><a href="{{ pathto('quickstart') }}">⚡ Quickstart</a></h3>
+            <p>Get up and running in minutes</p>
+        </div>
+        
+        <div class="link-card" style="border: 1px solid #e1e4e5; border-radius: 4px; padding: 15px;">
+            <h3 style="margin-top: 0;"><a href="{{ pathto('api-reference') }}">📚 API Reference</a></h3>
+            <p>Complete API documentation</p>
+        </div>
+        
+        <div class="link-card" style="border: 1px solid #e1e4e5; border-radius: 4px; padding: 15px;">
+            <h3 style="margin-top: 0;"><a href="{{ pathto('examples/index') }}">💡 Examples</a></h3>
+            <p>Practical usage examples and patterns</p>
+        </div>
+        
+        <div class="link-card" style="border: 1px solid #e1e4e5; border-radius: 4px; padding: 15px;">
+            <h3 style="margin-top: 0;"><a href="{{ pathto('troubleshooting') }}">🔧 Troubleshooting</a></h3>
+            <p>Common issues and solutions</p>
+        </div>
+    </div>
+
+    <h2>Still need help?</h2>
+    <p>If you believe this page should exist or you're experiencing technical difficulties:</p>
+    
+    <ul>
+        <li>
+            <strong>Report an issue</strong>: 
+            <a href="https://github.com/YossiAshkenazi/automatic-claude-code/issues/new?template=documentation.md&title=Documentation%20404%20Error&body=URL:%20{{ request.url }}%0A%0AExpected:%20%0A%0AActual:%20Page%20not%20found" target="_blank" rel="noopener">
+                Create a GitHub issue
+            </a>
+        </li>
+        <li>
+            <strong>Browse the repository</strong>: 
+            <a href="https://github.com/YossiAshkenazi/automatic-claude-code/tree/main/python-sdk" target="_blank" rel="noopener">
+                View source code
+            </a>
+        </li>
+        <li>
+            <strong>Join discussions</strong>: 
+            <a href="https://github.com/YossiAshkenazi/automatic-claude-code/discussions" target="_blank" rel="noopener">
+                GitHub Discussions
+            </a>
+        </li>
+    </ul>
+
+    <div class="admonition tip" style="margin-top: 30px;">
+        <p class="admonition-title">Pro Tip</p>
+        <p>
+            Use <kbd>Ctrl+K</kbd> (or <kbd>Cmd+K</kbd> on Mac) to open the search function and quickly find what you're looking for.
+            You can also use the navigation menu on the left to browse all available documentation.
+        </p>
+    </div>
+</div>
+
+<script>
+// Enhance 404 page with additional functionality
+(function() {
+    'use strict';
+
+    // Log 404 error for analytics
+    console.warn('404 Error: Page not found -', window.location.href);
+    
+    // Track 404 with Google Analytics if available
+    if (typeof gtag !== 'undefined') {
+        gtag('event', 'page_not_found', {
+            'page_location': window.location.href,
+            'custom_parameter': window.location.pathname
+        });
+    }
+
+    // Auto-suggest similar pages based on URL
+    function suggestSimilarPages() {
+        const currentPath = window.location.pathname.toLowerCase();
+        const suggestions = [];
+        
+        // Common misspellings and alternatives
+        const alternatives = {
+            'quick-start': 'quickstart',
+            'api-ref': 'api-reference',
+            'reference': 'api-reference',
+            'example': 'examples/index',
+            'sample': 'examples/index',
+            'guide': 'getting-started',
+            'install': 'getting-started',
+            'setup': 'getting-started',
+            'config': 'getting-started',
+            'trouble': 'troubleshooting',
+            'error': 'troubleshooting',
+            'issue': 'troubleshooting'
+        };
+        
+        // Check for potential matches
+        for (const [key, value] of Object.entries(alternatives)) {
+            if (currentPath.includes(key)) {
+                suggestions.push({
+                    text: `Did you mean: ${value}?`,
+                    url: value
+                });
+            }
+        }
+        
+        // Add suggestions to page if found
+        if (suggestions.length > 0) {
+            const suggestionsDiv = document.createElement('div');
+            suggestionsDiv.className = 'suggestions';
+            suggestionsDiv.innerHTML = `
+                <h3>Suggestions</h3>
+                <ul>
+                    ${suggestions.map(s => `<li><a href="${s.url}">${s.text}</a></li>`).join('')}
+                </ul>
+            `;
+            
+            const quickLinks = document.querySelector('.quick-links');
+            if (quickLinks) {
+                quickLinks.parentNode.insertBefore(suggestionsDiv, quickLinks);
+            }
+        }
+    }
+    
+    // Initialize suggestions
+    suggestSimilarPages();
+    
+    // Add keyboard shortcuts
+    document.addEventListener('keydown', function(event) {
+        // Press 'h' to go home
+        if (event.key === 'h' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            const homeLink = document.querySelector('a[href*="index"]');
+            if (homeLink) {
+                window.location.href = homeLink.href;
+            }
+        }
+        
+        // Press 'g' to go to getting started
+        if (event.key === 'g' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            const gettingStartedLink = document.querySelector('a[href*="getting-started"]');
+            if (gettingStartedLink) {
+                window.location.href = gettingStartedLink.href;
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

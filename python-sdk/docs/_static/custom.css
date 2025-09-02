@@ -1,0 +1,170 @@
+/* Claude Code SDK Custom Styles */
+
+/* Brand colors */
+:root {
+    --claude-blue: #2980b9;
+    --claude-dark-blue: #1f5f99;
+    --claude-light-blue: #ebf3fd;
+    --claude-accent: #e74c3c;
+    --claude-success: #27ae60;
+    --claude-warning: #f39c12;
+}
+
+/* Header styling */
+.wy-side-nav-search {
+    background-color: var(--claude-blue) !important;
+}
+
+.wy-side-nav-search .wy-dropdown > a,
+.wy-side-nav-search > a {
+    color: #fcfcfc !important;
+    font-weight: bold;
+}
+
+/* Version selector */
+.version-selector {
+    margin: 10px 0;
+    padding: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.version-selector select {
+    background: var(--claude-dark-blue);
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 3px;
+    width: 100%;
+}
+
+/* Code blocks */
+.highlight {
+    background: #f8f9fa !important;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+}
+
+.highlight pre {
+    background: transparent !important;
+    padding: 1em !important;
+}
+
+/* Admonitions */
+.admonition {
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.admonition.note {
+    border-left: 4px solid var(--claude-blue);
+}
+
+.admonition.warning {
+    border-left: 4px solid var(--claude-warning);
+}
+
+.admonition.danger {
+    border-left: 4px solid var(--claude-accent);
+}
+
+.admonition.tip {
+    border-left: 4px solid var(--claude-success);
+}
+
+/* API documentation styling */
+.py.class > dt,
+.py.method > dt,
+.py.function > dt {
+    background-color: var(--claude-light-blue);
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+/* Table styling */
+table.docutils {
+    border-collapse: collapse;
+    border-spacing: 0;
+    empty-cells: show;
+    margin: 1em 0;
+    width: 100%;
+}
+
+table.docutils td,
+table.docutils th {
+    border: 1px solid #e1e4e5;
+    padding: 12px;
+    text-align: left;
+    vertical-align: top;
+}
+
+table.docutils th {
+    background-color: var(--claude-light-blue);
+    font-weight: bold;
+}
+
+/* Navigation improvements */
+.wy-nav-content-wrap {
+    margin-left: 300px;
+}
+
+@media screen and (max-width: 768px) {
+    .wy-nav-content-wrap {
+        margin-left: 0;
+    }
+}
+
+/* Footer styling */
+.rst-footer-buttons {
+    padding-top: 2em;
+    border-top: 1px solid #e1e4e5;
+    margin-top: 2em;
+}
+
+/* Search improvements */
+.wy-side-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--claude-blue) transparent;
+}
+
+.wy-side-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.wy-side-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.wy-side-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--claude-blue);
+    border-radius: 3px;
+}
+
+/* Enhanced code examples */
+.literalblock-wrapper .code-block-caption {
+    background-color: var(--claude-blue);
+    color: white;
+    padding: 8px 12px;
+    font-weight: bold;
+    border-radius: 4px 4px 0 0;
+    margin-bottom: 0;
+}
+
+.literalblock-wrapper .highlight {
+    border-radius: 0 0 4px 4px;
+    margin-top: 0;
+}
+
+/* GitHub link styling */
+.fa-github:before {
+    content: "\f09b";
+}
+
+/* Mobile responsiveness */
+@media screen and (max-width: 480px) {
+    .wy-table-responsive table td,
+    .wy-table-responsive table th {
+        font-size: 14px;
+    }
+}

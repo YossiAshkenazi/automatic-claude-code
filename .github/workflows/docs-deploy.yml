@@ -1,0 +1,205 @@
+name: Deploy Python SDK Documentation
+
+on:
+  push:
+    branches: [ main, dashboard-ui-enhancement ]
+    paths:
+      - 'python-sdk/**'
+      - '.github/workflows/docs-deploy.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'python-sdk/**'
+      - '.github/workflows/docs-deploy.yml'
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build job
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./python-sdk
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for version info
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-docs-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-docs-
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[docs]"
+        pip install sphinx-rtd-theme myst-parser
+    
+    - name: Verify Sphinx installation
+      run: |
+        sphinx-build --version
+        python -c "import sphinx; print(f'Sphinx version: {sphinx.__version__}')"
+    
+    - name: Configure git for version info
+      run: |
+        git config --global user.email "action@github.com"
+        git config --global user.name "GitHub Action"
+    
+    - name: Extract version information
+      id: version
+      run: |
+        # Get version from pyproject.toml
+        VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building documentation for version: $VERSION"
+        
+        # Get git info
+        COMMIT_SHA=${GITHUB_SHA::8}
+        BRANCH=${GITHUB_REF#refs/heads/}
+        echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
+        echo "BRANCH=$BRANCH" >> $GITHUB_OUTPUT
+    
+    - name: Create docs build directory
+      run: |
+        mkdir -p docs/_build/html
+        mkdir -p docs/_static
+    
+    - name: Generate API documentation
+      run: |
+        # Create API docs directory if it doesn't exist
+        mkdir -p docs/api
+        
+        # Generate API documentation using sphinx-apidoc
+        sphinx-apidoc -o docs/api ../claude_code_sdk --force --module-first --separate
+        
+        # Verify API docs were generated
+        ls -la docs/api/ || echo "No API docs generated"
+    
+    - name: Build documentation with Sphinx
+      run: |
+        cd docs
+        
+        # Set environment variables for build
+        export GITHUB_ACTIONS=true
+        export READTHEDOCS=false
+        
+        # Build HTML documentation
+        sphinx-build -b html . _build/html -v -W --keep-going
+        
+        # Verify build
+        ls -la _build/html/
+        echo "Documentation built successfully!"
+    
+    - name: Add version info to built docs
+      run: |
+        cd docs/_build/html
+        
+        # Create version info file
+        cat > version-info.json << EOF
+        {
+          "version": "${{ steps.version.outputs.VERSION }}",
+          "commit": "${{ steps.version.outputs.COMMIT_SHA }}",
+          "branch": "${{ steps.version.outputs.BRANCH }}",
+          "build_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+          "build_number": "${{ github.run_number }}"
+        }
+        EOF
+        
+        # Add build info to index
+        echo "<!-- Built: $(date -u) | Version: ${{ steps.version.outputs.VERSION }} | Commit: ${{ steps.version.outputs.COMMIT_SHA }} -->" >> index.html
+    
+    - name: Create .nojekyll file
+      run: |
+        touch docs/_build/html/.nojekyll
+        echo "Created .nojekyll file to disable Jekyll processing"
+    
+    - name: Create custom domain file (if needed)
+      run: |
+        # Uncomment and modify if you have a custom domain
+        # echo "your-domain.com" > docs/_build/html/CNAME
+        echo "Skipping custom domain setup"
+    
+    - name: Verify documentation structure
+      run: |
+        echo "Documentation structure:"
+        find docs/_build/html -name "*.html" | head -20
+        
+        echo "Static files:"
+        find docs/_build/html/_static -type f | head -10
+        
+        # Check for critical files
+        test -f docs/_build/html/index.html && echo "✅ index.html exists"
+        test -f docs/_build/html/getting-started.html && echo "✅ getting-started.html exists"
+        test -f docs/_build/html/api-reference.html && echo "✅ api-reference.html exists"
+        test -f docs/_build/html/404.html && echo "✅ 404.html exists"
+        
+        # Check file sizes
+        du -sh docs/_build/html/
+    
+    - name: Setup Pages
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dashboard-ui-enhancement')
+      uses: actions/configure-pages@v4
+    
+    - name: Upload artifact
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dashboard-ui-enhancement')
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: ./python-sdk/docs/_build/html
+
+  # Deployment job
+  deploy:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dashboard-ui-enhancement')
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v3
+    
+    - name: Output deployment URL
+      run: |
+        echo "📚 Documentation deployed to: ${{ steps.deployment.outputs.page_url }}"
+        echo "🔗 Direct SDK docs: ${{ steps.deployment.outputs.page_url }}python-sdk/"
+
+  # Notification job
+  notify:
+    if: always() && (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dashboard-ui-enhancement'))
+    runs-on: ubuntu-latest
+    needs: [build, deploy]
+    steps:
+    - name: Notify deployment status
+      run: |
+        if [ "${{ needs.deploy.result }}" == "success" ]; then
+          echo "✅ Documentation deployment successful!"
+          echo "📚 Live URL: https://yossiashkenazi.github.io/automatic-claude-code/python-sdk/"
+        else
+          echo "❌ Documentation deployment failed!"
+          echo "Check the logs above for details."
+        fi

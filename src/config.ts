@@ -26,7 +26,6 @@ export interface Config {
   monitoring: {
     enabled: boolean;
     serverUrl: string;
-    webSocketUrl: string;
     uiUrl: string;
     serverPath?: string; // Path to dual-agent-monitor
     autoStartServer: boolean;
@@ -49,7 +48,7 @@ class ConfigManager {
   private config: Config;
   private defaultConfig: Config = {
     defaultModel: 'sonnet',
-    maxIterations: 10,
+    maxIterations: 15, // Increased for better SDK performance
     continueOnError: false,
     verbose: false,
     allowedTools: [
@@ -60,38 +59,38 @@ class ConfigManager {
       'Bash',
       'Glob',
       'Grep',
-      'LS',
       'WebFetch',
       'WebSearch',
       'TodoWrite',
+      'ExitPlanMode', // SDK-specific tools
     ],
-    sessionHistoryLimit: 100,
-    autoSaveInterval: 60000,
+    sessionHistoryLimit: 150, // Increased for better context retention
+    autoSaveInterval: 30000, // More frequent saves for SDK reliability
     
-    // Essential logging by default
+    // Optimized logging for SDK
     logging: {
       enableFileLogging: true,
-      essentialMode: false,
+      essentialMode: true, // Essential mode by default for cleaner output
       logLevel: 'INFO',
       showProgress: true,
     },
     
-    // Monitoring disabled by default - completely optional
+    // Monitoring optional and simplified
     monitoring: {
       enabled: false,
       serverUrl: 'http://localhost:4005',
-      webSocketUrl: 'ws://localhost:4005',
       uiUrl: 'http://localhost:6011',
       autoStartServer: false,
     },
     
+    // Optimized dual-agent for SDK
     dualAgent: {
       enabled: false,
       managerModel: 'opus',
       workerModel: 'sonnet',
-      coordinationInterval: 3,
-      qualityGateThreshold: 0.8,
-      maxConcurrentTasks: 2,
+      coordinationInterval: 2, // Faster coordination for SDK
+      qualityGateThreshold: 0.85, // Higher quality threshold
+      maxConcurrentTasks: 3, // Increased for SDK efficiency
       enableCrossValidation: true,
     },
   };
@@ -184,10 +183,9 @@ class ConfigManager {
     return this.config.monitoring.enabled;
   }
   
-  getMonitoringUrls(): { server: string; webSocket: string; ui: string } {
+  getMonitoringUrls(): { server: string; ui: string } {
     return {
       server: this.config.monitoring.serverUrl,
-      webSocket: this.config.monitoring.webSocketUrl,
       ui: this.config.monitoring.uiUrl,
     };
   }

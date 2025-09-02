@@ -1141,7 +1141,6 @@ async function main() {
         configTable.push(
           ['Enabled', cfg.monitoring.enabled ? 'Yes' : 'No'],
           ['Server URL', cfg.monitoring.serverUrl],
-          ['WebSocket URL', cfg.monitoring.webSocketUrl],
           ['UI URL', cfg.monitoring.uiUrl],
           ['Server Path', cfg.monitoring.serverPath || 'Auto-detect'],
           ['Auto Start', cfg.monitoring.autoStartServer ? 'Yes' : 'No']
@@ -1166,7 +1165,6 @@ async function main() {
       
       statusTable.push(
         ['Server', status.serverRunning ? chalk.green('Running') : chalk.red('Stopped'), status.urls.server],
-        ['WebSocket', status.serverRunning ? chalk.green('Available') : chalk.red('Unavailable'), status.urls.webSocket],
         ['UI', status.serverRunning ? chalk.green('Available') : chalk.red('Unavailable'), status.urls.ui],
         ['Server Path', status.serverPath ? chalk.green('Found') : chalk.yellow('Not Found'), status.serverPath || 'N/A']
       );

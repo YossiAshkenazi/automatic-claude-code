@@ -141,7 +141,7 @@ export class MonitoringManager {
   async getStatus(): Promise<{ 
     serverRunning: boolean; 
     serverPath: string | null; 
-    urls: { server: string; webSocket: string; ui: string } 
+    urls: { server: string; ui: string } 
   }> {
     return {
       serverRunning: await this.isServerRunning(),

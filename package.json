@@ -60,7 +60,6 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.98",
-    "@stoneagebr/windows-credman": "^1.1.1",
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
     "boxen": "^8.0.1",
@@ -69,8 +68,6 @@
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
     "commander": "^12.0.0",
-    "keytar": "^7.9.0",
-    "node-windows": "^1.0.0-beta.8",
     "ora": "^8.2.0",
     "strip-ansi": "^7.1.0"
   },

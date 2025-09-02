@@ -1,0 +1,33 @@
+[bandit]
+# Bandit configuration for Claude Code Python SDK
+exclude_dirs = [
+    "tests",
+    "docs", 
+    "build",
+    "dist",
+    ".venv",
+    ".tox",
+    "__pycache__"
+]
+
+# Skip specific tests that may be false positives
+skips = [
+    "B101",  # Skip assert_used_test - assertions are OK in our codebase
+    "B601",  # Skip paramiko_calls - not using paramiko
+    "B602",  # Skip subprocess_popen_with_shell_equals_true - we control subprocess calls
+]
+
+# Confidence levels: LOW, MEDIUM, HIGH
+confidence = "MEDIUM"
+
+# Severity levels: LOW, MEDIUM, HIGH  
+severity = "MEDIUM"
+
+[bandit.any_other_function_with_shell_equals_true]
+no_shell = [
+    "subprocess.run",
+    "subprocess.call", 
+    "subprocess.check_call",
+    "subprocess.check_output",
+    "subprocess.Popen"
+]

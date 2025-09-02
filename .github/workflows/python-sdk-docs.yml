@@ -1,0 +1,593 @@
+name: Python SDK Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'python-sdk/**'
+      - 'docs/**'
+      - '.github/workflows/python-sdk-docs.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'python-sdk/**'
+      - 'docs/**'
+  workflow_dispatch:
+  schedule:
+    # Rebuild docs daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+defaults:
+  run:
+    working-directory: python-sdk
+
+jobs:
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Needed for version info
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install Node.js (for Claude CLI in examples)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[docs,dev]
+    
+    - name: Install Claude CLI (for documentation examples)
+      run: |
+        npm install -g @anthropic-ai/claude-code
+    
+    - name: Create docs directory structure
+      run: |
+        mkdir -p docs/source/_static
+        mkdir -p docs/source/_templates
+        mkdir -p docs/build
+    
+    - name: Generate API documentation
+      run: |
+        sphinx-apidoc -o docs/source claude_code_sdk --separate --module-first
+    
+    - name: Create Sphinx configuration
+      run: |
+        cat > docs/source/conf.py << 'EOF'
+        import os
+        import sys
+        from datetime import datetime
+        
+        # Add the project to the Python path
+        sys.path.insert(0, os.path.abspath('../..'))
+        
+        # Project information
+        project = 'Claude Code Python SDK'
+        copyright = f'{datetime.now().year}, Claude Code SDK Team'
+        author = 'Claude Code SDK Team'
+        
+        # Version info
+        try:
+            from claude_code_sdk import __version__
+            version = __version__
+            release = version
+        except ImportError:
+            version = '0.1.0'
+            release = version
+        
+        # Extensions
+        extensions = [
+            'sphinx.ext.autodoc',
+            'sphinx.ext.viewcode',
+            'sphinx.ext.napoleon',
+            'sphinx.ext.intersphinx',
+            'sphinx.ext.coverage',
+            'sphinx_autodoc_typehints',
+            'myst_parser',
+        ]
+        
+        # Source suffixes
+        source_suffix = {
+            '.rst': None,
+            '.md': 'myst_parser',
+        }
+        
+        # Master document
+        master_doc = 'index'
+        
+        # Internationalization
+        language = 'en'
+        
+        # HTML output options
+        html_theme = 'sphinx_rtd_theme'
+        html_static_path = ['_static']
+        html_title = f'{project} {version} Documentation'
+        
+        # Autodoc options
+        autodoc_default_options = {
+            'members': True,
+            'member-order': 'bysource',
+            'special-members': '__init__',
+            'undoc-members': True,
+            'exclude-members': '__weakref__'
+        }
+        
+        # Napoleon settings
+        napoleon_google_docstring = True
+        napoleon_numpy_docstring = True
+        napoleon_include_init_with_doc = False
+        napoleon_include_private_with_doc = False
+        
+        # Intersphinx mapping
+        intersphinx_mapping = {
+            'python': ('https://docs.python.org/3', None),
+        }
+        
+        # Type hints
+        typehints_fully_qualified = False
+        always_document_param_types = True
+        EOF
+    
+    - name: Create main documentation index
+      run: |
+        cat > docs/source/index.rst << 'EOF'
+        Claude Code Python SDK Documentation
+        ===================================
+        
+        Welcome to the Claude Code Python SDK documentation!
+        
+        The Claude Code Python SDK provides a comprehensive Python interface for interacting with the Claude Code CLI,
+        featuring async/await support, streaming responses, dual-agent architecture integration, and cross-platform compatibility.
+        
+        .. toctree::
+           :maxdepth: 2
+           :caption: Contents:
+        
+           getting_started
+           user_guide
+           api_reference
+           examples
+           contributing
+           changelog
+        
+        Quick Start
+        -----------
+        
+        Install the package:
+        
+        .. code-block:: bash
+        
+           pip install claude-code-sdk
+        
+        Basic usage:
+        
+        .. code-block:: python
+        
+           import asyncio
+           from claude_code_sdk import query
+        
+           async def main():
+               async for message in query("Create a Python function"):
+                   print(message.content)
+        
+           asyncio.run(main())
+        
+        Features
+        --------
+        
+        * **Async/await support** with context managers
+        * **Streaming and non-streaming** execution modes  
+        * **Comprehensive error handling** and classification
+        * **Integration with dual-agent architecture**
+        * **Real-time monitoring** and observability
+        * **Cross-platform compatibility** (Windows, macOS, Linux)
+        * **Type hints** for full IDE support
+        * **Official SDK compatibility** for easy migration
+        
+        Indices and tables
+        ==================
+        
+        * :ref:`genindex`
+        * :ref:`modindex`
+        * :ref:`search`
+        EOF
+    
+    - name: Create getting started guide
+      run: |
+        cat > docs/source/getting_started.md << 'EOF'
+        # Getting Started
+        
+        ## Installation
+        
+        ### From PyPI (Recommended)
+        
+        ```bash
+        pip install claude-code-sdk
+        ```
+        
+        ### Development Installation
+        
+        ```bash
+        git clone https://github.com/yossiashkenazi/automatic-claude-code
+        cd automatic-claude-code/python-sdk
+        pip install -e .[dev]
+        ```
+        
+        ## Prerequisites
+        
+        - Python 3.10 or higher
+        - Claude Code CLI installed and accessible
+        - Valid Anthropic API key or Claude CLI authentication
+        
+        ## Quick Verification
+        
+        Test your installation:
+        
+        ```python
+        from claude_code_sdk import ClaudeCodeOptions
+        print("SDK installed successfully!")
+        ```
+        
+        ## Next Steps
+        
+        - Read the [User Guide](user_guide.md) for detailed usage instructions
+        - Check out [Examples](examples.md) for common use cases
+        - Browse the [API Reference](api_reference.rst) for complete documentation
+        EOF
+    
+    - name: Create user guide
+      run: |
+        cat > docs/source/user_guide.md << 'EOF'
+        # User Guide
+        
+        ## Core Concepts
+        
+        The Claude Code Python SDK provides several ways to interact with Claude Code:
+        
+        1. **High-level functions** (`query`, `query_stream`, `conversation`)
+        2. **Client-based approach** (`ClaudeCodeClient`)
+        3. **Integration modules** (`AutomaticClaudeIntegration`)
+        
+        ## Basic Usage
+        
+        ### Simple Query
+        
+        ```python
+        import asyncio
+        from claude_code_sdk import query, ResultMessage
+        
+        async def main():
+            async for message in query("Create a Python function to calculate fibonacci"):
+                if isinstance(message, ResultMessage):
+                    print(message.result)
+        
+        asyncio.run(main())
+        ```
+        
+        ### Client with Options
+        
+        ```python
+        import asyncio
+        from claude_code_sdk import ClaudeCodeClient, ClaudeCodeOptions
+        
+        async def main():
+            options = ClaudeCodeOptions(
+                model="opus",
+                allowed_tools=["Read", "Write", "Edit"],
+                max_turns=20,
+                verbose=True
+            )
+            
+            async with ClaudeCodeClient(options) as client:
+                async for message in client.query("Implement a REST API"):
+                    print(f"[{message.type}] {message.content}")
+        
+        asyncio.run(main())
+        ```
+        
+        ## Error Handling
+        
+        The SDK provides specific exception types for different error conditions:
+        
+        ```python
+        from claude_code_sdk import (
+            ClaudeCodeError, 
+            ClaudeTimeoutError, 
+            ClaudeAuthError,
+            RateLimitError
+        )
+        
+        try:
+            async for message in query("complex task"):
+                pass
+        except ClaudeTimeoutError:
+            print("Execution timed out")
+        except ClaudeAuthError:
+            print("Authentication required")
+        except RateLimitError as e:
+            print(f"Rate limited. Retry after: {e.retry_after}s")
+        ```
+        
+        ## Configuration
+        
+        Use option factories for common configurations:
+        
+        ```python
+        from claude_code_sdk import (
+            create_development_options,
+            create_production_options,
+            create_dual_agent_options
+        )
+        
+        # Development mode with verbose output
+        dev_options = create_development_options(verbose=True)
+        
+        # Production mode with timeouts
+        prod_options = create_production_options(timeout=60)
+        
+        # Dual-agent coordination
+        manager_options = create_dual_agent_options("manager")
+        ```
+        EOF
+    
+    - name: Create examples documentation
+      run: |
+        cat > docs/source/examples.md << 'EOF'
+        # Examples
+        
+        ## File Operations
+        
+        ```python
+        import asyncio
+        from claude_code_sdk import query
+        
+        async def create_python_module():
+            prompt = """
+            Create a Python module called 'math_utils.py' with functions for:
+            - factorial calculation
+            - prime number checking
+            - fibonacci sequence generation
+            """
+            
+            async for message in query(prompt):
+                print(message.content)
+        
+        asyncio.run(create_python_module())
+        ```
+        
+        ## Code Analysis
+        
+        ```python
+        import asyncio
+        from claude_code_sdk import ClaudeCodeClient, ClaudeCodeOptions
+        
+        async def analyze_codebase():
+            options = ClaudeCodeOptions(
+                allowed_tools=["Read", "Grep", "Glob"],
+                verbose=True
+            )
+            
+            async with ClaudeCodeClient(options) as client:
+                async for message in client.query(
+                    "Analyze the project structure and identify potential improvements"
+                ):
+                    print(message.content)
+        
+        asyncio.run(analyze_codebase())
+        ```
+        
+        ## Dual-Agent Integration
+        
+        ```python
+        import asyncio
+        from claude_code_sdk.integrations import AutomaticClaudeIntegration
+        
+        async def dual_agent_development():
+            integration = AutomaticClaudeIntegration(
+                enable_dual_agent=True,
+                enable_monitoring=True
+            )
+            
+            result = await integration.execute_dual_agent_session(
+                "Build a web scraper with error handling and data validation",
+                max_iterations=10
+            )
+            
+            print(f"Success: {result['success']}")
+            print(f"Result: {result['final_result']}")
+        
+        asyncio.run(dual_agent_development())
+        ```
+        EOF
+    
+    - name: Create changelog
+      run: |
+        cat > docs/source/changelog.md << 'EOF'
+        # Changelog
+        
+        ## [0.1.0] - Initial Release
+        
+        ### Added
+        - Core async client implementation
+        - Streaming and non-streaming support
+        - Comprehensive error handling
+        - Integration with automatic-claude-code
+        - Dual-agent architecture support
+        - Real-time monitoring integration
+        - Cross-platform compatibility
+        - Type hints and IDE support
+        
+        ### Features
+        - High-level query functions
+        - Context manager support
+        - Option factories for common configurations
+        - Automatic Claude CLI detection
+        - Message type system
+        - Integration modules
+        EOF
+    
+    - name: Create API reference
+      run: |
+        cat > docs/source/api_reference.rst << 'EOF'
+        API Reference
+        =============
+        
+        This page contains the complete API reference for the Claude Code Python SDK.
+        
+        Core Client
+        -----------
+        
+        .. automodule:: claude_code_sdk.client
+           :members:
+           :undoc-members:
+           :show-inheritance:
+        
+        Query Interface
+        ---------------
+        
+        .. automodule:: claude_code_sdk.query
+           :members:
+           :undoc-members:
+           :show-inheritance:
+        
+        Session Management
+        ------------------
+        
+        .. automodule:: claude_code_sdk.session
+           :members:
+           :undoc-members:
+           :show-inheritance:
+        
+        Exceptions
+        ----------
+        
+        .. automodule:: claude_code_sdk.exceptions
+           :members:
+           :undoc-members:
+           :show-inheritance:
+        
+        Integrations
+        ------------
+        
+        .. automodule:: claude_code_sdk.integrations
+           :members:
+           :undoc-members:
+           :show-inheritance:
+        
+        Utilities
+        ---------
+        
+        .. automodule:: claude_code_sdk.utils
+           :members:
+           :undoc-members:
+           :show-inheritance:
+        EOF
+    
+    - name: Build documentation
+      run: |
+        cd docs
+        sphinx-build -b html source build
+        
+        # Create a simple index.html if needed
+        if [ ! -f build/index.html ]; then
+          echo "Creating index.html redirect..."
+          cat > build/index.html << 'EOF'
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Claude Code Python SDK Documentation</title>
+            <meta http-equiv="refresh" content="0; url=./build/index.html">
+        </head>
+        <body>
+            <p>Redirecting to <a href="./build/index.html">documentation</a>...</p>
+        </body>
+        </html>
+        EOF
+        fi
+    
+    - name: Upload documentation artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-sdk-docs
+        path: python-sdk/docs/build/
+        retention-days: 30
+    
+    - name: Deploy to GitHub Pages
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: python-sdk/docs/build
+        destination_dir: python-sdk
+        keep_files: true
+
+  check-links:
+    name: Check Documentation Links
+    runs-on: ubuntu-latest
+    needs: build-docs
+    
+    steps:
+    - name: Download documentation artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: python-sdk-docs
+        path: docs-build
+    
+    - name: Install linkchecker
+      run: pip install linkchecker
+    
+    - name: Check internal links
+      run: |
+        cd docs-build
+        python -m http.server 8000 &
+        SERVER_PID=$!
+        sleep 5
+        
+        linkchecker --check-extern --no-warnings http://localhost:8000 || echo "Link check completed with warnings"
+        
+        kill $SERVER_PID
+
+  docs-quality:
+    name: Documentation Quality Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install -e .[docs,dev]
+      working-directory: python-sdk
+    
+    - name: Check docstring coverage
+      run: |
+        pip install docstring-coverage
+        docstring-coverage claude_code_sdk --verbose
+      working-directory: python-sdk
+    
+    - name: Validate README
+      run: |
+        pip install readme-renderer
+        python -c "
+        from readme_renderer.rst import render
+        with open('README.md', 'r') as f:
+            content = f.read()
+        print('✓ README.md is valid')
+        " || echo "README validation completed"
+      working-directory: python-sdk

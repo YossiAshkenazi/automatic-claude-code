@@ -46,6 +46,19 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 - ✅ **Comprehensive Testing**: 45+ tests ensuring UI reliability and data accuracy
 - ✅ **Production Ready**: Enhanced API connectivity and state management
 
+## 📚 Documentation
+
+The project documentation has been organized into logical categories for easy navigation:
+
+- **[Documentation Index](./docs/INDEX.md)** - Complete documentation overview
+- **[Quick Start Guide](./docs/setup/QUICK_START.md)** - Get started in minutes
+- **[Architecture Overview](./docs/architecture/overview.md)** - System design and architecture
+- **[Development Guide](./docs/development/prd.md)** - Development documentation
+- **[Testing Guide](./docs/testing/TESTING_GUIDE.md)** - Testing procedures
+- **[API Reference](./docs/reference/api-documentation.md)** - API documentation
+
+For the complete documentation structure, see [docs/INDEX.md](./docs/INDEX.md).
+
 ## Installation
 
 ### Method 1: Global Installation (Recommended)

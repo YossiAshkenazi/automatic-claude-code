@@ -14,340 +14,15 @@ import json
 import time
 import random
 from pathlib import Path
-from typing import Optional, AsyncGenerator, Dict, Any, List, Set, Tuple
+from typing import Optional, AsyncGenerator, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import Enum
 import shutil
 import logging
-import threading
-import weakref
-import signal
-from contextlib import asynccontextmanager
-
-# Try to import psutil for advanced process management, fallback gracefully
-try:
-    import psutil
-    HAS_PSUTIL = True
-except ImportError:
-    HAS_PSUTIL = False
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-
-class ProcessState(Enum):
-    """Process lifecycle states for tracking"""
-    IDLE = "idle"
-    STARTING = "starting"
-    RUNNING = "running"
-    TERMINATING = "terminating"
-    TERMINATED = "terminated"
-    FAILED = "failed"
-
-
-class ResourceType(Enum):
-    """Types of resources to track"""
-    PROCESS = "process"
-    STREAM = "stream"
-    TIMER = "timer"
-    TASK = "task"
-    SIGNAL_HANDLER = "signal_handler"
-
-
-@dataclass
-class TrackedResource:
-    """Resource tracking metadata"""
-    resource_id: str
-    resource_type: ResourceType
-    resource_ref: weakref.ref
-    created_at: float
-    description: str
-    cleanup_method: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    cleaned_up: bool = False
-    cleanup_error: Optional[str] = None
-
-
-class ProcessHandleManager:
-    """
-    Epic 3-inspired process handle management for Python async processes.
-    
-    Provides:
-    - Automatic tracking of all spawned processes and resources
-    - Guaranteed cleanup on cancellation or timeout
-    - Resource leak detection and prevention
-    - Cross-platform signal handling
-    - Graceful termination with escalation to force kill
-    """
-    
-    _instance = None
-    _lock = threading.Lock()
-    
-    def __init__(self):
-        self.tracked_resources: Dict[str, TrackedResource] = {}
-        self.resource_counter = 0
-        self.cleanup_in_progress = False
-        self.shutdown_initiated = False
-        self.logger = logging.getLogger(f"{__name__}.ProcessHandleManager")
-        
-        # Resource cleanup callbacks by type
-        self.cleanup_handlers = {
-            ResourceType.PROCESS: self._cleanup_process_resource,
-            ResourceType.STREAM: self._cleanup_stream_resource,
-            ResourceType.TIMER: self._cleanup_timer_resource,
-            ResourceType.TASK: self._cleanup_task_resource,
-            ResourceType.SIGNAL_HANDLER: self._cleanup_signal_handler_resource,
-        }
-        
-        # Setup exit handlers
-        self._setup_exit_handlers()
-    
-    @classmethod
-    def get_instance(cls) -> 'ProcessHandleManager':
-        """Thread-safe singleton instance"""
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
-    
-    def register_resource(self, resource: Any, resource_type: ResourceType, 
-                         description: str, cleanup_method: Optional[str] = None,
-                         metadata: Optional[Dict[str, Any]] = None) -> str:
-        """Register a resource for tracking and cleanup"""
-        self.resource_counter += 1
-        resource_id = f"{resource_type.value}_{self.resource_counter}_{int(time.time())}"
-        
-        try:
-            resource_ref = weakref.ref(resource)
-        except TypeError:
-            # Some objects can't be weakly referenced, store directly
-            resource_ref = lambda: resource
-        
-        tracked = TrackedResource(
-            resource_id=resource_id,
-            resource_type=resource_type,
-            resource_ref=resource_ref,
-            created_at=time.time(),
-            description=description,
-            cleanup_method=cleanup_method,
-            metadata=metadata or {},
-        )
-        
-        self.tracked_resources[resource_id] = tracked
-        
-        self.logger.debug(f"Registered {resource_type.value} resource: {resource_id} ({description})")
-        
-        return resource_id
-    
-    def unregister_resource(self, resource_id: str) -> bool:
-        """Unregister a resource (when properly cleaned up)"""
-        if resource_id in self.tracked_resources:
-            resource = self.tracked_resources.pop(resource_id)
-            self.logger.debug(f"Unregistered {resource.resource_type.value} resource: {resource_id}")
-            return True
-        return False
-    
-    async def force_cleanup_all(self, timeout: float = 5.0) -> Tuple[int, int, List[str]]:
-        """
-        Force cleanup of all tracked resources.
-        
-        Returns: (cleaned_count, failed_count, errors)
-        """
-        if self.cleanup_in_progress:
-            self.logger.warning("Cleanup already in progress")
-            return 0, 0, ["Cleanup already in progress"]
-        
-        self.cleanup_in_progress = True
-        self.logger.info(f"Starting force cleanup of {len(self.tracked_resources)} resources")
-        
-        cleaned_count = 0
-        failed_count = 0
-        errors = []
-        
-        # Get snapshot of resources to avoid modification during iteration
-        resources_snapshot = list(self.tracked_resources.items())
-        
-        # Group resources by priority (processes first, then streams, etc.)
-        priority_order = [
-            ResourceType.PROCESS,
-            ResourceType.STREAM, 
-            ResourceType.TASK,
-            ResourceType.TIMER,
-            ResourceType.SIGNAL_HANDLER,
-        ]
-        
-        for resource_type in priority_order:
-            type_resources = [(rid, res) for rid, res in resources_snapshot 
-                            if res.resource_type == resource_type and not res.cleaned_up]
-            
-            if not type_resources:
-                continue
-                
-            self.logger.debug(f"Cleaning up {len(type_resources)} {resource_type.value} resources")
-            
-            for resource_id, tracked_resource in type_resources:
-                try:
-                    await asyncio.wait_for(
-                        self._cleanup_single_resource(resource_id, tracked_resource),
-                        timeout=max(0.5, timeout / len(resources_snapshot))
-                    )
-                    cleaned_count += 1
-                except asyncio.TimeoutError:
-                    error_msg = f"Timeout cleaning up {resource_type.value} resource {resource_id}"
-                    errors.append(error_msg)
-                    self.logger.error(error_msg)
-                    failed_count += 1
-                except Exception as e:
-                    error_msg = f"Error cleaning up {resource_type.value} resource {resource_id}: {e}"
-                    errors.append(error_msg)
-                    self.logger.error(error_msg)
-                    failed_count += 1
-        
-        self.cleanup_in_progress = False
-        
-        self.logger.info(f"Cleanup completed: {cleaned_count} cleaned, {failed_count} failed")
-        return cleaned_count, failed_count, errors
-    
-    async def _cleanup_single_resource(self, resource_id: str, tracked_resource: TrackedResource):
-        """Clean up a single tracked resource"""
-        if tracked_resource.cleaned_up:
-            return
-        
-        resource = tracked_resource.resource_ref()
-        if resource is None:
-            # Resource was garbage collected
-            tracked_resource.cleaned_up = True
-            self.unregister_resource(resource_id)
-            return
-        
-        try:
-            cleanup_handler = self.cleanup_handlers.get(tracked_resource.resource_type)
-            if cleanup_handler:
-                await cleanup_handler(resource, tracked_resource)
-            
-            tracked_resource.cleaned_up = True
-            self.unregister_resource(resource_id)
-            
-        except Exception as e:
-            tracked_resource.cleanup_error = str(e)
-            raise
-    
-    async def _cleanup_process_resource(self, process: asyncio.subprocess.Process, tracked: TrackedResource):
-        """Clean up a subprocess resource"""
-        if process.returncode is not None:
-            return  # Already terminated
-        
-        try:
-            # Phase 1: Graceful termination
-            process.terminate()
-            try:
-                await asyncio.wait_for(process.wait(), timeout=2.0)
-                self.logger.debug(f"Process {process.pid} terminated gracefully")
-                return
-            except asyncio.TimeoutError:
-                pass
-            
-            # Phase 2: Force kill
-            self.logger.warning(f"Force killing process {process.pid}")
-            process.kill()
-            await process.wait()
-            
-        except ProcessLookupError:
-            # Process already terminated
-            pass
-        except Exception as e:
-            self.logger.error(f"Error terminating process {getattr(process, 'pid', 'unknown')}: {e}")
-    
-    async def _cleanup_stream_resource(self, stream, tracked: TrackedResource):
-        """Clean up a stream resource"""
-        try:
-            if hasattr(stream, 'close') and callable(stream.close):
-                if asyncio.iscoroutinefunction(stream.close):
-                    await stream.close()
-                else:
-                    stream.close()
-            elif hasattr(stream, 'cancel') and callable(stream.cancel):
-                stream.cancel()
-        except Exception as e:
-            self.logger.error(f"Error cleaning up stream: {e}")
-    
-    async def _cleanup_timer_resource(self, timer, tracked: TrackedResource):
-        """Clean up a timer resource"""
-        try:
-            if hasattr(timer, 'cancel') and callable(timer.cancel):
-                timer.cancel()
-        except Exception as e:
-            self.logger.error(f"Error cleaning up timer: {e}")
-    
-    async def _cleanup_task_resource(self, task, tracked: TrackedResource):
-        """Clean up an async task resource"""
-        try:
-            if not task.done():
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-        except Exception as e:
-            self.logger.error(f"Error cleaning up task: {e}")
-    
-    async def _cleanup_signal_handler_resource(self, handler_info, tracked: TrackedResource):
-        """Clean up a signal handler resource"""
-        try:
-            signal_num = handler_info.get('signal')
-            if signal_num:
-                signal.signal(signal_num, signal.SIG_DFL)
-        except Exception as e:
-            self.logger.error(f"Error cleaning up signal handler: {e}")
-    
-    def get_resource_stats(self) -> Dict[str, Any]:
-        """Get statistics about tracked resources"""
-        stats = {
-            'total_resources': len(self.tracked_resources),
-            'by_type': {},
-            'cleanup_in_progress': self.cleanup_in_progress,
-            'oldest_resource_age': None,
-        }
-        
-        current_time = time.time()
-        oldest_age = None
-        
-        for resource in self.tracked_resources.values():
-            resource_type = resource.resource_type.value
-            stats['by_type'][resource_type] = stats['by_type'].get(resource_type, 0) + 1
-            
-            age = current_time - resource.created_at
-            if oldest_age is None or age > oldest_age:
-                oldest_age = age
-        
-        stats['oldest_resource_age'] = oldest_age
-        return stats
-    
-    def _setup_exit_handlers(self):
-        """Setup process exit handlers for cleanup"""
-        def signal_handler(signum, frame):
-            if not self.shutdown_initiated:
-                self.shutdown_initiated = True
-                self.logger.info(f"Received signal {signum}, initiating shutdown")
-                # Run cleanup in the event loop if possible
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.create_task(self.force_cleanup_all())
-                    else:
-                        loop.run_until_complete(self.force_cleanup_all())
-                except Exception as e:
-                    self.logger.error(f"Error during signal cleanup: {e}")
-        
-        # Register signal handlers for graceful shutdown
-        for sig in [signal.SIGINT, signal.SIGTERM]:
-            try:
-                signal.signal(sig, signal_handler)
-            except (OSError, ValueError):
-                # Signal not available on this platform
-                pass
 
 
 class CircuitBreakerState(Enum):
@@ -513,12 +188,6 @@ class ClaudeCliOptions:
     working_directory: Optional[Path] = None
     timeout: int = 300  # 5 minutes default
     cli_path: Optional[str] = None  # Custom path to claude CLI
-    # Enhanced error handling options
-    enable_circuit_breaker: bool = True
-    circuit_breaker_config: Optional[CircuitBreakerConfig] = None
-    retry_strategy: Optional[RetryStrategy] = None
-    network_timeout: int = 30  # Network-specific timeout
-    connection_timeout: int = 10  # Connection establishment timeout
 
     def to_cli_args(self) -> List[str]:
         """Convert options to CLI arguments"""
@@ -565,44 +234,12 @@ class ClaudeCliWrapper:
     
     This approach bypasses API key requirements by using the CLI directly,
     similar to how Dan Disler handles Gemini CLI in agentic-drop-zones.
-    
-    Enhanced with:
-    - Circuit breaker pattern for authentication failures
-    - Exponential backoff retry logic with jitter
-    - Comprehensive network timeout handling
-    - Transient failure recovery
     """
     
     def __init__(self, options: Optional[ClaudeCliOptions] = None):
         self.options = options or ClaudeCliOptions()
         self.cli_path = self._find_claude_cli()
         self.process: Optional[asyncio.subprocess.Process] = None
-        self.process_state = ProcessState.IDLE
-        
-        # Initialize process handle manager for resource tracking
-        self.handle_manager = ProcessHandleManager.get_instance()
-        self.registered_resources: Set[str] = set()
-        
-        # Initialize circuit breaker for authentication failures
-        if self.options.enable_circuit_breaker:
-            circuit_config = self.options.circuit_breaker_config or CircuitBreakerConfig()
-            self.circuit_breaker = AuthenticationCircuitBreaker(circuit_config)
-        else:
-            self.circuit_breaker = None
-        
-        # Initialize retry strategy
-        self.retry_strategy = self.options.retry_strategy or RetryStrategy(
-            max_attempts=3,
-            base_delay=1.0,
-            max_delay=30.0,
-            backoff_factor=2.0,
-            jitter=True
-        )
-        
-        # Track authentication state
-        self.last_auth_check = 0.0
-        self.auth_status_cache = None
-        self.consecutive_failures = 0
         
     def _find_claude_cli(self) -> str:
         """Find Claude CLI executable"""
@@ -641,15 +278,14 @@ class ClaudeCliWrapper:
     
     async def execute(self, prompt: str) -> AsyncGenerator[CliMessage, None]:
         """
-        Enhanced execute method with circuit breaker, comprehensive retry logic, and robust error handling.
+        Enhanced execute method with timeout enforcement, retry logic, and comprehensive error handling.
         
-        Features:
-        - Circuit breaker pattern prevents excessive authentication failures
-        - Exponential backoff with jitter for transient failures
-        - Network timeout enforcement with connection-specific timeouts
-        - Authentication status detection and recovery guidance
-        - Graceful process termination and resource cleanup
-        - Comprehensive error classification and handling
+        Improvements:
+        - Timeout enforcement using asyncio.timeout()
+        - Exponential backoff retry for transient failures
+        - Enhanced authentication error detection
+        - Graceful process termination sequence (SIGTERM → wait → SIGKILL)
+        - Better resource cleanup and error recovery
         """
         
         # Validate input
@@ -658,22 +294,6 @@ class ClaudeCliWrapper:
                 type="error",
                 content="Empty prompt provided",
                 metadata={"validation_error": True}
-            )
-            return
-        
-        # Check circuit breaker
-        if self.circuit_breaker and not self.circuit_breaker.can_execute():
-            breaker_status = self.circuit_breaker.get_status()
-            yield CliMessage(
-                type="auth_error",
-                content=f"Circuit breaker OPEN - too many authentication failures. "
-                        f"Next retry in {breaker_status['next_attempt_in']:.1f}s. "
-                        f"Please verify authentication: claude setup-token",
-                metadata={
-                    "circuit_breaker_open": True,
-                    "breaker_status": breaker_status,
-                    "auth_setup_required": True
-                }
             )
             return
         
@@ -687,11 +307,11 @@ class ClaudeCliWrapper:
         
         logger.info(f"Executing command: {' '.join(cmd[:4])}... (timeout: {self.options.timeout}s)")
         
-        # Enhanced retry logic using RetryStrategy
-        max_attempts = self.retry_strategy.max_attempts
-        execution_start_time = time.time()
+        # Retry logic with exponential backoff
+        max_retries = 3
+        base_delay = 1.0
         
-        for attempt in range(max_attempts):
+        for attempt in range(max_retries):
             try:
                 # Implement timeout enforcement
                 async with asyncio.timeout(self.options.timeout):
@@ -701,9 +321,6 @@ class ClaudeCliWrapper:
                     # Set environment variables for better CLI behavior
                     env["CLAUDE_NO_BROWSER"] = "1"  # Prevent browser launches in CI/automation
                     env["FORCE_COLOR"] = "0"  # Disable colors for parsing
-                    
-                    # Change state to starting
-                    self.process_state = ProcessState.STARTING
                     
                     self.process = await asyncio.create_subprocess_exec(
                         *cmd,
@@ -715,16 +332,6 @@ class ClaudeCliWrapper:
                         preexec_fn=os.setsid if hasattr(os, 'setsid') else None
                     )
                     
-                    # Register process with handle manager for tracking
-                    process_id = self.handle_manager.register_resource(
-                        self.process, ResourceType.PROCESS, 
-                        f"Claude CLI process (PID: {self.process.pid})",
-                        metadata={'cmd': cmd[:4], 'attempt': attempt + 1}
-                    )
-                    self.registered_resources.add(process_id)
-                    
-                    # Change state to running
-                    self.process_state = ProcessState.RUNNING
                     logger.info(f"Started Claude CLI process (PID: {self.process.pid})")
                     
                     # Stream output with timeout monitoring
@@ -740,24 +347,11 @@ class ClaudeCliWrapper:
                                 break
                     
                     except asyncio.CancelledError:
-                        logger.info("Execution cancelled by user - initiating resource cleanup")
-                        self.process_state = ProcessState.TERMINATING
-                        
-                        # Perform immediate cleanup before re-raising
-                        try:
-                            await self._enhanced_cleanup_with_tracking()
-                        except Exception as cleanup_error:
-                            logger.error(f"Error during cancellation cleanup: {cleanup_error}")
-                        
+                        logger.info("Execution cancelled by user")
                         yield CliMessage(
                             type="status",
-                            content="Execution cancelled - resources cleaned up",
-                            metadata={
-                                "cancelled": True, 
-                                "messages_received": message_count,
-                                "cleanup_attempted": True,
-                                "process_state": self.process_state.value
-                            }
+                            content="Execution cancelled",
+                            metadata={"cancelled": True, "messages_received": message_count}
                         )
                         raise
                     
@@ -795,18 +389,18 @@ class ClaudeCliWrapper:
                 # Force cleanup on timeout
                 await self._force_process_cleanup()
                 
-                if attempt < max_attempts - 1:
-                    delay = self.retry_strategy.base_delay * (2 ** attempt)  # Exponential backoff
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
                     yield CliMessage(
                         type="status",
-                        content=f"Timeout occurred, retrying in {delay}s... (attempt {attempt + 1}/{max_attempts})",
+                        content=f"Timeout occurred, retrying in {delay}s... (attempt {attempt + 1}/{max_retries})",
                         metadata={"retry_attempt": attempt + 1, "delay": delay}
                     )
                     await asyncio.sleep(delay)
                 else:
                     yield CliMessage(
                         type="error",
-                        content=f"Execution failed after {max_attempts} attempts due to timeout ({self.options.timeout}s)",
+                        content=f"Execution failed after {max_retries} attempts due to timeout ({self.options.timeout}s)",
                         metadata={"timeout": True, "max_retries_exceeded": True}
                     )
             
@@ -827,15 +421,8 @@ class ClaudeCliWrapper:
                 break  # No point retrying for permission issues
             
             except asyncio.CancelledError:
-                logger.info("Execution cancelled at retry level - performing comprehensive cleanup")
-                self.process_state = ProcessState.TERMINATING
-                
-                try:
-                    await self._enhanced_cleanup_with_tracking()
-                except Exception as cleanup_error:
-                    logger.error(f"Error during comprehensive cleanup: {cleanup_error}")
-                
-                self.process_state = ProcessState.TERMINATED
+                logger.info("Execution cancelled")
+                await self._force_process_cleanup()
                 raise
             
             except Exception as e:
@@ -846,11 +433,11 @@ class ClaudeCliWrapper:
                     "connection", "network", "timeout", "temporary", "unavailable"
                 ])
                 
-                if is_transient and attempt < max_attempts - 1:
-                    delay = self.retry_strategy.base_delay * (2 ** attempt)
+                if is_transient and attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
                     yield CliMessage(
                         type="status",
-                        content=f"Transient error, retrying in {delay}s... (attempt {attempt + 1}/{max_attempts})",
+                        content=f"Transient error, retrying in {delay}s... (attempt {attempt + 1}/{max_retries})",
                         metadata={"retry_attempt": attempt + 1, "delay": delay, "error": str(e)}
                     )
                     await asyncio.sleep(delay)
@@ -934,14 +521,20 @@ class ClaudeCliWrapper:
                 logger.error(f"Stream reader error ({'stderr' if is_stderr else 'stdout'}): {e}")
         
         try:
-            # Create stream readers for stdout and stderr
-            stream_readers = []
+            # Create concurrent tasks for stdout and stderr
+            tasks = []
             
             if self.process.stdout:
-                stream_readers.append(read_stream(self.process.stdout, False))
+                stdout_task = asyncio.create_task(
+                    self._collect_stream_messages(read_stream(self.process.stdout, False))
+                )
+                tasks.append(stdout_task)
             
             if self.process.stderr:
-                stream_readers.append(read_stream(self.process.stderr, True))
+                stderr_task = asyncio.create_task(
+                    self._collect_stream_messages(read_stream(self.process.stderr, True))
+                )
+                tasks.append(stderr_task)
             
             # Process messages from both streams concurrently
             message_queue = asyncio.Queue()
@@ -961,8 +554,8 @@ class ClaudeCliWrapper:
             
             # Start message collection tasks
             collection_tasks = []
-            for stream_reader in stream_readers:
-                collection_task = asyncio.create_task(queue_messages(stream_reader))
+            for task in tasks:
+                collection_task = asyncio.create_task(queue_messages(task))
                 collection_tasks.append(collection_task)
             
             # Yield messages as they arrive
@@ -1257,121 +850,23 @@ class ClaudeCliWrapper:
             self.process.kill()
             logger.info("Killed running Claude CLI process")
 
-    async def _enhanced_cleanup_with_tracking(self):
-        """
-        Enhanced cleanup method with process handle tracking and Epic 3-style resource management.
-        
-        Features:
-        - Tracks and cleans up all registered resources
-        - Graceful termination with escalation to force kill
-        - Comprehensive error handling and logging
-        - Resource leak detection and prevention
-        """
-        cleanup_start_time = time.time()
-        
-        try:
-            self.process_state = ProcessState.TERMINATING
-            
-            # Step 1: Clean up all tracked resources via handle manager
-            if self.registered_resources:
-                logger.info(f"Cleaning up {len(self.registered_resources)} tracked resources")
-                
-                # Force cleanup through handle manager
-                cleaned_count, failed_count, errors = await self.handle_manager.force_cleanup_all(timeout=3.0)
-                
-                if errors:
-                    logger.warning(f"Resource cleanup errors: {errors}")
-                
-                logger.info(f"Resource cleanup completed: {cleaned_count} cleaned, {failed_count} failed")
-                
-                # Clear our resource tracking
-                self.registered_resources.clear()
-            
-            # Step 2: Explicit process cleanup (backup in case handle manager missed it)
-            if self.process:
-                await self._cleanup_process_explicit()
-            
-            self.process_state = ProcessState.TERMINATED
-            
-            cleanup_duration = time.time() - cleanup_start_time
-            logger.info(f"Enhanced cleanup completed in {cleanup_duration:.2f}s")
-            
-        except Exception as e:
-            self.process_state = ProcessState.FAILED
-            logger.error(f"Error during enhanced cleanup: {e}")
-            raise
-    
-    async def _cleanup_process_explicit(self):
-        """Explicit process cleanup with enhanced error handling"""
-        if not self.process or self.process.returncode is not None:
-            return
-        
-        process_pid = getattr(self.process, 'pid', 'unknown')
-        logger.debug(f"Explicit cleanup of process {process_pid}")
-        
-        try:
-            # Phase 1: Graceful termination (SIGTERM)
-            self.process.terminate()
-            try:
-                await asyncio.wait_for(self.process.wait(), timeout=2.0)
-                logger.debug(f"Process {process_pid} terminated gracefully")
-                return
-            except asyncio.TimeoutError:
-                logger.warning(f"Process {process_pid} did not respond to SIGTERM")
-            
-            # Phase 2: Force kill (SIGKILL)
-            logger.warning(f"Force killing process {process_pid}")
-            self.process.kill()
-            
-            try:
-                await asyncio.wait_for(self.process.wait(), timeout=3.0)
-                logger.info(f"Process {process_pid} force killed successfully")
-            except asyncio.TimeoutError:
-                logger.error(f"Process {process_pid} did not respond to SIGKILL - may be zombie")
-        
-        except ProcessLookupError:
-            logger.debug(f"Process {process_pid} already terminated")
-        except Exception as e:
-            logger.error(f"Error during explicit process cleanup: {e}")
-        finally:
-            self.process = None
-
     async def cleanup(self):
-        """
-        Legacy cleanup method - enhanced to use new tracking system.
-        
-        Maintained for backward compatibility.
-        """
+        """Cleanup resources and terminate processes"""
         try:
-            await self._enhanced_cleanup_with_tracking()
+            if self.process:
+                if self.process.returncode is None:
+                    # Try graceful termination first
+                    self.process.terminate()
+                    try:
+                        await asyncio.wait_for(self.process.wait(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        # Force kill if graceful termination fails
+                        self.process.kill()
+                        await self.process.wait()
+                self.process = None
+                logger.info("Cleaned up Claude CLI process")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
-    
-    @asynccontextmanager
-    async def managed_execution(self, prompt: str):
-        """
-        Context manager for guaranteed resource cleanup.
-        
-        Usage:
-            async with wrapper.managed_execution("prompt") as execution:
-                async for message in execution:
-                    print(message.content)
-        """
-        try:
-            yield self.execute(prompt)
-        finally:
-            await self._enhanced_cleanup_with_tracking()
-    
-    def get_resource_stats(self) -> Dict[str, Any]:
-        """Get statistics about managed resources"""
-        handle_stats = self.handle_manager.get_resource_stats()
-        return {
-            'process_state': self.process_state.value,
-            'registered_resources': len(self.registered_resources),
-            'process_pid': getattr(self.process, 'pid', None) if self.process else None,
-            'process_returncode': getattr(self.process, 'returncode', None) if self.process else None,
-            'handle_manager_stats': handle_stats,
-        }
 
 
 # Simple synchronous wrapper for ease of use

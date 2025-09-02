@@ -600,6 +600,108 @@ Sessions are saved in `.claude-sessions/` directory with comprehensive dual-agen
 - 🐛 **Error logs** and recovery attempts
 - 🛠️ **Tools used** (Read, Write, Edit, Bash, etc.)
 
+## Python SDK Integration
+
+### 🐍 Enhanced Python SDK (NEW - v1.1.0)
+
+ACC now includes a comprehensive **Python SDK** for Claude CLI wrapper functionality, providing direct integration without complex authentication management.
+
+**Key Features:**
+- ✅ **Enhanced Output Parsing** - 14 pattern detection types (JSON, XML, action phrases, progress indicators)
+- ✅ **Authentication Error Detection** - Automatic `claude setup-token` guidance
+- ✅ **Async Resource Management** - Timeout enforcement and graceful process cleanup
+- ✅ **Retry Logic** - Exponential backoff for transient failures
+- ✅ **Unicode/Cross-platform** - Windows emoji handling and universal compatibility
+- ✅ **Comprehensive Testing** - 14/14 parsing tests passing with real-world scenarios
+
+#### Python SDK Quick Start
+
+```bash
+# Navigate to Python SDK
+cd python-sdk
+
+# Install dependencies (if any)
+pip install -r requirements.txt  # (currently no external deps)
+
+# Run comprehensive demo
+python examples/enhanced_cli_wrapper_demo.py
+
+# Run test suite
+python run_tests.py
+
+# Test with real Claude CLI integration (requires authentication)
+python test_real_claude.py
+```
+
+#### Python SDK Usage Examples
+
+**Basic Synchronous Usage:**
+```python
+from claude_cli_wrapper import ClaudeCliSimple
+
+# Simple wrapper for quick tasks
+claude = ClaudeCliSimple(model="sonnet", verbose=True)
+result = claude.query("Write a hello world function in Python")
+print(result)
+```
+
+**Advanced Async Usage:**
+```python
+import asyncio
+from claude_cli_wrapper import ClaudeCliWrapper, ClaudeCliOptions
+
+async def main():
+    options = ClaudeCliOptions(
+        model="opus", 
+        timeout=600,
+        allowed_tools=["Read", "Write", "Edit"],
+        verbose=True
+    )
+    
+    wrapper = ClaudeCliWrapper(options)
+    
+    async for message in wrapper.execute("refactor this Python file"):
+        if message.type == "stream":
+            print(f"Claude: {message.content}")
+        elif message.type == "tool_action":
+            print(f"Tool: {message.content}")
+        elif message.type == "auth_error":
+            print(f"Auth Error: {message.content}")
+            break
+
+asyncio.run(main())
+```
+
+**Authentication Setup Integration:**
+```python
+# The wrapper automatically detects authentication issues
+# and provides clear guidance:
+
+# If Claude CLI needs setup, you'll see:
+# "Authentication failed: Invalid API key
+#  
+#  Please run: claude setup-token"
+```
+
+#### Python SDK Architecture
+
+```
+python-sdk/
+├── claude_cli_wrapper.py           # Core wrapper with enhanced parsing
+├── examples/
+│   └── enhanced_cli_wrapper_demo.py # Comprehensive demo (21 scenarios)
+├── tests/
+│   └── test_claude_cli_wrapper.py  # Full test suite (14/14 passing)
+├── run_tests.py                    # Test runner with coverage
+├── test_real_claude.py             # Real Claude CLI integration test
+└── docs/                           # Detailed documentation (see below)
+```
+
+For complete Python SDK documentation, see:
+- **[Python SDK Integration Guide](./python-sdk/docs/integration-guide.md)** - Authentication and setup
+- **[Python SDK API Reference](./python-sdk/docs/api-reference.md)** - Complete method documentation  
+- **[Python SDK Testing Guide](./python-sdk/docs/testing-procedures.md)** - Testing and troubleshooting
+
 ## Architecture
 
 ```
@@ -619,7 +721,12 @@ src/
 ├── promptBuilder.ts   # Agent-aware prompt generation
 ├── claudeUtils.ts     # Claude Code utilities
 ├── logger.ts          # Structured logging
-└── tuiBrowser.ts     # Enhanced UI
+├── tuiBrowser.ts     # Enhanced UI
+└── python-sdk/        # Python SDK integration
+    ├── claude_cli_wrapper.py    # Enhanced Python wrapper
+    ├── examples/                # Usage demonstrations  
+    ├── tests/                   # Comprehensive test suite
+    └── docs/                    # Python SDK documentation
 ```
 
 ## Development

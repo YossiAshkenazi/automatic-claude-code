@@ -5,7 +5,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Logger } from '../interfaces/logger';
+import { Stats } from 'fs';
 
 export class AsyncFileHelpers {
   /**
@@ -25,7 +25,7 @@ export class AsyncFileHelpers {
    */
   static async findFirstExistingPath(
     paths: string[], 
-    logger?: Logger
+    logger?: { debug: (msg: string) => void }
   ): Promise<string | null> {
     for (const searchPath of paths) {
       try {
@@ -117,7 +117,7 @@ export class AsyncFileHelpers {
   /**
    * Get file stats asynchronously
    */
-  static async getStats(filePath: string): Promise<fs.Stats | null> {
+  static async getStats(filePath: string): Promise<Stats | null> {
     try {
       return await fs.stat(filePath);
     } catch {

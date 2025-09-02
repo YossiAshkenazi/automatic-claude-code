@@ -31,6 +31,7 @@ import {
   ModelQuotaError,
   RetryExhaustedError
 } from './services/sdkClaudeExecutor';
+import { SDKChecker } from './utils/sdkChecker';
 // BrowserSessionManager deprecated - browser auth handled by SDK
 import Table from 'cli-table3';
 
@@ -480,12 +481,23 @@ class AutomaticClaudeCode {
 
     if (error instanceof SDKNotInstalledError || error instanceof ClaudeInstallationError) {
       console.error(chalk.red.bold('\n📦 Claude Installation Issue'));
-      console.log(chalk.yellow('Claude Code is not properly installed.'));
-      console.log(chalk.cyan('\n📋 Installation Options:'));
+      console.log(chalk.yellow('Claude Code SDK is not properly installed or configured.'));
+      console.log(chalk.cyan('\n📋 Quick Fix Options:'));
       console.log(chalk.white('  Option 1 (Recommended): npm install -g @anthropic-ai/claude-code'));
-      console.log(chalk.white('  Option 2: curl -sL https://claude.ai/install.sh | sh'));
-      console.log(chalk.white('  Option 3: Download from https://claude.ai/download'));
-      console.log(chalk.yellow('\n💡 After installation, run "claude auth" to authenticate'));
+      console.log(chalk.white('  Option 2: pnpm install -g @anthropic-ai/claude-code'));
+      console.log(chalk.white('  Option 3: curl -sL https://claude.ai/install.sh | sh'));
+      
+      console.log(chalk.blue('\n🔧 Troubleshooting Steps:'));
+      console.log(chalk.gray('  1. Verify installation: claude --version'));
+      console.log(chalk.gray('  2. Check global packages: npm list -g --depth=0'));
+      console.log(chalk.gray('  3. Run comprehensive check: acc --verify-claude-cli'));
+      console.log(chalk.gray('  4. For detailed diagnosis: DEBUG_CLAUDE_PATH=true acc run "test"'));
+      
+      console.log(chalk.yellow('\n⚡ Alternative Solutions:'));
+      console.log(chalk.gray('  • Use --use-legacy flag to bypass SDK if Claude CLI is installed'));
+      console.log(chalk.gray('  • Set ANTHROPIC_API_KEY for API-only mode'));
+      console.log(chalk.gray('  • Check https://docs.anthropic.com for latest installation guides'));
+      
       return false; // Don't continue for installation issues
     }
 
@@ -733,6 +745,7 @@ async function main() {
     .option('--use-sdk-only', 'Force SDK-only execution (no CLI fallback)')
     .option('--use-legacy', 'Force legacy CLI execution (bypass SDK)')
     .option('--sdk-status', 'Show SDK and browser status')
+    .option('--verify-claude-cli', 'Comprehensive Claude CLI and SDK verification')
     .option('--quality-gate', 'Enable quality validation checks')
     .option('--check-browser-session', 'Check browser session status and exit')
     .option('--browser-status', 'Show all browser session status and exit')
@@ -753,6 +766,67 @@ async function main() {
         console.log(chalk.gray('   All execution now uses the Claude SDK directly'));
       }
       
+      // Handle comprehensive Claude CLI verification
+      if (options.verifyClaudeCli) {
+        console.log(chalk.blue.bold('\n🔍 Claude CLI & SDK Verification\n'));
+        
+        const sdkChecker = SDKChecker.getInstance();
+        try {
+          // Get comprehensive health status
+          const healthStatus = await sdkChecker.getSDKHealthStatus();
+          sdkChecker.displayHealthReport(healthStatus);
+          
+          // Additional verification steps
+          console.log(chalk.blue.bold('🧪 Additional Verification:\n'));
+          
+          // Test Claude CLI command
+          console.log(chalk.cyan('Testing Claude CLI command...'));
+          try {
+            const { command, baseArgs } = ClaudeUtils.getClaudeCommand();
+            console.log(chalk.green(`✅ Claude CLI found: ${command} ${baseArgs.join(' ')}`));
+          } catch (cliError) {
+            console.log(chalk.red(`❌ Claude CLI test failed: ${cliError instanceof Error ? cliError.message : String(cliError)}`));
+          }
+          
+          // Test SDK import
+          console.log(chalk.cyan('Testing SDK import...'));
+          const availabilityStatus = await sdkChecker.checkSDKAvailability(true);
+          if (availabilityStatus.isAvailable) {
+            console.log(chalk.green('✅ SDK import test passed'));
+          } else {
+            console.log(chalk.red('❌ SDK import test failed'));
+            console.log(chalk.yellow('Issues:'));
+            availabilityStatus.issues.forEach((issue, i) => {
+              console.log(chalk.yellow(`  ${i + 1}. ${issue}`));
+            });
+          }
+          
+          // Show installation guidance if needed
+          if (healthStatus.overallHealth !== 'healthy') {
+            console.log(chalk.blue.bold('\n📋 Installation Guidance:\n'));
+            const guidance = sdkChecker.getInstallationGuidance();
+            guidance.forEach(line => {
+              if (line.startsWith('📦') || line.startsWith('🔐') || line.startsWith('🔍')) {
+                console.log(chalk.blue.bold(line));
+              } else if (line.startsWith('Option') || line.startsWith('  ')) {
+                console.log(chalk.cyan(line));
+              } else if (line.trim() === '') {
+                console.log('');
+              } else {
+                console.log(chalk.gray(line));
+              }
+            });
+          }
+          
+          // Exit with appropriate code
+          process.exit(healthStatus.overallHealth === 'healthy' ? 0 : 1);
+          
+        } catch (error) {
+          console.error(chalk.red('❌ Verification failed:'), error);
+          process.exit(1);
+        }
+      }
+
       // Handle SDK status check
       if (options.sdkStatus) {
         const app = new AutomaticClaudeCode();
@@ -768,8 +842,22 @@ async function main() {
         console.log(chalk.cyan(`\nSDK Available: ${sdkHealth.available ? '✅' : '❌'}`));
         console.log(chalk.cyan(`Circuit Breaker: ${(sdkHealth as any).circuitBreakerOpen ? '🔴 Open' : '🟢 Closed'}`));
         
+        // Enhanced SDK health info from the new checker
+        if (sdkHealth.overallHealth) {
+          const healthColor = sdkHealth.overallHealth === 'healthy' ? chalk.green : 
+                             sdkHealth.overallHealth === 'partial' ? chalk.yellow : chalk.red;
+          console.log(chalk.cyan(`Overall Health: ${healthColor(sdkHealth.overallHealth.toUpperCase())}`));
+        }
+        
+        if (sdkHealth.issues && sdkHealth.issues.length > 0) {
+          console.log(chalk.yellow(`Issues Found: ${sdkHealth.issues.length}`));
+        }
+        
         const browserHealth = healthMetrics.browserHealth || { available: false };
         console.log(chalk.cyan(`\nBrowser Sessions: ${browserHealth.available ? '✅' : '❌'}`));
+        
+        console.log(chalk.gray(`\nLast Health Check: ${sdkHealth.lastChecked?.toLocaleString() || 'Never'}`));
+        console.log(chalk.blue('\n💡 For detailed verification, use: acc --verify-claude-cli'));
         
         return;
       }

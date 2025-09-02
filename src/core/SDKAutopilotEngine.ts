@@ -1,10 +1,12 @@
 import { EventEmitter } from 'events';
 import { Logger } from '../logger';
 import { SessionManager } from '../sessionManager';
-import { SDKClaudeExecutor } from '../services/sdkClaudeExecutor';
+import { SDKClaudeExecutor, SDKNotInstalledError } from '../services/sdkClaudeExecutor';
 import { SDKDualAgentCoordinator, SDKDualAgentOptions } from '../agents/SDKDualAgentCoordinator';
 import { AgentCoordinatorConfig } from '../agents/agentTypes';
 import { TaskCompletionAnalyzer } from './TaskCompletionAnalyzer';
+import { SDKChecker, SDKAvailabilityStatus, SDKHealthStatus } from '../utils/sdkChecker';
+import chalk from 'chalk';
 
 export interface AutopilotOptions {
   workDir?: string;
@@ -70,9 +72,12 @@ export class SDKAutopilotEngine extends EventEmitter {
   private sdkExecutor: SDKClaudeExecutor;
   private completionAnalyzer: TaskCompletionAnalyzer;
   private dualAgentCoordinator?: SDKDualAgentCoordinator;
+  private sdkChecker: SDKChecker;
 
   private isRunning: boolean = false;
   private currentSessionId?: string;
+  private sdkHealthLastChecked?: Date;
+  private lastSDKHealth?: SDKHealthStatus;
 
   constructor(logger?: Logger) {
     super();
@@ -81,12 +86,13 @@ export class SDKAutopilotEngine extends EventEmitter {
     this.sessionManager = new SessionManager();
     this.sdkExecutor = new SDKClaudeExecutor(this.logger);
     this.completionAnalyzer = new TaskCompletionAnalyzer(this.logger);
+    this.sdkChecker = SDKChecker.getInstance();
     
-    this.logger.info('SDKAutopilotEngine initialized');
+    this.logger.info('SDKAutopilotEngine initialized with enhanced SDK checking');
   }
 
   /**
-   * Run autopilot loop using SDK execution
+   * Run autopilot loop using SDK execution with comprehensive availability checking
    */
   async runAutopilotLoop(task: string, options: AutopilotOptions = {}): Promise<AutopilotResult> {
     const startTime = Date.now();
@@ -99,9 +105,10 @@ export class SDKAutopilotEngine extends EventEmitter {
         options
       });
 
-      // Check SDK availability
-      if (!this.sdkExecutor.isAvailable()) {
-        throw new Error('Claude Code SDK is not available. Please install it globally: npm install -g @anthropic-ai/claude-code');
+      // Comprehensive SDK availability check
+      const sdkAvailabilityCheck = await this.checkSDKReadiness();
+      if (!sdkAvailabilityCheck.canProceed) {
+        return this.createSDKUnavailableResult(task, startTime, sdkAvailabilityCheck);
       }
 
       // Create session
@@ -549,6 +556,153 @@ Please continue working on this task. If you believe the task is complete, clear
   }
 
   /**
+   * Check SDK readiness for autopilot execution
+   */
+  private async checkSDKReadiness(): Promise<{
+    canProceed: boolean;
+    health?: SDKHealthStatus;
+    issues: string[];
+    recommendations: string[];
+    fallbackAvailable: boolean;
+  }> {
+    try {
+      this.logger.debug('Performing comprehensive SDK readiness check...');
+      
+      // Get fresh SDK health status
+      const health = await this.sdkChecker.getSDKHealthStatus();
+      this.lastSDKHealth = health;
+      this.sdkHealthLastChecked = new Date();
+      
+      const result = {
+        canProceed: false,
+        health,
+        issues: [...health.issues],
+        recommendations: [...health.actionItems],
+        fallbackAvailable: false
+      };
+
+      // Determine if we can proceed
+      if (health.overallHealth === 'healthy') {
+        result.canProceed = true;
+        this.logger.info('SDK health check passed - ready for autopilot execution');
+      } else if (health.overallHealth === 'partial') {
+        // SDK partially available - can proceed with limitations
+        result.canProceed = true;
+        this.logger.warning('SDK partially available - proceeding with limited functionality', {
+          availableFeatures: {
+            sdkAvailable: health.sdkAvailable,
+            canImportSDK: health.canImportSDK,
+            hasClaudeCLI: health.hasClaudeCLI,
+            authReady: health.authenticationReady
+          }
+        });
+        result.issues.push('SDK functionality may be limited');
+        result.recommendations.push('Consider resolving SDK issues for full functionality');
+      } else {
+        // SDK unavailable
+        result.canProceed = false;
+        this.logger.error('SDK health check failed - cannot proceed with autopilot execution', {
+          health: health.overallHealth,
+          issues: health.issues,
+          actionItems: health.actionItems
+        });
+        
+        // Check if fallback options are available
+        result.fallbackAvailable = this.checkFallbackOptions();
+      }
+
+      return result;
+      
+    } catch (error) {
+      this.logger.error('SDK readiness check failed', { error: String(error) });
+      return {
+        canProceed: false,
+        issues: [`SDK readiness check failed: ${String(error)}`],
+        recommendations: ['Verify Claude Code installation and try again'],
+        fallbackAvailable: false
+      };
+    }
+  }
+
+  /**
+   * Check if fallback execution options are available
+   */
+  private checkFallbackOptions(): boolean {
+    // Check for environment variables that might indicate API-only mode
+    const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY);
+    
+    // Check if we can fall back to legacy CLI execution
+    const hasClaudeCLI = this.lastSDKHealth?.hasClaudeCLI || false;
+    
+    return hasApiKey || hasClaudeCLI;
+  }
+
+  /**
+   * Create result when SDK is unavailable
+   */
+  private createSDKUnavailableResult(
+    task: string, 
+    startTime: number,
+    availabilityCheck: { health?: SDKHealthStatus; issues: string[]; recommendations: string[]; fallbackAvailable: boolean }
+  ): AutopilotResult {
+    const duration = Date.now() - startTime;
+    
+    let errorMessage = '🚫 Claude Code SDK Not Available\n\n';
+    
+    if (availabilityCheck.health) {
+      const health = availabilityCheck.health;
+      errorMessage += `Overall Health: ${health.overallHealth.toUpperCase()}\n`;
+      errorMessage += `SDK Available: ${health.sdkAvailable ? '✅' : '❌'}\n`;
+      errorMessage += `Can Import SDK: ${health.canImportSDK ? '✅' : '❌'}\n`;
+      errorMessage += `Claude CLI: ${health.hasClaudeCLI ? '✅' : '❌'}\n`;
+      errorMessage += `Authentication: ${health.authenticationReady ? '✅' : '❌'}\n\n`;
+    }
+    
+    if (availabilityCheck.issues.length > 0) {
+      errorMessage += '❌ Issues:\n';
+      availabilityCheck.issues.forEach((issue, index) => {
+        errorMessage += `  ${index + 1}. ${issue}\n`;
+      });
+      errorMessage += '\n';
+    }
+    
+    if (availabilityCheck.recommendations.length > 0) {
+      errorMessage += '💡 Recommendations:\n';
+      availabilityCheck.recommendations.slice(0, 3).forEach((rec, index) => {
+        errorMessage += `  ${index + 1}. ${rec}\n`;
+      });
+      errorMessage += '\n';
+    }
+    
+    if (availabilityCheck.fallbackAvailable) {
+      errorMessage += '🔄 Alternative Options:\n';
+      errorMessage += '  • Use --use-legacy flag to bypass SDK\n';
+      errorMessage += '  • Try acc --verify-claude-cli for diagnostics\n';
+    } else {
+      errorMessage += '📦 Installation Required:\n';
+      errorMessage += '  npm install -g @anthropic-ai/claude-code\n';
+    }
+
+    return {
+      success: false,
+      iterations: 0,
+      duration,
+      totalDuration: duration,
+      output: errorMessage,
+      sessionId: this.currentSessionId || '',
+      error: 'SDK unavailable',
+      errors: ['Claude Code SDK is not available or not properly configured'],
+      coordinationType: 'SINGLE_AGENT',
+      executionMethod: 'SDK-UNAVAILABLE',
+      successRate: 0,
+      modelUsed: 'N/A',
+      totalTokens: 0,
+      toolsInvoked: [],
+      qualityScore: 0
+    };
+  }
+
+  /**
    * Get health metrics for monitoring
    */
   async getHealthMetrics(): Promise<{
@@ -572,11 +726,34 @@ Please continue working on this task. If you believe the task is complete, clear
       status: string;
       sdkAvailable?: boolean;
       circuitBreakerOpen?: boolean;
+      overallHealth?: string;
+      lastChecked?: Date;
+      issues?: string[];
+      canImportSDK?: boolean;
+      hasClaudeCLI?: boolean;
+      authenticationReady?: boolean;
     };
     averageDuration: number;
   }> {
     // Get SDK status from executor
     const sdkStatus = await this.sdkExecutor.getSDKStatus();
+    
+    // Get comprehensive SDK health if not recently checked
+    const needsHealthCheck = !this.sdkHealthLastChecked || 
+      (Date.now() - this.sdkHealthLastChecked.getTime()) > 60000; // 1 minute
+    
+    let comprehensiveHealth: SDKHealthStatus | undefined;
+    if (needsHealthCheck || !this.lastSDKHealth) {
+      try {
+        comprehensiveHealth = await this.sdkChecker.getSDKHealthStatus();
+        this.lastSDKHealth = comprehensiveHealth;
+        this.sdkHealthLastChecked = new Date();
+      } catch (error) {
+        this.logger.debug('Failed to get comprehensive SDK health', { error: String(error) });
+      }
+    } else {
+      comprehensiveHealth = this.lastSDKHealth;
+    }
     
     return {
       isRunning: this.isRunning,
@@ -598,9 +775,33 @@ Please continue working on this task. If you believe the task is complete, clear
         available: sdkStatus.sdkAvailable,
         status: sdkStatus.sdkAvailable ? 'ready' : 'unavailable',
         sdkAvailable: sdkStatus.sdkAvailable,
-        circuitBreakerOpen: sdkStatus.circuitBreakerOpen
+        circuitBreakerOpen: sdkStatus.circuitBreakerOpen,
+        overallHealth: comprehensiveHealth?.overallHealth,
+        lastChecked: this.sdkHealthLastChecked,
+        issues: comprehensiveHealth?.issues || [],
+        canImportSDK: comprehensiveHealth?.canImportSDK,
+        hasClaudeCLI: comprehensiveHealth?.hasClaudeCLI,
+        authenticationReady: comprehensiveHealth?.authenticationReady
       },
       averageDuration: 30000
     };
+  }
+
+  /**
+   * Force refresh SDK health status
+   */
+  async refreshSDKHealth(): Promise<SDKHealthStatus> {
+    this.logger.debug('Forcing SDK health refresh...');
+    const health = await this.sdkChecker.getSDKHealthStatus();
+    this.lastSDKHealth = health;
+    this.sdkHealthLastChecked = new Date();
+    return health;
+  }
+
+  /**
+   * Display comprehensive SDK status for debugging
+   */
+  async displaySDKStatus(): Promise<void> {
+    await this.sdkExecutor.displaySDKStatus();
   }
 }

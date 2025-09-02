@@ -1,5 +1,7 @@
 import { Logger } from '../logger';
 import { SDKResponse, SDKResult } from '../types';
+import { SDKChecker, SDKAvailabilityStatus, SDKHealthStatus } from '../utils/sdkChecker';
+import chalk from 'chalk';
 // BrowserSessionManager removed - SDK handles browser auth directly
 
 export interface SDKExecutionResult {
@@ -101,14 +103,20 @@ export class SDKClaudeExecutor {
   private circuitBreakerOpen: boolean = false;
   private lastFailureTime: number = 0;
   private readonly maxRetries: number = 3;
+  private sdkChecker: SDKChecker;
+  private sdkStatus?: SDKAvailabilityStatus;
+  private initializationAttempted: boolean = false;
+  private gracefulDegradationEnabled: boolean = true;
 
   constructor(logger: Logger) {
     this.logger = logger;
+    this.sdkChecker = SDKChecker.getInstance();
     // Browser authentication is now handled transparently by the Claude SDK
     // Initialize SDK asynchronously without blocking constructor
-    this.initializeSDK().catch(() => {
+    this.initializeSDK().catch((error) => {
       // Initialization failed, will retry during execution
       this.isSDKAvailable = false;
+      this.logger.debug('SDK initialization failed during construction', { error: error?.message });
     });
   }
 
@@ -243,12 +251,25 @@ export class SDKClaudeExecutor {
   }
 
   /**
-   * Initialize the Claude Code SDK
+   * Initialize the Claude Code SDK with comprehensive availability checking
    */
   private async initializeSDK(): Promise<void> {
+    this.initializationAttempted = true;
+    
     try {
-      // Claude Code is an ESM module, so we need to use dynamic import
-      this.logger.debug('Attempting to load Claude Code SDK via dynamic import...');
+      // Use the new SDK checker for comprehensive availability testing
+      this.sdkStatus = await this.sdkChecker.checkSDKAvailability();
+      
+      if (!this.sdkStatus.isAvailable) {
+        this.logger.warning('Claude Code SDK not available', { 
+          issues: this.sdkStatus.issues,
+          recommendations: this.sdkStatus.recommendations 
+        });
+        this.isSDKAvailable = false;
+        return;
+      }
+
+      this.logger.debug('SDK availability confirmed, attempting to load...');
       
       // First try direct dynamic import (works if SDK is in node_modules)
       try {
@@ -263,8 +284,8 @@ export class SDKClaudeExecutor {
         this.logger.debug(`Direct import failed: ${String(importError)}`);
       }
       
-      // Try to find SDK path and import it
-      const sdkPath = await this.findSDKPath();
+      // Try to find SDK path and import it using the new checker
+      const sdkPath = this.sdkStatus.sdkPath || await this.findSDKPath();
       if (sdkPath) {
         try {
           // Convert Windows paths to file:// URLs for dynamic import
@@ -284,11 +305,21 @@ export class SDKClaudeExecutor {
         }
       }
       
-      throw new Error('Claude Code SDK not found or not accessible');
+      throw new SDKNotInstalledError('Claude Code SDK not found or not accessible after comprehensive search');
       
     } catch (error) {
       this.logger.debug(`SDK initialization failed: ${String(error)}`);
-      this.logger.warning('Claude Code SDK not available. Install with: npm install -g @anthropic-ai/claude-code');
+      
+      // Provide user-friendly error message based on the type of issue
+      if (error instanceof SDKNotInstalledError) {
+        this.logger.error('Claude Code SDK is not properly installed', { 
+          error: error.message,
+          installationGuidance: this.sdkChecker.getInstallationGuidance().slice(0, 5) // First 5 lines
+        });
+      } else {
+        this.logger.warning('Claude Code SDK initialization failed', { error: String(error) });
+      }
+      
       this.isSDKAvailable = false;
     }
   }
@@ -305,17 +336,25 @@ export class SDKClaudeExecutor {
   }
 
   /**
-   * Execute Claude using the SDK
+   * Execute Claude using the SDK with comprehensive fallback handling
    */
   async executeWithSDK(
     prompt: string,
     options: SDKClaudeOptions = {}
   ): Promise<SDKResult> {
-    // Ensure SDK is loaded
+    // Ensure SDK is loaded with retry mechanism
     if (!this.isSDKAvailable) {
-      await this.initializeSDK();
+      if (!this.initializationAttempted) {
+        this.logger.info('First-time SDK initialization...');
+        await this.initializeSDK();
+      } else {
+        // Re-attempt initialization after failure
+        this.logger.info('Re-attempting SDK initialization...');
+        await this.initializeSDK();
+      }
+      
       if (!this.isSDKAvailable) {
-        throw new Error('Claude Code SDK is not available. Please install it globally: npm install -g @anthropic-ai/claude-code');
+        return this.createSDKUnavailableResult(options);
       }
     }
 
@@ -482,6 +521,72 @@ export class SDKClaudeExecutor {
   }
 
   /**
+   * Creates a result for when SDK is unavailable with helpful guidance
+   */
+  private createSDKUnavailableResult(options: SDKClaudeOptions): SDKResult {
+    const errorMessage = this.generateSDKUnavailableMessage();
+    
+    // If graceful degradation is enabled, provide helpful guidance instead of hard failure
+    if (this.gracefulDegradationEnabled) {
+      return {
+        output: errorMessage,
+        exitCode: 2, // Different exit code to indicate SDK unavailability (not execution failure)
+        sessionId: this.generateSessionId(),
+        messages: [
+          {
+            type: 'error',
+            error: 'Claude Code SDK is not available',
+            timestamp: new Date()
+          }
+        ],
+        hasError: true,
+        executionTime: 0
+      };
+    } else {
+      // Hard failure mode
+      throw new SDKNotInstalledError(errorMessage);
+    }
+  }
+
+  /**
+   * Generate comprehensive SDK unavailable message
+   */
+  private generateSDKUnavailableMessage(): string {
+    let message = chalk.red.bold('🚫 Claude Code SDK Not Available\n\n');
+    
+    if (this.sdkStatus) {
+      if (this.sdkStatus.issues.length > 0) {
+        message += chalk.yellow('Issues Found:\n');
+        this.sdkStatus.issues.forEach((issue, index) => {
+          message += chalk.yellow(`  ${index + 1}. ${issue}\n`);
+        });
+        message += '\n';
+      }
+      
+      if (this.sdkStatus.recommendations.length > 0) {
+        message += chalk.blue('💡 Quick Fix:\n');
+        this.sdkStatus.recommendations.slice(0, 3).forEach((rec, index) => {
+          message += chalk.blue(`  ${index + 1}. ${rec}\n`);
+        });
+        message += '\n';
+      }
+    } else {
+      // Default message when status is not available
+      message += chalk.blue('💡 Installation Required:\n');
+      message += chalk.blue('  1. npm install -g @anthropic-ai/claude-code\n');
+      message += chalk.blue('  2. Verify installation: claude --version\n');
+      message += chalk.blue('  3. Authenticate: claude auth\n\n');
+    }
+    
+    message += chalk.cyan('📋 Alternative Solutions:\n');
+    message += chalk.cyan('  • Use --use-legacy flag to bypass SDK\n');
+    message += chalk.cyan('  • Set ANTHROPIC_API_KEY for API-only mode\n');
+    message += chalk.cyan('  • Check installation: acc --verify-claude-cli\n');
+    
+    return message;
+  }
+
+  /**
    * Generates a unique session ID for autopilot integration
    */
   private generateSessionId(): string {
@@ -523,6 +628,77 @@ export class SDKClaudeExecutor {
    */
   isAvailable(): boolean {
     return this.isSDKAvailable;
+  }
+
+  /**
+   * Get comprehensive SDK health status
+   */
+  async getSDKHealthStatus(): Promise<SDKHealthStatus> {
+    return await this.sdkChecker.getSDKHealthStatus();
+  }
+
+  /**
+   * Perform comprehensive SDK availability check with retry
+   */
+  async checkSDKAvailability(forceRefresh = false): Promise<SDKAvailabilityStatus> {
+    const status = await this.sdkChecker.checkSDKAvailability(forceRefresh);
+    this.sdkStatus = status;
+    
+    // Update internal availability flag
+    if (status.isAvailable && !this.isSDKAvailable) {
+      // SDK became available, try to initialize
+      try {
+        await this.initializeSDK();
+      } catch (error) {
+        this.logger.debug('SDK initialization failed despite availability check', { error: String(error) });
+      }
+    }
+    
+    return status;
+  }
+
+  /**
+   * Enable/disable graceful degradation mode
+   */
+  setGracefulDegradation(enabled: boolean): void {
+    this.gracefulDegradationEnabled = enabled;
+    this.logger.debug(`Graceful degradation ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get current SDK status information
+   */
+  getSDKStatusInfo(): {
+    isAvailable: boolean;
+    initializationAttempted: boolean;
+    gracefulDegradationEnabled: boolean;
+    lastStatus?: SDKAvailabilityStatus;
+    circuitBreakerOpen: boolean;
+  } {
+    return {
+      isAvailable: this.isSDKAvailable,
+      initializationAttempted: this.initializationAttempted,
+      gracefulDegradationEnabled: this.gracefulDegradationEnabled,
+      lastStatus: this.sdkStatus,
+      circuitBreakerOpen: this.circuitBreakerOpen
+    };
+  }
+
+  /**
+   * Display SDK status to console (useful for debugging)
+   */
+  async displaySDKStatus(): Promise<void> {
+    console.log(chalk.blue.bold('\n🔍 SDK Claude Executor Status\n'));
+    
+    const healthStatus = await this.getSDKHealthStatus();
+    this.sdkChecker.displayHealthReport(healthStatus);
+    
+    const statusInfo = this.getSDKStatusInfo();
+    console.log(chalk.cyan.bold('Internal Status:'));
+    console.log(`  Initialization Attempted: ${statusInfo.initializationAttempted ? '✅' : '❌'}`);
+    console.log(`  Graceful Degradation: ${statusInfo.gracefulDegradationEnabled ? '✅' : '❌'}`);
+    console.log(`  Circuit Breaker: ${statusInfo.circuitBreakerOpen ? '🔴 Open' : '🟢 Closed'}`);
+    console.log('');
   }
 
   /**

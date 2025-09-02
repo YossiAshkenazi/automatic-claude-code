@@ -252,6 +252,23 @@ class CLIDetector:
         
         return results
     
+    async def find_claude_installations(self) -> List[str]:
+        """
+        Find all Claude CLI installations on the system
+        
+        Returns:
+            List of valid Claude CLI paths found
+        """
+        installations = []
+        search_paths = self._get_search_paths()
+        
+        for path in search_paths:
+            if await self._test_cli_path(path):
+                installations.append(path)
+        
+        logger.info(f"Found {len(installations)} Claude CLI installations")
+        return installations
+    
     def clear_cache(self) -> None:
         """Clear the detection cache"""
         self._cache.clear()

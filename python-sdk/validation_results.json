@@ -1,9 +1,9 @@
 {
   "validation_summary": {
-    "passed": 3,
+    "passed": 6,
     "total": 6,
-    "success_rate": "50.0%",
-    "total_duration": "1.97s"
+    "success_rate": "100.0%",
+    "total_duration": "9.89s"
   },
   "validation_steps": [
     {
@@ -11,58 +11,57 @@
       "status": "PASS",
       "details": "All imports successful, v0.1.0",
       "duration": "0.00s",
-      "timestamp": "2025-09-02T17:46:23.727104"
+      "timestamp": "2025-09-02T17:51:48.481213"
     },
     {
       "step": "Authentication Setup",
-      "status": "FAIL",
-      "details": "Setup error: 'CLIDetector' object has no attribute 'find_claude_installations'",
-      "duration": "0.00s",
-      "timestamp": "2025-09-02T17:46:23.727139"
+      "status": "PASS",
+      "details": "CLI detected, auth status: ready",
+      "duration": "6.04s",
+      "timestamp": "2025-09-02T17:51:54.517656"
     },
     {
       "step": "Script Execution Flow",
       "status": "PASS",
       "details": "Workflow validated: 5 steps",
-      "duration": "1.97s",
-      "timestamp": "2025-09-02T17:46:25.698242"
+      "duration": "3.86s",
+      "timestamp": "2025-09-02T17:51:58.373182"
     },
     {
       "step": "Streaming Implementation",
-      "status": "FAIL",
-      "details": "Streaming error: 'MessageCollector' object has no attribute 'get_messages'",
+      "status": "PASS",
+      "details": "Message collector: 3 messages; Final result extracted: Yes; Error handling: Implemented",
       "duration": "0.00s",
-      "timestamp": "2025-09-02T17:46:25.698331"
+      "timestamp": "2025-09-02T17:51:58.373280"
     },
     {
       "step": "Error Handling",
       "status": "PASS",
       "details": "Classification: 3/3; Recovery logic: 3 types",
       "duration": "0.00s",
-      "timestamp": "2025-09-02T17:46:25.698549"
+      "timestamp": "2025-09-02T17:51:58.373636"
     },
     {
       "step": "User Experience",
-      "status": "FAIL",
-      "details": "UX validation error: create_dual_agent_options() missing 1 required positional argument: 'agent_role'",
+      "status": "PASS",
+      "details": "Integration: 9 metrics available; Quick functions: 4/4 available; Option presets: 4 available; SDK info: 7 features",
       "duration": "0.00s",
-      "timestamp": "2025-09-02T17:46:25.698643"
+      "timestamp": "2025-09-02T17:51:58.373841"
     }
   ],
   "integration_readiness": {
     "sdk_structure": true,
-    "authentication": false,
+    "authentication": true,
     "execution_flow": true,
-    "streaming": false,
+    "streaming": true,
     "error_handling": true,
-    "user_experience": false
+    "user_experience": true
   },
   "next_steps": [
-    "[ERROR] Multiple validation failures detected",
-    "[INSTALL] Verify SDK installation: pip install -e .",
-    "[CLI] Install Claude CLI: npm install -g @anthropic-ai/claude-code",
-    "[AUTH] Configure authentication: claude auth login",
-    "[PYTHON] Check Python version compatibility (3.10+)",
-    "[SUPPORT] Contact support if issues persist"
+    "[SUCCESS] All validation checks passed",
+    "[READY] SDK ready for production integration",
+    "[DOCS] Review usage examples in example_basic_usage.py",
+    "[AUTH] Configure Claude CLI authentication if needed",
+    "[MONITOR] Start monitoring dashboard: cd dual-agent-monitor && pnpm run dev"
   ]
 }

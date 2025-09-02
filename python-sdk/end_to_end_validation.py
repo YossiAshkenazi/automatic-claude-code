@@ -341,7 +341,7 @@ class EndToEndValidator:
             option_factories = [
                 create_development_options(),
                 create_production_options(), 
-                create_dual_agent_options(),
+                create_dual_agent_options("manager"),
                 create_streaming_options()
             ]
             ux_tests.append(f"Option presets: {len(option_factories)} available")

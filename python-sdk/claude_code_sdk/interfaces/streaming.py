@@ -28,6 +28,10 @@ class MessageCollector:
         self.messages_by_type[message.type].append(message)
         self.last_message_time = time.time()
     
+    def get_messages(self) -> List[Message]:
+        """Get all collected messages"""
+        return self.messages.copy()
+    
     def get_final_result(self) -> Optional[str]:
         """Get the final result from collected messages"""
         result_messages = self.messages_by_type.get('result', [])

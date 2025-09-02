@@ -759,7 +759,7 @@ export class EnhancedSessionManager extends SessionManager {
   async listActiveSessions(): Promise<(SessionState & { session?: Session })[]> {
     const results: (SessionState & { session?: Session })[] = [];
     
-    for (const [sessionId, state] of this.sessionStates) {
+    for (const [sessionId, state] of Array.from(this.sessionStates.entries())) {
       if (state.status === 'running') {
         try {
           const session = await this.loadSession(sessionId);
@@ -873,7 +873,7 @@ export class EnhancedSessionManager extends SessionManager {
       const now = Date.now();
       const inactivityThreshold = 30 * 60 * 1000; // 30 minutes
       
-      for (const [sessionId, state] of this.sessionStates) {
+      for (const [sessionId, state] of Array.from(this.sessionStates.entries())) {
         if (state.processInfo.lastActivity) {
           const timeSinceActivity = now - state.processInfo.lastActivity.getTime();
           

@@ -293,7 +293,7 @@ export class SDKChecker {
     try {
       // First try standard import
       try {
-        const sdkModule = await import('@anthropic-ai/claude-code');
+        const sdkModule = await import('@anthropic-ai/claude-code' as any);
         if (sdkModule && (typeof sdkModule.query === 'function' || typeof sdkModule.default?.query === 'function')) {
           return { success: true };
         }

@@ -399,7 +399,7 @@ export class SDKClaudeExecutor extends EventEmitter {
   private async tryDirectImport(initId: string): Promise<boolean> {
     try {
       this.logger.debug(`Attempting direct SDK import [${initId}]`);
-      const sdkModule = await import('@anthropic-ai/claude-code') as any;
+      const sdkModule = await import('@anthropic-ai/claude-code' as any) as any;
       
       if (sdkModule && (sdkModule.query || sdkModule.default?.query)) {
         claudeSDK = sdkModule.default || sdkModule;

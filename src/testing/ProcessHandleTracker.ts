@@ -298,7 +298,7 @@ export class ProcessHandleTracker extends EventEmitter {
       if (this.trackedHandles.size > 0 && opts.logCleanupProgress) {
         this.logger.warning(`Phase 2: Force cleaning ${this.trackedHandles.size} remaining handles...`);
         
-        for (const [id, handle] of this.trackedHandles) {
+        for (const [id, handle] of Array.from(this.trackedHandles.entries())) {
           try {
             await this.forceCleanupHandle(handle);
             cleanedCount++;
@@ -509,7 +509,7 @@ export class ProcessHandleTracker extends EventEmitter {
    */
   private restoreGlobalMethods(): void {
     try {
-      for (const [key, original] of this.originalMethods) {
+      Array.from(this.originalMethods.entries()).forEach(([key, original]) => {
         const [objName, methodName] = key.split('.');
         let obj: any = global;
         
@@ -520,7 +520,7 @@ export class ProcessHandleTracker extends EventEmitter {
         if (obj[methodName]) {
           obj[methodName] = original;
         }
-      }
+      });
       
       this.originalMethods.clear();
       this.logger.debug('Global methods restored');

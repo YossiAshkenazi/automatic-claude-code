@@ -119,7 +119,7 @@ export class OutputParser {
       tools.push(...jsonOutput.tool_calls.map((tc) => tc.tool));
     }
     
-    return [...new Set(tools)];
+    return Array.from(new Set(tools));
   }
 
   private extractFiles(jsonOutput: ClaudeJsonOutput): string[] {
@@ -137,7 +137,7 @@ export class OutputParser {
       files.push(...jsonOutput.files_read);
     }
     
-    return [...new Set(files)];
+    return Array.from(new Set(files));
   }
 
   private extractCommands(jsonOutput: ClaudeJsonOutput): string[] {
@@ -583,7 +583,7 @@ export class StreamJsonParser {
       }
     }
 
-    return [...new Set(tools)]; // Remove duplicates
+    return Array.from(new Set(tools)); // Remove duplicates
   }
 
   /**
@@ -618,7 +618,7 @@ export class StreamJsonParser {
       }
     }
 
-    return [...new Set(errors)]; // Remove duplicates
+    return Array.from(new Set(errors)); // Remove duplicates
   }
 
   /**
@@ -655,14 +655,14 @@ export class StreamJsonParser {
 
       const cleanOutput = this.stripAnsi(output);
       
-      for (const [operation, pattern] of Object.entries(filePatterns)) {
+      Array.from(Object.entries(filePatterns)).forEach(([operation, pattern]) => {
         const matches = cleanOutput.matchAll(pattern);
-        for (const match of matches) {
+        Array.from(matches).forEach(match => {
           if (match[1]) {
             (fileOps as any)[operation].push(match[1]);
           }
-        }
-      }
+        });
+      });
     }
 
     return fileOps;
@@ -694,17 +694,17 @@ export class StreamJsonParser {
 
       const cleanOutput = this.stripAnsi(output);
       
-      for (const pattern of commandPatterns) {
+      commandPatterns.forEach(pattern => {
         const matches = cleanOutput.matchAll(pattern);
-        for (const match of matches) {
+        Array.from(matches).forEach(match => {
           if (match[1]) {
             commands.push(match[1].trim());
           }
-        }
-      }
+        });
+      });
     }
 
-    return [...new Set(commands)]; // Remove duplicates
+    return Array.from(new Set(commands)); // Remove duplicates
   }
 
   /**

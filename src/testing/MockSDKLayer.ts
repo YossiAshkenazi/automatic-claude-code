@@ -62,9 +62,9 @@ export class MockSDKLayer {
     this.sessionId = this.generateSessionId();
 
     // Add custom responses
-    for (const [key, response] of this.config.responses) {
+    Array.from(this.config.responses.entries()).forEach(([key, response]) => {
       this.responseTemplates.set(key, response);
-    }
+    });
   }
 
   /**
@@ -157,7 +157,7 @@ export class MockSDKLayer {
     }
 
     // Check for pattern matches
-    for (const [pattern, response] of this.responseTemplates) {
+    for (const [pattern, response] of Array.from(this.responseTemplates.entries())) {
       if (this.matchesPattern(prompt, pattern)) {
         return response;
       }
@@ -495,9 +495,9 @@ export class MockSDKLayer {
     this.responseTemplates = this.createDefaultResponses();
     
     // Re-add custom responses
-    for (const [key, response] of this.config.responses) {
+    Array.from(this.config.responses.entries()).forEach(([key, response]) => {
       this.responseTemplates.set(key, response);
-    }
+    });
   }
 }
 

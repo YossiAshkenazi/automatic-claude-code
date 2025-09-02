@@ -245,12 +245,12 @@ export class ShutdownManager extends EventEmitter {
     this.dependencyGraph.delete(hookId);
     
     // Remove from dependencies of other hooks
-    for (const [id, deps] of this.dependencyGraph) {
+    Array.from(this.dependencyGraph.entries()).forEach(([id, deps]) => {
       deps.delete(hookId);
       if (deps.size === 0) {
         this.dependencyGraph.delete(id);
       }
-    }
+    });
     
     // Invalidate execution order
     this.executionOrder = [];
@@ -476,11 +476,11 @@ export class ShutdownManager extends EventEmitter {
       visiting.add(hookId);
       
       const dependencies = this.dependencyGraph.get(hookId) || new Set();
-      for (const depId of dependencies) {
+      Array.from(dependencies).forEach(depId => {
         if (this.hooks.has(depId) && this.hooks.get(depId)!.enabled) {
           visit(depId);
         }
-      }
+      });
       
       visiting.delete(hookId);
       visited.add(hookId);
@@ -488,11 +488,11 @@ export class ShutdownManager extends EventEmitter {
     };
 
     // Visit all hooks
-    for (const hook of allHooks) {
+    allHooks.forEach(hook => {
       if (!visited.has(hook.id)) {
         visit(hook.id);
       }
-    }
+    });
 
     // Sort by priority within dependency groups
     const sortedHooks = resolved
@@ -532,11 +532,11 @@ export class ShutdownManager extends EventEmitter {
 
     // Group hooks by priority for potential parallel execution
     const priorityGroups: Map<ShutdownPriority, ShutdownHook[]> = new Map();
-    for (const hook of this.executionOrder) {
+    this.executionOrder.forEach(hook => {
       const group = priorityGroups.get(hook.priority) || [];
       group.push(hook);
       priorityGroups.set(hook.priority, group);
-    }
+    });
 
     // Execute hooks by priority groups
     for (const priority of ['critical', 'high', 'normal', 'low', 'cleanup'] as ShutdownPriority[]) {
@@ -600,7 +600,7 @@ export class ShutdownManager extends EventEmitter {
     try {
       // Check dependencies
       if (hook.dependencies && hook.dependencies.length > 0) {
-        for (const depId of hook.dependencies) {
+        hook.dependencies.forEach(depId => {
           if (!this.completedHooks.has(depId)) {
             result.skipped = true;
             result.reason = `Dependency '${depId}' not completed`;
@@ -611,7 +611,7 @@ export class ShutdownManager extends EventEmitter {
             this.currentHookResults.set(hook.id, result);
             return;
           }
-        }
+        });
       }
 
       this.logger.debug(`Executing shutdown hook '${hook.name}'`, { 
@@ -708,7 +708,7 @@ export class ShutdownManager extends EventEmitter {
       return;
     }
 
-    for (const signal of SHUTDOWN_SIGNALS) {
+    SHUTDOWN_SIGNALS.forEach(signal => {
       process.on(signal as NodeJS.Signals, (sig) => {
         this.logger.info(`Received ${sig} signal - initiating graceful shutdown`);
         this.shutdown(`Signal: ${sig}`).then((result) => {
@@ -717,7 +717,7 @@ export class ShutdownManager extends EventEmitter {
           process.exit(1);
         });
       });
-    }
+    });
 
     // Handle uncaught exceptions and rejections
     process.on('uncaughtException', (error) => {

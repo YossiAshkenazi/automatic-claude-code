@@ -513,7 +513,7 @@ export class TestSDKFactory {
     console.warn('Emergency shutdown initiated - forcing cleanup of all instances');
     
     // Force cleanup all instances without waiting
-    for (const [instanceId, instance] of this.instances) {
+    for (const [instanceId, instance] of Array.from(this.instances.entries())) {
       try {
         if (instance.handleTracker) {
           await instance.handleTracker.enforceProcessTermination({
@@ -548,11 +548,11 @@ export class TestSDKFactory {
     };
 
     // Collect stats from each instance
-    for (const [instanceId, instance] of this.instances) {
+    Array.from(this.instances.entries()).forEach(([instanceId, instance]) => {
       if (instance.getHandleStatistics) {
         stats.instanceStats.set(instanceId, instance.getHandleStatistics());
       }
-    }
+    });
 
     // Global tracker stats
     if (this.globalHandleTracker) {
@@ -568,7 +568,7 @@ export class TestSDKFactory {
   static getLeakedHandles(): any[] {
     const leakedHandles: any[] = [];
 
-    for (const [instanceId, instance] of this.instances) {
+    Array.from(this.instances.entries()).forEach(([instanceId, instance]) => {
       if (instance.handleTracker) {
         const leaked = instance.handleTracker.getLeakedHandles();
         leakedHandles.push(...leaked.map(handle => ({ 
@@ -576,7 +576,7 @@ export class TestSDKFactory {
           instanceId 
         })));
       }
-    }
+    });
 
     return leakedHandles;
   }

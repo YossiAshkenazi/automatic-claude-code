@@ -160,7 +160,8 @@ export class AgentIntegrationService extends EventEmitter {
       `"${task}"`, // Quote the task to handle spaces
       '--dual-agent',
       '--manager-model', options.managerModel || 'opus',
-      '--max-iterations', String(options.maxIterations || 10)
+      '--worker-model', options.workerModel || 'sonnet',
+      '-i', String(options.maxIterations || 10)
     ];
 
     if (options.verbose) {
@@ -490,7 +491,6 @@ export class AgentIntegrationService extends EventEmitter {
     try {
       if (process.platform === 'win32') {
         // Windows: Use wmic command
-        const { exec } = require('child_process');
         return new Promise((resolve) => {
           exec(`wmic process where ProcessId=${pid} get WorkingSetSize,PageFileUsage`, (error: any, stdout: string) => {
             if (error) {
@@ -510,7 +510,6 @@ export class AgentIntegrationService extends EventEmitter {
         });
       } else {
         // Unix/Linux: Use ps command
-        const { exec } = require('child_process');
         return new Promise((resolve) => {
           exec(`ps -p ${pid} -o %cpu,rss`, (error: any, stdout: string) => {
             if (error) {

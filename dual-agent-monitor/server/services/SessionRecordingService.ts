@@ -479,8 +479,7 @@ export class SessionRecordingService {
       status: 'completed',
       filePath,
       fileSizeBytes,
-      completedAt: new Date(),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+      completedAt: new Date()
     });
   }
 
@@ -604,7 +603,7 @@ export class SessionRecordingService {
   }
 
   private getDefaultAnnotationColor(type: string): string {
-    const colors = {
+    const colors: { [key: string]: string } = {
       note: '#ffeb3b',
       highlight: '#ff9800',
       bookmark: '#2196f3',

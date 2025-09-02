@@ -180,64 +180,62 @@ class ClaudeCliWrapper:
     
     async def _stream_output(self) -> AsyncGenerator[CliMessage, None]:
         """
-        Stream and parse output from the CLI process.
-        
-        This method reads stdout and stderr concurrently,
-        similar to Dan's read_stream approach.
+        Stream and parse output from the CLI process with proper async handling.
         """
         if not self.process:
             return
         
-        async def read_stream(stream, is_stderr=False):
-            """Read from a stream and yield messages"""
-            messages = []
-            
+        try:
+            # Read stdout line by line
             while True:
-                line = await stream.readline()
-                if not line:
+                try:
+                    line = await self.process.stdout.readline()
+                    if not line:
+                        break
+                    
+                    decoded = line.decode('utf-8', errors='replace').rstrip()
+                    if decoded:
+                        message = self._parse_line(decoded, False)
+                        yield message
+                        
+                except asyncio.CancelledError:
+                    logger.info("Stream output cancelled")
                     break
-                
-                decoded = line.decode('utf-8', errors='replace').rstrip()
-                if decoded:
-                    message = self._parse_line(decoded, is_stderr)
-                    messages.append(message)
+                except Exception as e:
+                    logger.error(f"Error reading stdout: {e}")
+                    break
             
-            return messages
+            # Check for any stderr output
+            try:
+                if self.process.stderr:
+                    while True:
+                        line = await asyncio.wait_for(self.process.stderr.readline(), timeout=0.1)
+                        if not line:
+                            break
+                        
+                        decoded = line.decode('utf-8', errors='replace').rstrip()
+                        if decoded:
+                            message = self._parse_line(decoded, True)
+                            yield message
+            except asyncio.TimeoutError:
+                # No more stderr output
+                pass
+            except Exception as e:
+                logger.error(f"Error reading stderr: {e}")
         
-        # Read both streams concurrently
-        stdout_task = asyncio.create_task(read_stream(self.process.stdout, False))
-        stderr_task = asyncio.create_task(read_stream(self.process.stderr, True))
-        
-        # Process messages as they arrive
-        while not stdout_task.done() or not stderr_task.done():
-            # Check stdout
-            if not stdout_task.done():
+        except asyncio.CancelledError:
+            logger.info("Stream cancelled during execution")
+            raise
+        except Exception as e:
+            logger.error(f"Streaming error: {e}")
+            yield CliMessage(type="error", content=str(e))
+        finally:
+            # Ensure process cleanup
+            if self.process and self.process.returncode is None:
                 try:
-                    await asyncio.wait_for(stdout_task, timeout=0.1)
-                    for msg in stdout_task.result():
-                        yield msg
+                    await asyncio.wait_for(self.process.wait(), timeout=1.0)
                 except asyncio.TimeoutError:
-                    pass
-            
-            # Check stderr
-            if not stderr_task.done():
-                try:
-                    await asyncio.wait_for(stderr_task, timeout=0.1)
-                    for msg in stderr_task.result():
-                        yield msg
-                except asyncio.TimeoutError:
-                    pass
-            
-            await asyncio.sleep(0.01)  # Small delay to prevent CPU spinning
-        
-        # Get any remaining messages
-        if stdout_task.done():
-            for msg in stdout_task.result():
-                yield msg
-        
-        if stderr_task.done():
-            for msg in stderr_task.result():
-                yield msg
+                    logger.warning("Process did not terminate gracefully")
     
     def _parse_line(self, line: str, is_stderr: bool = False) -> CliMessage:
         """
@@ -320,6 +318,24 @@ class ClaudeCliWrapper:
         if self.process and self.process.returncode is None:
             self.process.kill()
             logger.info("Killed running Claude CLI process")
+
+    async def cleanup(self):
+        """Cleanup resources and terminate processes"""
+        try:
+            if self.process:
+                if self.process.returncode is None:
+                    # Try graceful termination first
+                    self.process.terminate()
+                    try:
+                        await asyncio.wait_for(self.process.wait(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        # Force kill if graceful termination fails
+                        self.process.kill()
+                        await self.process.wait()
+                self.process = None
+                logger.info("Cleaned up Claude CLI process")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
 
 
 # Simple synchronous wrapper for ease of use

@@ -154,7 +154,7 @@ export class RecordingManager extends EventEmitter {
         this.emit('recordingError', {
           sessionId: message.sessionId,
           recordingId,
-          error: error.message
+          error: error instanceof Error ? error.message : String(error)
         });
       }
     }

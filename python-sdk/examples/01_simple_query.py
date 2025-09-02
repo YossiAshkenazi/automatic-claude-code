@@ -113,4 +113,4 @@ if __name__ == "__main__":
         if choice in ['y', 'yes']:
             asyncio.run(interactive_query_example())
     except KeyboardInterrupt:
-        print("\n👋 Exiting...")
+        print("\n[EXIT] Exiting...")

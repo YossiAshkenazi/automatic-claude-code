@@ -573,6 +573,11 @@ The v2.0 SDK architecture is operational, but nested execution requires this dir
     // Check if we're running in a nested Claude Code session - this is the primary entry point
     const isNestedSession = process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT === 'cli';
     
+    // Debug: Log nested session detection for troubleshooting
+    if (isNestedSession) {
+      this.logger.debug(`Nested session detected [${executionId}]: Using direct execution mode to avoid authentication conflicts`);
+    }
+    
     if (isNestedSession) {
       this.logger.debug(`Detected nested session at entry point - using direct execution mode [${executionId}]`);
       return this.executeDirectMode(prompt, options, executionId);

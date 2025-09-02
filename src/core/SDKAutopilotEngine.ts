@@ -143,22 +143,62 @@ export class SDKAutopilotEngine extends EventEmitter {
 
     } catch (error) {
       const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorType = error?.constructor?.name || 'Error';
+      
       this.logger.error('SDK autopilot loop failed', { 
-        error: error instanceof Error ? error.message : error,
-        duration: `${duration / 1000}s`
+        error: errorMessage,
+        errorType,
+        duration: `${duration / 1000}s`,
+        coordinationType: options.dualAgent ? 'DUAL_AGENT_SDK' : 'SINGLE_AGENT',
+        sessionId: this.currentSessionId
       });
+      
+      // Enhanced error classification for better user guidance
+      let enhancedErrorMessage = errorMessage;
+      let recoveryGuidance: string[] = [];
+      
+      if (errorMessage.toLowerCase().includes('sdk') || errorMessage.toLowerCase().includes('not installed')) {
+        recoveryGuidance = [
+          'Install Claude Code CLI: npm install -g @anthropic-ai/claude-code',
+          'Verify installation: claude --version',
+          'Run diagnostic: acc --verify-claude-cli'
+        ];
+        enhancedErrorMessage = `SDK Installation Issue: ${errorMessage}`;
+      } else if (errorMessage.toLowerCase().includes('authentication') || errorMessage.toLowerCase().includes('unauthorized')) {
+        recoveryGuidance = [
+          'Authenticate with Claude: claude auth',
+          'Ensure you are logged into claude.ai in your browser',
+          'Try clearing browser cache and re-authenticating'
+        ];
+        enhancedErrorMessage = `Authentication Issue: ${errorMessage}`;
+      } else if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('timeout')) {
+        recoveryGuidance = [
+          'Check your internet connection',
+          'Try increasing timeout with --timeout option',
+          'Verify firewall is not blocking connections to claude.ai'
+        ];
+        enhancedErrorMessage = `Network Issue: ${errorMessage}`;
+      } else if (errorMessage.toLowerCase().includes('quota') || errorMessage.toLowerCase().includes('limit')) {
+        recoveryGuidance = [
+          'Check your Claude subscription status',
+          'Wait for usage limits to reset',
+          'Try using a different model with --model option'
+        ];
+        enhancedErrorMessage = `Usage Limit Issue: ${errorMessage}`;
+      }
 
       return {
         success: false,
         iterations: 0,
         duration,
         totalDuration: duration,
-        output: error instanceof Error ? error.message : String(error),
+        output: enhancedErrorMessage + (recoveryGuidance.length > 0 ? '\n\nRecovery Suggestions:\n' + recoveryGuidance.map((g, i) => `${i + 1}. ${g}`).join('\n') : ''),
         sessionId: this.currentSessionId || '',
-        error: error instanceof Error ? error.message : String(error),
-        errors: [error instanceof Error ? error.message : String(error)],
+        error: enhancedErrorMessage,
+        errors: [enhancedErrorMessage],
         coordinationType: options.dualAgent ? 'DUAL_AGENT_SDK' : 'SINGLE_AGENT',
-        executionMethod: 'SDK',
+        executionMethod: 'SDK-ERROR',
         successRate: 0,
         modelUsed: options.model || 'sonnet',
         totalTokens: 0,
@@ -259,15 +299,39 @@ export class SDKAutopilotEngine extends EventEmitter {
         await this.delay(1500);
 
       } catch (error) {
-        this.logger.error(`SDK autopilot iteration ${currentIteration} failed`, { error });
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorType = error?.constructor?.name || 'Error';
+        
+        this.logger.error(`SDK autopilot iteration ${currentIteration} failed`, { 
+          error: errorMessage,
+          errorType,
+          iteration: currentIteration,
+          maxIterations,
+          continueOnError: options.continueOnError
+        });
         
         if (!options.continueOnError) {
-          throw error;
+          // Enhanced error before throwing
+          const enhancedError = new Error(`Autopilot iteration ${currentIteration}/${maxIterations} failed: ${errorMessage}`);
+          enhancedError.name = errorType;
+          throw enhancedError;
         }
         
-        // Add error to output and continue
-        totalOutput += `\nError in iteration ${currentIteration}: ${error}\n`;
-        await this.delay(3000);
+        // Add detailed error to output and continue
+        totalOutput += `\n🚫 Error in iteration ${currentIteration}/${maxIterations}:\n`;
+        totalOutput += `   Type: ${errorType}\n`;
+        totalOutput += `   Message: ${errorMessage}\n`;
+        totalOutput += `   Continuing with next iteration...\n\n`;
+        
+        // Adaptive delay based on error type
+        let errorDelay = 3000;
+        if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('timeout')) {
+          errorDelay = 5000; // Longer delay for network issues
+        } else if (errorMessage.toLowerCase().includes('rate') || errorMessage.toLowerCase().includes('limit')) {
+          errorDelay = 10000; // Much longer delay for rate limiting
+        }
+        
+        await this.delay(errorDelay);
       }
     }
 
@@ -377,8 +441,22 @@ export class SDKAutopilotEngine extends EventEmitter {
       };
 
     } catch (error) {
-      this.logger.error('Dual-agent coordination failed', { error });
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorType = error?.constructor?.name || 'Error';
+      
+      this.logger.error('Dual-agent coordination failed', { 
+        error: errorMessage,
+        errorType,
+        handoffCount,
+        managerIterations,
+        workerIterations,
+        sessionId: this.currentSessionId
+      });
+      
+      // Enhanced error for dual-agent specific issues
+      const enhancedError = new Error(`Dual-agent coordination failed: ${errorMessage}`);
+      enhancedError.name = `DualAgent${errorType}`;
+      throw enhancedError;
     }
   }
 
@@ -438,11 +516,30 @@ Please continue working on this task. If you believe the task is complete, clear
       };
 
     } catch (error) {
-      this.logger.error('Task execution failed', { error });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorType = error?.constructor?.name || 'Error';
+      
+      this.logger.error('Task execution failed', { 
+        error: errorMessage,
+        errorType,
+        promptLength: prompt.length,
+        context: Object.keys(context)
+      });
+      
+      // Provide enhanced error context
+      let enhancedMessage = errorMessage;
+      if (errorMessage.toLowerCase().includes('sdk')) {
+        enhancedMessage += ' (Hint: Check SDK installation with: acc --verify-claude-cli)';
+      } else if (errorMessage.toLowerCase().includes('auth')) {
+        enhancedMessage += ' (Hint: Authenticate with: claude auth)';
+      } else if (errorMessage.toLowerCase().includes('network')) {
+        enhancedMessage += ' (Hint: Check internet connection and try --timeout 300000)';
+      }
+      
       return {
         result: '',
         exitCode: 1,
-        error: error instanceof Error ? error.message : String(error)
+        error: enhancedMessage
       };
     }
   }

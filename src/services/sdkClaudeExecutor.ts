@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import { Logger } from '../logger';
 import { SDKResponse, SDKResult } from '../types';
 import { SDKChecker, SDKAvailabilityStatus, SDKHealthStatus } from '../utils/sdkChecker';
@@ -26,6 +27,42 @@ export interface SDKClaudeOptions {
   enableSessionContinuity?: boolean;
   maxTurns?: number;
   continueOnError?: boolean;
+}
+
+// Enhanced error classes for specific error scenarios
+export class RateLimitError extends Error {
+  constructor(message: string, public retryAfter?: number) {
+    super(message);
+    this.name = 'RateLimitError';
+  }
+}
+
+export class QuotaExceededError extends Error {
+  constructor(message: string, public quotaType?: string) {
+    super(message);
+    this.name = 'QuotaExceededError';
+  }
+}
+
+export class InvalidModelError extends Error {
+  constructor(message: string, public modelRequested?: string) {
+    super(message);
+    this.name = 'InvalidModelError';
+  }
+}
+
+export class SessionCorruptedError extends Error {
+  constructor(message: string, public sessionId?: string) {
+    super(message);
+    this.name = 'SessionCorruptedError';
+  }
+}
+
+export class ResourceExhaustionError extends Error {
+  constructor(message: string, public resourceType?: string) {
+    super(message);
+    this.name = 'ResourceExhaustionError';
+  }
 }
 
 // Alias for backward compatibility
@@ -92,7 +129,7 @@ export class RetryExhaustedError extends Error {
  * SDK-based Claude executor using the official TypeScript SDK
  * This works with browser authentication (no API key needed)
  */
-export class SDKClaudeExecutor {
+export class SDKClaudeExecutor extends EventEmitter {
   private logger: Logger;
   private isSDKAvailable: boolean = false;
   private activeSessions: Map<string, any> = new Map(); // Track active SDK sessions
@@ -109,6 +146,7 @@ export class SDKClaudeExecutor {
   private gracefulDegradationEnabled: boolean = true;
 
   constructor(logger: Logger) {
+    super();
     this.logger = logger;
     this.sdkChecker = SDKChecker.getInstance();
     // Browser authentication is now handled transparently by the Claude SDK
@@ -251,9 +289,12 @@ export class SDKClaudeExecutor {
   }
 
   /**
-   * Initialize the Claude Code SDK with comprehensive availability checking
+   * Initialize the Claude Code SDK with comprehensive availability checking and recovery
    */
   private async initializeSDK(): Promise<void> {
+    const initId = `init-${Date.now()}-${Math.random().toString(36).substr(2, 3)}`;
+    this.logger.debug(`Starting SDK initialization [${initId}]`);
+    
     this.initializationAttempted = true;
     
     try {
@@ -261,67 +302,208 @@ export class SDKClaudeExecutor {
       this.sdkStatus = await this.sdkChecker.checkSDKAvailability();
       
       if (!this.sdkStatus.isAvailable) {
-        this.logger.warning('Claude Code SDK not available', { 
+        this.logger.warning(`SDK availability check failed [${initId}]`, { 
           issues: this.sdkStatus.issues,
           recommendations: this.sdkStatus.recommendations 
         });
         this.isSDKAvailable = false;
+        
+        // Try recovery strategies for common issues
+        await this.attemptSDKRecovery(initId);
         return;
       }
 
-      this.logger.debug('SDK availability confirmed, attempting to load...');
+      this.logger.debug(`SDK availability confirmed [${initId}], attempting to load...`);
       
-      // First try direct dynamic import (works if SDK is in node_modules)
-      try {
-        const sdkModule = await import('@anthropic-ai/claude-code') as any;
-        if (sdkModule && (sdkModule.query || sdkModule.default?.query)) {
-          claudeSDK = sdkModule.default || sdkModule;
-          this.isSDKAvailable = true;
-          this.logger.debug('Claude Code SDK loaded via dynamic import');
-          return;
-        }
-      } catch (importError) {
-        this.logger.debug(`Direct import failed: ${String(importError)}`);
+      // Strategy 1: Direct dynamic import (preferred method)
+      if (await this.tryDirectImport(initId)) {
+        return;
       }
       
-      // Try to find SDK path and import it using the new checker
-      const sdkPath = this.sdkStatus.sdkPath || await this.findSDKPath();
-      if (sdkPath) {
-        try {
-          // Convert Windows paths to file:// URLs for dynamic import
+      // Strategy 2: Path-based import with comprehensive search
+      if (await this.tryPathBasedImport(initId)) {
+        return;
+      }
+      
+      // Strategy 3: Recovery with SDK reinstallation suggestions
+      await this.suggestSDKRecovery(initId);
+      
+      throw new SDKNotInstalledError('Claude Code SDK not found or not accessible after comprehensive search and recovery attempts');
+      
+    } catch (error) {
+      this.logger.error(`SDK initialization failed [${initId}]`, { 
+        error: String(error),
+        initializationAttempted: this.initializationAttempted,
+        sdkStatus: this.sdkStatus
+      });
+      
+      // Enhanced error classification and recovery suggestions
+      if (error instanceof SDKNotInstalledError) {
+        this.logger.error('Claude Code SDK is not properly installed', { 
+          error: error.message,
+          installationGuidance: this.sdkChecker.getInstallationGuidance().slice(0, 5),
+          recoveryStrategies: [
+            'npm install -g @anthropic-ai/claude-code',
+            'pnpm add -g @anthropic-ai/claude-code',
+            'yarn global add @anthropic-ai/claude-code'
+          ]
+        });
+      } else if (String(error).includes('permission')) {
+        this.logger.error('SDK initialization failed due to permissions', {
+          error: String(error),
+          suggestions: [
+            'Run with administrator/sudo privileges',
+            'Check file permissions in node_modules',
+            'Try: npm config set prefix ~/.npm-global'
+          ]
+        });
+      } else {
+        this.logger.warning('SDK initialization failed with unknown error', { 
+          error: String(error),
+          errorType: error?.constructor?.name,
+          ...(error && typeof error === 'object' && 'stack' in error ? { stack: (error as any).stack } : {})
+        });
+      }
+      
+      this.isSDKAvailable = false;
+    }
+  }
+  
+  /**
+   * Attempt direct SDK import with error handling
+   */
+  private async tryDirectImport(initId: string): Promise<boolean> {
+    try {
+      this.logger.debug(`Attempting direct SDK import [${initId}]`);
+      const sdkModule = await import('@anthropic-ai/claude-code') as any;
+      
+      if (sdkModule && (sdkModule.query || sdkModule.default?.query)) {
+        claudeSDK = sdkModule.default || sdkModule;
+        this.isSDKAvailable = true;
+        this.logger.info(`Claude Code SDK loaded via direct import [${initId}]`);
+        return true;
+      }
+      
+      this.logger.debug(`Direct import returned invalid module [${initId}]`);
+      return false;
+    } catch (importError) {
+      this.logger.debug(`Direct import failed [${initId}]:`, String(importError));
+      return false;
+    }
+  }
+  
+  /**
+   * Attempt path-based SDK import with comprehensive search
+   */
+  private async tryPathBasedImport(initId: string): Promise<boolean> {
+    try {
+      this.logger.debug(`Attempting path-based SDK import [${initId}]`);
+      const sdkPath = this.sdkStatus?.sdkPath || await this.findSDKPath();
+      
+      if (!sdkPath) {
+        this.logger.debug(`No SDK path found [${initId}]`);
+        return false;
+      }
+      
+      // Convert Windows paths to file:// URLs for dynamic import
+      const fileUrl = process.platform === 'win32' ? 
+        `file:///${sdkPath.replace(/\\/g, '/')}` : 
+        `file://${sdkPath}`;
+      
+      this.logger.debug(`Importing SDK from path [${initId}]:`, sdkPath);
+      const sdkModule = await import(fileUrl);
+      
+      if (sdkModule && (sdkModule.query || sdkModule.default?.query)) {
+        claudeSDK = sdkModule.default || sdkModule;
+        this.isSDKAvailable = true;
+        this.logger.info(`Claude Code SDK loaded from path [${initId}]:`, sdkPath);
+        return true;
+      }
+      
+      this.logger.debug(`Path import returned invalid module [${initId}]`);
+      return false;
+    } catch (fileImportError) {
+      this.logger.debug(`Path-based import failed [${initId}]:`, String(fileImportError));
+      return false;
+    }
+  }
+  
+  /**
+   * Attempt SDK recovery for common issues
+   */
+  private async attemptSDKRecovery(initId: string): Promise<void> {
+    this.logger.info(`Attempting SDK recovery [${initId}]`);
+    
+    // Check if it's a simple path issue
+    const potentialPaths = await this.generateRecoveryPaths();
+    
+    for (const recoveryPath of potentialPaths) {
+      try {
+        const fs = require('fs');
+        if (fs.existsSync(recoveryPath)) {
+          this.logger.debug(`Found potential SDK at recovery path [${initId}]:`, recoveryPath);
+          
+          // Try to import from this path
           const fileUrl = process.platform === 'win32' ? 
-            `file:///${sdkPath.replace(/\\/g, '/')}` : 
-            `file://${sdkPath}`;
+            `file:///${recoveryPath.replace(/\\/g, '/')}` : 
+            `file://${recoveryPath}`;
           
           const sdkModule = await import(fileUrl);
           if (sdkModule && (sdkModule.query || sdkModule.default?.query)) {
             claudeSDK = sdkModule.default || sdkModule;
             this.isSDKAvailable = true;
-            this.logger.debug(`Claude Code SDK loaded from: ${sdkPath}`);
+            this.logger.info(`SDK recovery successful [${initId}]:`, recoveryPath);
             return;
           }
-        } catch (fileImportError) {
-          this.logger.debug(`File import failed for ${sdkPath}: ${String(fileImportError)}`);
         }
+      } catch (recoveryError) {
+        this.logger.debug(`Recovery attempt failed for path [${initId}]: ${recoveryPath} - ${String(recoveryError)}`);
       }
-      
-      throw new SDKNotInstalledError('Claude Code SDK not found or not accessible after comprehensive search');
-      
-    } catch (error) {
-      this.logger.debug(`SDK initialization failed: ${String(error)}`);
-      
-      // Provide user-friendly error message based on the type of issue
-      if (error instanceof SDKNotInstalledError) {
-        this.logger.error('Claude Code SDK is not properly installed', { 
-          error: error.message,
-          installationGuidance: this.sdkChecker.getInstallationGuidance().slice(0, 5) // First 5 lines
-        });
-      } else {
-        this.logger.warning('Claude Code SDK initialization failed', { error: String(error) });
-      }
-      
-      this.isSDKAvailable = false;
     }
+    
+    this.logger.warning(`SDK recovery unsuccessful [${initId}]`);
+  }
+  
+  /**
+   * Generate potential recovery paths for SDK
+   */
+  private async generateRecoveryPaths(): Promise<string[]> {
+    const path = require('path');
+    const os = require('os');
+    const userHome = process.env.USERPROFILE || process.env.HOME || os.homedir();
+    
+    return [
+      // Common global installation paths
+      path.join(userHome, '.npm-global', 'node_modules', '@anthropic-ai', 'claude-code', 'sdk.mjs'),
+      path.join(userHome, 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'sdk.mjs'),
+      path.join(userHome, '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-code', 'sdk.mjs'),
+      // System-wide paths
+      '/usr/local/lib/node_modules/@anthropic-ai/claude-code/sdk.mjs',
+      'C:\\Program Files\\nodejs\\node_modules\\@anthropic-ai\\claude-code\\sdk.mjs',
+      // Alternative file names
+      path.join(userHome, 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'index.js'),
+      path.join(userHome, 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'dist', 'index.js')
+    ];
+  }
+  
+  /**
+   * Provide comprehensive SDK recovery suggestions
+   */
+  private async suggestSDKRecovery(initId: string): Promise<void> {
+    this.logger.warning(`Generating SDK recovery suggestions [${initId}]`);
+    
+    const suggestions = [
+      'Install Claude Code SDK globally: npm install -g @anthropic-ai/claude-code',
+      'Verify installation: claude --version',
+      'Check npm global path: npm config get prefix',
+      'Try alternative package manager: pnpm add -g @anthropic-ai/claude-code',
+      'Update Node.js to latest LTS version',
+      'Clear npm cache: npm cache clean --force',
+      'Check permissions: ls -la $(npm root -g)',
+      'Reinstall with force: npm uninstall -g @anthropic-ai/claude-code && npm install -g @anthropic-ai/claude-code'
+    ];
+    
+    this.logger.info(`SDK Recovery Suggestions [${initId}]:`, { suggestions });
   }
 
   /**
@@ -336,27 +518,105 @@ export class SDKClaudeExecutor {
   }
 
   /**
-   * Execute Claude using the SDK with comprehensive fallback handling
+   * Execute Claude using the SDK with comprehensive fallback handling and retry logic
    */
   async executeWithSDK(
     prompt: string,
     options: SDKClaudeOptions = {}
   ): Promise<SDKResult> {
-    // Ensure SDK is loaded with retry mechanism
-    if (!this.isSDKAvailable) {
-      if (!this.initializationAttempted) {
-        this.logger.info('First-time SDK initialization...');
-        await this.initializeSDK();
+    const executionId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const startTime = Date.now();
+    
+    this.logger.debug(`Starting SDK execution [${executionId}]`, { 
+      promptLength: prompt.length,
+      options: { ...options, sessionId: options.sessionId ? 'redacted' : undefined }
+    });
+    
+    // Circuit breaker check
+    if (this.circuitBreakerOpen) {
+      const timeSinceLastFailure = Date.now() - this.lastFailureTime;
+      if (timeSinceLastFailure < 30000) { // 30 second cooldown
+        this.logger.warning(`Circuit breaker is open, skipping execution [${executionId}]`);
+        throw new RetryExhaustedError('Circuit breaker is open - too many recent failures');
       } else {
-        // Re-attempt initialization after failure
-        this.logger.info('Re-attempting SDK initialization...');
-        await this.initializeSDK();
-      }
-      
-      if (!this.isSDKAvailable) {
-        return this.createSDKUnavailableResult(options);
+        // Reset circuit breaker after cooldown
+        this.circuitBreakerOpen = false;
+        this.failureCount = 0;
+        this.logger.info(`Circuit breaker reset after cooldown [${executionId}]`);
       }
     }
+    
+    let lastError: any;
+    
+    // Retry logic with exponential backoff
+    for (let attempt = 1; attempt <= this.maxRetries + 1; attempt++) {
+      try {
+        this.executionAttempts++;
+        this.logger.debug(`SDK execution attempt ${attempt}/${this.maxRetries + 1} [${executionId}]`);
+        
+        // Ensure SDK is loaded with retry mechanism
+        if (!this.isSDKAvailable) {
+          if (!this.initializationAttempted || attempt > 1) {
+            this.logger.info(`SDK initialization attempt ${attempt} [${executionId}]`);
+            await this.initializeSDK();
+          }
+          
+          if (!this.isSDKAvailable) {
+            if (attempt <= this.maxRetries) {
+              this.logger.warning(`SDK unavailable on attempt ${attempt}, will retry [${executionId}]`);
+              await this.delay(Math.min(1000 * Math.pow(2, attempt - 1), 10000)); // Exponential backoff, max 10s
+              continue;
+            } else {
+              return this.createSDKUnavailableResult(options);
+            }
+          }
+        }
+        
+        const result = await this.executeWithRetry(prompt, options, attempt, executionId);
+        
+        // Success - record and return
+        this.recordSuccess();
+        const duration = Date.now() - startTime;
+        this.logger.debug(`SDK execution completed successfully [${executionId}] in ${duration}ms`);
+        
+        return result;
+        
+      } catch (error) {
+        lastError = error;
+        this.logger.warning(`SDK execution attempt ${attempt} failed [${executionId}]`, { error: String(error) });
+        
+        // Record failure for circuit breaker
+        this.recordFailure();
+        
+        // Check if we should retry
+        if (attempt <= this.maxRetries && this.shouldRetry(error, attempt)) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 15000); // Exponential backoff, max 15s
+          this.logger.info(`Retrying SDK execution in ${delay}ms [${executionId}]`);
+          await this.delay(delay);
+          continue;
+        } else {
+          // No more retries or non-retryable error
+          break;
+        }
+      }
+    }
+    
+    // All retries exhausted
+    const duration = Date.now() - startTime;
+    const enhancedError = this.enhanceError(lastError, { 
+      executionId, 
+      attempt: this.maxRetries + 1,
+      duration,
+      circuitBreakerOpen: this.circuitBreakerOpen
+    });
+    
+    this.logger.error(`SDK execution failed after all retries [${executionId}]`, { 
+      totalAttempts: this.maxRetries + 1,
+      totalDuration: duration,
+      finalError: enhancedError.message
+    });
+    
+    throw enhancedError;
 
     if (!claudeSDK || !(claudeSDK.query || claudeSDK.default?.query)) {
       throw new Error('Claude Code SDK query function not available');
@@ -752,49 +1012,409 @@ export class SDKClaudeExecutor {
    * Record successful execution for circuit breaker logic
    */
   private recordSuccess(): void {
-    this.failureCount = 0;
-    this.circuitBreakerOpen = false;
+    const wasOpen = this.circuitBreakerOpen;
+    this.failureCount = Math.max(0, this.failureCount - 1); // Gradually reduce failure count
+    
+    if (this.failureCount === 0) {
+      this.circuitBreakerOpen = false;
+      if (wasOpen) {
+        this.logger.info('Circuit breaker closed after successful execution');
+      }
+    }
   }
 
   /**
-   * Record failed execution for circuit breaker logic
+   * Record failed execution for circuit breaker logic with enhanced tracking
    */
   private recordFailure(): void {
     this.failureCount++;
     this.lastFailureTime = Date.now();
     
-    // Open circuit breaker after 5 consecutive failures
-    if (this.failureCount >= 5) {
+    // Different thresholds based on failure severity
+    let threshold = 5; // Default threshold
+    
+    // More lenient for network/transient errors
+    if (this.failureCount <= 3) {
+      threshold = 7; // Allow more network failures initially
+    }
+    
+    // Open circuit breaker after threshold consecutive failures
+    if (this.failureCount >= threshold && !this.circuitBreakerOpen) {
       this.circuitBreakerOpen = true;
-      this.logger.warning(`SDK circuit breaker opened after ${this.failureCount} failures`);
+      this.logger.warning(`SDK circuit breaker opened after ${this.failureCount} failures (threshold: ${threshold})`, {
+        lastFailureTime: new Date(this.lastFailureTime).toISOString(),
+        executionStats: {
+          attempts: this.executionAttempts,
+          failures: this.failureCount,
+          successRate: this.executionAttempts > 0 ? Math.round(((this.executionAttempts - this.failureCount) / this.executionAttempts) * 100) : 0
+        }
+      });
+      
+      // Emit event for monitoring systems
+      this.emit('circuit_breaker_opened', {
+        failureCount: this.failureCount,
+        threshold,
+        executionStats: {
+          attempts: this.executionAttempts,
+          failures: this.failureCount
+        }
+      });
     }
   }
-
+  
   /**
-   * Determine if execution should be retried
+   * Check if circuit breaker should be reset based on time and conditions
    */
-  private shouldRetry(error: any, attempt: number): boolean {
-    if (attempt >= this.maxRetries) return false;
-    if (this.circuitBreakerOpen) return false;
+  private shouldResetCircuitBreaker(): boolean {
+    if (!this.circuitBreakerOpen) return false;
     
-    const errorMessage = error?.message?.toLowerCase() || '';
+    const timeSinceLastFailure = Date.now() - this.lastFailureTime;
+    const cooldownPeriod = Math.min(30000 + (this.failureCount * 5000), 300000); // 30s to 5min based on failure count
     
-    // Don't retry installation or authentication errors
-    if (errorMessage.includes('not installed') || 
-        errorMessage.includes('api key') ||
-        errorMessage.includes('unauthorized')) {
-      return false;
-    }
-    
-    // Retry network, timeout, and temporary errors
-    if (errorMessage.includes('timeout') ||
-        errorMessage.includes('network') ||
-        errorMessage.includes('connection') ||
-        errorMessage.includes('temporary')) {
+    if (timeSinceLastFailure >= cooldownPeriod) {
+      this.logger.info(`Circuit breaker cooldown period elapsed (${Math.round(cooldownPeriod/1000)}s)`);
       return true;
     }
     
     return false;
+  }
+  
+  /**
+   * Force reset circuit breaker (for emergency recovery)
+   */
+  resetCircuitBreaker(): void {
+    const wasOpen = this.circuitBreakerOpen;
+    this.circuitBreakerOpen = false;
+    this.failureCount = 0;
+    this.lastFailureTime = 0;
+    
+    if (wasOpen) {
+      this.logger.info('Circuit breaker manually reset');
+    }
+  }
+
+  /**
+   * Determine if execution should be retried with comprehensive error analysis
+   */
+  private shouldRetry(error: any, attempt: number): boolean {
+    if (attempt >= this.maxRetries) {
+      this.logger.debug('Max retries reached, will not retry');
+      return false;
+    }
+    
+    if (this.circuitBreakerOpen) {
+      this.logger.debug('Circuit breaker is open, will not retry');
+      return false;
+    }
+    
+    const errorMessage = error?.message?.toLowerCase() || '';
+    const errorType = error?.constructor?.name || 'Error';
+    
+    // Never retry these error types - they indicate configuration/setup issues
+    const nonRetryableErrors = [
+      'not installed',
+      'api key',
+      'unauthorized',
+      'forbidden',
+      'quota exceeded',
+      'billing',
+      'payment required',
+      'invalid model',
+      'subscription'
+    ];
+    
+    for (const nonRetryable of nonRetryableErrors) {
+      if (errorMessage.includes(nonRetryable)) {
+        this.logger.debug(`Non-retryable error detected: ${nonRetryable}`);
+        return false;
+      }
+    }
+    
+    // Always retry these error types - they indicate transient issues
+    const retryableErrors = [
+      'timeout',
+      'network',
+      'connection',
+      'temporary',
+      'server error',
+      'service unavailable',
+      'rate limit',
+      'too many requests',
+      'internal error',
+      'dns',
+      'socket'
+    ];
+    
+    for (const retryable of retryableErrors) {
+      if (errorMessage.includes(retryable)) {
+        this.logger.debug(`Retryable error detected: ${retryable}, attempt ${attempt}`);
+        return true;
+      }
+    }
+    
+    // Special handling for specific error types
+    if (error instanceof NetworkError) {
+      this.logger.debug('NetworkError detected, will retry');
+      return true;
+    }
+    
+    if (error instanceof AuthenticationError && attempt === 1) {
+      // Only retry authentication errors once (maybe token expired)
+      this.logger.debug('AuthenticationError detected, will retry once');
+      return true;
+    }
+    
+    if (errorType === 'SDKNotInstalledError' && attempt <= 2) {
+      // Retry SDK errors a couple times (maybe transient loading issue)
+      this.logger.debug('SDK installation error detected, will retry with re-initialization');
+      return true;
+    }
+    
+    // Default: don't retry unknown errors after 2 attempts
+    if (attempt <= 2) {
+      this.logger.debug(`Unknown error type, allowing retry (attempt ${attempt})`);
+      return true;
+    }
+    
+    this.logger.debug(`Unknown error after multiple attempts, will not retry`);
+    return false;
+  }
+
+  /**
+   * Execute SDK with comprehensive error handling and recovery
+   */
+  private async executeWithRetry(
+    prompt: string, 
+    options: SDKClaudeOptions, 
+    attempt: number,
+    executionId: string
+  ): Promise<SDKResult> {
+    if (!claudeSDK || !(claudeSDK.query || claudeSDK.default?.query)) {
+      throw new SDKNotInstalledError('Claude Code SDK query function not available');
+    }
+    
+    // Check browser authentication before proceeding
+    const isAuthenticated = await this.checkBrowserAuthentication();
+    if (!isAuthenticated) {
+      this.logger.warning(`Browser authentication required [${executionId}]`);
+      throw new AuthenticationError('Browser authentication required. Please open claude.ai in your browser and log in.');
+    }
+
+    return new Promise(async (resolve, reject) => {
+      let output = '';
+      let hasError = false;
+      let errorCount = 0;
+      const timeoutMs = options.timeout || 120000;
+      const maxErrors = 5; // Maximum errors before giving up
+
+      // Enhanced timeout with grace period for cleanup
+      const timeoutHandle = setTimeout(() => {
+        if (!hasError) {
+          hasError = true;
+          this.logger.warning(`SDK execution timeout after ${timeoutMs}ms [${executionId}]`);
+          reject(new NetworkError(`Claude execution timed out after ${timeoutMs}ms`));
+        }
+      }, timeoutMs);
+
+      try {
+        this.logger.debug(`Executing Claude via SDK [${executionId}]`, { 
+          promptLength: prompt.length,
+          attempt,
+          timeout: timeoutMs
+        });
+
+        // Prepare SDK options with validation
+        const sdkOptions: any = {
+          maxTurns: 1,
+          model: options.model || 'sonnet',
+        };
+
+        // Add allowed tools if specified and validate format
+        if (options.allowedTools) {
+          try {
+            sdkOptions.allowedTools = options.allowedTools.split(',').map(t => t.trim()).filter(t => t.length > 0);
+            this.logger.debug(`Tools configured [${executionId}]`, { tools: sdkOptions.allowedTools });
+          } catch (toolError) {
+            this.logger.warning(`Invalid tools specification [${executionId}]`, { error: String(toolError) });
+          }
+        }
+
+        // Add session continuation with validation
+        if (options.sessionId && typeof options.sessionId === 'string') {
+          sdkOptions.continue = options.sessionId;
+        }
+
+        // Use the SDK's query function with error recovery
+        const queryFunction = claudeSDK.query || claudeSDK.default?.query;
+        let messages;
+        
+        try {
+          messages = queryFunction({
+            prompt: prompt,
+            options: sdkOptions
+          });
+        } catch (queryError) {
+          clearTimeout(timeoutHandle);
+          this.logger.error(`SDK query function failed [${executionId}]`, { error: String(queryError) });
+          
+          if (String(queryError).toLowerCase().includes('quota')) {
+            reject(new ModelQuotaError(`Model quota exceeded: ${queryError}`));
+          } else if (String(queryError).toLowerCase().includes('key')) {
+            reject(new APIKeyRequiredError(`API key issue: ${queryError}`));
+          } else {
+            reject(new SDKNotInstalledError(`SDK query failed: ${queryError}`));
+          }
+          return;
+        }
+
+        if (!messages || typeof messages[Symbol.asyncIterator] !== 'function') {
+          clearTimeout(timeoutHandle);
+          reject(new SDKNotInstalledError('SDK did not return a valid async iterator'));
+          return;
+        }
+
+        // Process messages with enhanced error handling
+        try {
+          for await (const message of messages) {
+            if (hasError) break;
+            
+            // Error counting for early termination
+            if (message.type === 'error') {
+              errorCount++;
+              if (errorCount > maxErrors) {
+                hasError = true;
+                clearTimeout(timeoutHandle);
+                reject(new RetryExhaustedError(`Too many errors (${errorCount}) during execution`));
+                return;
+              }
+            }
+
+            this.logger.debug(`SDK message [${executionId}]`, { type: message.type });
+
+            // Handle different message types with comprehensive error handling
+            switch (message.type) {
+              case 'result':
+                output += message.result || '';
+                if (options.verbose && message.result) {
+                  this.logger.debug(`Claude response [${executionId}]`, { 
+                    preview: message.result.substring(0, 200) + (message.result.length > 200 ? '...' : '')
+                  });
+                }
+                break;
+              
+              case 'tool_use':
+                if (options.verbose) {
+                  this.logger.debug(`Tool used [${executionId}]`, { tool: message.tool });
+                }
+                break;
+
+              case 'error':
+                const errorMessage = message.error || 'Unknown SDK error';
+                this.logger.error(`SDK error message received [${executionId}]`, { error: errorMessage });
+                
+                // Classify error type for better handling
+                if (errorMessage.toLowerCase().includes('quota') || errorMessage.toLowerCase().includes('limit')) {
+                  hasError = true;
+                  clearTimeout(timeoutHandle);
+                  reject(new ModelQuotaError(errorMessage));
+                  return;
+                } else if (errorMessage.toLowerCase().includes('auth')) {
+                  hasError = true;
+                  clearTimeout(timeoutHandle);
+                  reject(new AuthenticationError(errorMessage));
+                  return;
+                } else if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('connection')) {
+                  hasError = true;
+                  clearTimeout(timeoutHandle);
+                  reject(new NetworkError(errorMessage));
+                  return;
+                } else {
+                  // Generic error - continue processing but log
+                  this.logger.warning(`Non-fatal SDK error [${executionId}]`, { error: errorMessage });
+                }
+                break;
+
+              case 'session':
+                if (message.sessionId && options.verbose) {
+                  this.logger.debug(`Session info [${executionId}]`, { sessionId: message.sessionId.substring(0, 8) + '...' });
+                }
+                break;
+
+              case 'stream':
+                if (message.content) {
+                  output += message.content;
+                }
+                break;
+
+              default:
+                if (options.verbose) {
+                  this.logger.debug(`Unhandled message type [${executionId}]`, { type: message.type });
+                }
+            }
+          }
+        } catch (iteratorError) {
+          clearTimeout(timeoutHandle);
+          this.logger.error(`SDK message processing failed [${executionId}]`, { error: String(iteratorError) });
+          
+          if (String(iteratorError).toLowerCase().includes('network')) {
+            reject(new NetworkError(`Network error during processing: ${iteratorError}`));
+          } else {
+            reject(new Error(`Message processing failed: ${iteratorError}`));
+          }
+          return;
+        }
+
+        clearTimeout(timeoutHandle);
+
+        // Validate output
+        const finalOutput = output.trim();
+        if (!finalOutput && !hasError) {
+          this.logger.warning(`No output received from SDK [${executionId}]`);
+        }
+
+        // Successfully completed
+        resolve({
+          output: finalOutput || 'No output received from Claude',
+          exitCode: 0,
+          messages: [],
+          hasError: false,
+          executionTime: timeoutMs
+        });
+
+      } catch (error: any) {
+        clearTimeout(timeoutHandle);
+        
+        this.logger.error(`SDK execution error [${executionId}]`, { 
+          error: String(error),
+          attempt,
+          type: error?.constructor?.name
+        });
+        
+        // Enhanced error classification
+        if (error.message && (
+          error.message.includes('authenticate') || 
+          error.message.includes('sign in') ||
+          error.message.includes('login') ||
+          error.message.includes('unauthorized')
+        )) {
+          reject(new AuthenticationError('Claude authentication required. Please run "claude" in your terminal and complete authentication.'));
+        } else if (error.message && (
+          error.message.includes('quota') ||
+          error.message.includes('limit') ||
+          error.message.includes('billing')
+        )) {
+          reject(new ModelQuotaError(`Model quota or billing issue: ${error.message}`));
+        } else if (error.message && (
+          error.message.includes('network') ||
+          error.message.includes('connection') ||
+          error.message.includes('timeout')
+        )) {
+          reject(new NetworkError(`Network connectivity issue: ${error.message}`));
+        } else {
+          reject(error);
+        }
+      }
+    });
   }
 
   /**
@@ -802,33 +1422,82 @@ export class SDKClaudeExecutor {
    */
   private enhanceError(error: any, context: any): Error {
     const originalMessage = error?.message || 'Unknown error';
+    const errorType = error?.constructor?.name || 'Error';
     
-    let enhancedMessage = `SDK Execution Failed: ${originalMessage}`;
+    let enhancedMessage = `${chalk.red.bold('🚫 SDK Execution Failed')}: ${originalMessage}\n`;
     
-    if (context.browserUsed) {
-      enhancedMessage += `\nBrowser used: ${context.browserUsed}`;
+    // Add context information
+    if (context.executionId) {
+      enhancedMessage += `\n${chalk.gray('Execution ID:')} ${context.executionId}`;
     }
-    
     if (context.attempt > 1) {
-      enhancedMessage += `\nFailed after ${context.attempt} attempts`;
+      enhancedMessage += `\n${chalk.gray('Failed after:')} ${context.attempt} attempts`;
+    }
+    if (context.duration) {
+      enhancedMessage += `\n${chalk.gray('Total duration:')} ${Math.round(context.duration / 1000)}s`;
+    }
+    if (context.circuitBreakerOpen) {
+      enhancedMessage += `\n${chalk.red('Circuit breaker:')} Open (too many failures)`;
     }
     
-    // Add troubleshooting suggestions
-    if (originalMessage.toLowerCase().includes('authentication')) {
-      enhancedMessage += '\n\nTroubleshooting:';
-      enhancedMessage += '\n1. Ensure you are logged into Claude in your browser';
-      enhancedMessage += '\n2. Try refreshing the Claude tab';
-      enhancedMessage += '\n3. Clear browser cache if issues persist';
-    } else if (originalMessage.toLowerCase().includes('timeout')) {
-      enhancedMessage += '\n\nTroubleshooting:';
-      enhancedMessage += '\n1. Try a simpler task first';
-      enhancedMessage += '\n2. Increase timeout with --timeout option';
-      enhancedMessage += '\n3. Check your internet connection';
+    enhancedMessage += '\n';
+    
+    // Add specific troubleshooting based on error type and message
+    const lowerMessage = originalMessage.toLowerCase();
+    
+    if (error instanceof AuthenticationError || lowerMessage.includes('authentication') || lowerMessage.includes('unauthorized')) {
+      enhancedMessage += `\n${chalk.blue.bold('🔐 Authentication Issue')}:`;
+      enhancedMessage += `\n${chalk.blue('1.')} Run: ${chalk.cyan('claude auth')} to authenticate`;
+      enhancedMessage += `\n${chalk.blue('2.')} Ensure Claude is open in your browser and you are logged in`;
+      enhancedMessage += `\n${chalk.blue('3.')} Try: ${chalk.cyan('acc --verify-claude-cli')} to check CLI status`;
+      enhancedMessage += `\n${chalk.blue('4.')} Clear browser cache and cookies for claude.ai if issues persist`;
+    } else if (error instanceof NetworkError || lowerMessage.includes('network') || lowerMessage.includes('connection') || lowerMessage.includes('timeout')) {
+      enhancedMessage += `\n${chalk.yellow.bold('🌐 Network Issue')}:`;
+      enhancedMessage += `\n${chalk.yellow('1.')} Check your internet connection`;
+      enhancedMessage += `\n${chalk.yellow('2.')} Try increasing timeout: ${chalk.cyan('--timeout 300000')} (5 minutes)`;
+      enhancedMessage += `\n${chalk.yellow('3.')} Verify firewall/proxy settings allow connections to claude.ai`;
+      enhancedMessage += `\n${chalk.yellow('4.')} Try a simpler task to test connectivity`;
+    } else if (error instanceof ModelQuotaError || lowerMessage.includes('quota') || lowerMessage.includes('limit')) {
+      enhancedMessage += `\n${chalk.red.bold('💳 Quota/Billing Issue')}:`;
+      enhancedMessage += `\n${chalk.red('1.')} Check your Claude subscription at claude.ai/account`;
+      enhancedMessage += `\n${chalk.red('2.')} Verify you have remaining usage credits`;
+      enhancedMessage += `\n${chalk.red('3.')} Try switching to a different model with ${chalk.cyan('--model sonnet')}`;
+      enhancedMessage += `\n${chalk.red('4.')} Wait for usage limits to reset if using free tier`;
+    } else if (error instanceof SDKNotInstalledError || lowerMessage.includes('not installed') || lowerMessage.includes('not found')) {
+      enhancedMessage += `\n${chalk.magenta.bold('📦 Installation Issue')}:`;
+      enhancedMessage += `\n${chalk.magenta('1.')} Install Claude CLI: ${chalk.cyan('npm install -g @anthropic-ai/claude-code')}`;
+      enhancedMessage += `\n${chalk.magenta('2.')} Verify installation: ${chalk.cyan('claude --version')}`;
+      enhancedMessage += `\n${chalk.magenta('3.')} Run diagnostic: ${chalk.cyan('acc --verify-claude-cli')}`;
+      enhancedMessage += `\n${chalk.magenta('4.')} Try reinstalling if version is outdated`;
+    } else if (error instanceof RetryExhaustedError) {
+      enhancedMessage += `\n${chalk.red.bold('🔄 Retry Exhausted')}:`;
+      enhancedMessage += `\n${chalk.red('1.')} Wait a few minutes before trying again`;
+      enhancedMessage += `\n${chalk.red('2.')} Try breaking down the task into smaller parts`;
+      enhancedMessage += `\n${chalk.red('3.')} Check if Claude services are experiencing issues`;
+      enhancedMessage += `\n${chalk.red('4.')} Consider using ${chalk.cyan('--use-legacy')} flag as fallback`;
+    } else {
+      // Generic troubleshooting
+      enhancedMessage += `\n${chalk.cyan.bold('🛠️ General Troubleshooting')}:`;
+      enhancedMessage += `\n${chalk.cyan('1.')} Run: ${chalk.cyan('acc --verify-claude-cli')} for diagnostics`;
+      enhancedMessage += `\n${chalk.cyan('2.')} Try restarting your terminal/command prompt`;
+      enhancedMessage += `\n${chalk.cyan('3.')} Check for Claude CLI updates`;
+      enhancedMessage += `\n${chalk.cyan('4.')} Report persistent issues at the project repository`;
     }
     
-    const enhancedError = new Error(enhancedMessage);
-    enhancedError.name = error?.name || 'SDKExecutionError';
-    enhancedError.stack = error?.stack;
+    enhancedMessage += '\n';
+    
+    // Add quick fixes section
+    enhancedMessage += `\n${chalk.green.bold('💡 Quick Fixes')}:`;
+    enhancedMessage += `\n${chalk.green('•')} Use ${chalk.cyan('--verbose')} for detailed execution logs`;
+    enhancedMessage += `\n${chalk.green('•')} Try ${chalk.cyan('--model sonnet')} if using a different model`;
+    enhancedMessage += `\n${chalk.green('•')} Set ${chalk.cyan('ANTHROPIC_API_KEY')} for API-only mode`;
+    enhancedMessage += `\n${chalk.green('•')} Use ${chalk.cyan('--timeout 180000')} for longer tasks`;
+    
+    const enhancedError = new (error?.constructor || Error)(enhancedMessage);
+    enhancedError.name = errorType;
+    if (error?.stack) {
+      enhancedError.stack = error.stack;
+    }
     
     return enhancedError;
   }
@@ -843,6 +1512,9 @@ export class SDKClaudeExecutor {
   /**
    * Execute multiple iterations (for autopilot mode)
    */
+  /**
+   * Execute autopilot with enhanced error handling and adaptive recovery
+   */
   async executeAutopilot(
     initialPrompt: string,
     options: SDKClaudeOptions & { maxIterations?: number; continueOnError?: boolean }
@@ -851,6 +1523,8 @@ export class SDKClaudeExecutor {
     totalTokens: number;
     totalDuration: number;
     success: boolean;
+    errorRecoveries: number;
+    completionReason: string;
   }> {
     const maxIterations = options.maxIterations || 10;
     const results: SDKExecutionResult[] = [];
@@ -858,108 +1532,483 @@ export class SDKClaudeExecutor {
     let totalDuration = 0;
     let currentPrompt = initialPrompt;
     let sessionId = options.sessionId;
+    let errorRecoveries = 0;
+    let completionReason = 'max_iterations';
     
-    this.logger.info(`Starting SDK autopilot mode with max ${maxIterations} iterations`);
+    const autopilotId = `autopilot-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    
+    this.logger.info(`Starting enhanced SDK autopilot [${autopilotId}]`, {
+      maxIterations,
+      continueOnError: options.continueOnError,
+      initialPromptLength: initialPrompt.length
+    });
+    
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
     
     for (let i = 0; i < maxIterations; i++) {
-      this.logger.debug(`Autopilot iteration ${i + 1}/${maxIterations}`);
+      const iterationId = `${autopilotId}-iter-${i + 1}`;
+      this.logger.debug(`Autopilot iteration ${i + 1}/${maxIterations} [${iterationId}]`);
       
       try {
+        // Check if we should pause due to too many consecutive errors
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          this.logger.warning(`Too many consecutive errors (${consecutiveErrors}), adding extended delay [${iterationId}]`);
+          await this.delay(Math.min(5000 * consecutiveErrors, 30000)); // Up to 30s delay
+        }
+        
+        const iterationStart = Date.now();
         const result = await this.executeWithSDK(currentPrompt, {
           ...options,
           sessionId
         });
         
-        results.push(result);
-        totalTokens += result.executionTime || 0;
-        totalDuration += result.executionTime || 0;
+        const iterationDuration = Date.now() - iterationStart;
+        
+        results.push({
+          ...result,
+          duration: iterationDuration
+        });
+        
+        totalTokens += (result as any).tokensUsed || 0;
+        totalDuration += iterationDuration;
         sessionId = result.sessionId || sessionId;
         
-        // Check if task is complete
-        const isComplete = this.isTaskComplete(result.output);
-        if (isComplete) {
-          this.logger.info(`Task completed in ${i + 1} iterations`);
+        // Reset consecutive error count on success
+        consecutiveErrors = 0;
+        
+        this.logger.debug(`Iteration ${i + 1} completed successfully [${iterationId}]`, {
+          duration: `${iterationDuration}ms`,
+          outputLength: result.output.length
+        });
+        
+        // Enhanced task completion detection
+        const completionAnalysis = this.analyzeTaskCompletion(result.output, initialPrompt, i + 1);
+        if (completionAnalysis.isComplete) {
+          completionReason = completionAnalysis.reason;
+          this.logger.info(`Task completed in ${i + 1} iterations [${autopilotId}]`, {
+            reason: completionReason,
+            confidence: completionAnalysis.confidence
+          });
           return {
             results,
             totalTokens,
             totalDuration,
-            success: true
+            success: true,
+            errorRecoveries,
+            completionReason
           };
         }
         
-        // Generate next prompt based on current result
-        currentPrompt = this.generateNextPrompt(result.output, initialPrompt);
+        // Generate enhanced next prompt based on current result
+        currentPrompt = this.generateEnhancedNextPrompt(result.output, initialPrompt, i + 1, results);
         
       } catch (error) {
-        this.logger.error(`Autopilot iteration ${i + 1} failed:`, error instanceof Error ? error.message : String(error));
+        consecutiveErrors++;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        this.logger.error(`Autopilot iteration ${i + 1} failed [${iterationId}]`, {
+          error: errorMessage,
+          errorType: error?.constructor?.name,
+          consecutiveErrors,
+          continueOnError: options.continueOnError
+        });
+        
+        // Add error result to track failures
+        results.push({
+          output: `Error: ${errorMessage}`,
+          exitCode: 1,
+          hasError: true,
+          duration: 0
+        });
         
         if (!options.continueOnError) {
+          completionReason = 'error_abort';
+          this.logger.warning(`Autopilot aborted due to error [${autopilotId}]`);
           return {
             results,
             totalTokens,
             totalDuration,
-            success: false
+            success: false,
+            errorRecoveries,
+            completionReason
           };
         }
         
-        // Generate error recovery prompt
-        currentPrompt = this.generateErrorRecoveryPrompt(error, initialPrompt);
+        // Enhanced error recovery strategies
+        const recoveryStrategy = this.selectRecoveryStrategy(error, consecutiveErrors, i + 1);
+        currentPrompt = this.generateRecoveryPrompt(error, initialPrompt, recoveryStrategy, results);
+        errorRecoveries++;
+        
+        this.logger.info(`Applied error recovery strategy: ${recoveryStrategy.name} [${iterationId}]`);
+        
+        // Abort if too many consecutive errors even with continueOnError
+        if (consecutiveErrors >= maxConsecutiveErrors * 2) {
+          completionReason = 'too_many_errors';
+          this.logger.error(`Autopilot aborted: too many consecutive errors (${consecutiveErrors}) [${autopilotId}]`);
+          return {
+            results,
+            totalTokens,
+            totalDuration,
+            success: false,
+            errorRecoveries,
+            completionReason
+          };
+        }
       }
       
-      // Small delay between iterations
+      // Adaptive delay between iterations based on performance
       if (i < maxIterations - 1) {
-        await this.delay(1000);
+        const delay = this.calculateAdaptiveDelay(consecutiveErrors, i + 1, results);
+        await this.delay(delay);
       }
     }
     
-    this.logger.warning(`Autopilot reached max iterations (${maxIterations}) without completion`);
+    this.logger.warning(`Autopilot reached max iterations (${maxIterations}) without completion [${autopilotId}]`, {
+      errorRecoveries,
+      finalConsecutiveErrors: consecutiveErrors
+    });
     
     return {
       results,
       totalTokens,
       totalDuration,
-      success: false
+      success: false,
+      errorRecoveries,
+      completionReason
     };
   }
 
   /**
-   * Check if task appears to be complete
+   * Enhanced task completion analysis with confidence scoring
    */
-  private isTaskComplete(output: string): boolean {
+  private analyzeTaskCompletion(output: string, originalPrompt: string, iteration: number): {
+    isComplete: boolean;
+    confidence: number;
+    reason: string;
+  } {
     const lowerOutput = output.toLowerCase();
-    const completionIndicators = [
+    const lowerPrompt = originalPrompt.toLowerCase();
+    
+    // Strong completion indicators (high confidence)
+    const strongIndicators = [
       'task completed',
       'successfully implemented',
+      'implementation complete',
+      'task finished',
+      'work completed',
+      'finished successfully',
+      'completed successfully'
+    ];
+    
+    // Medium confidence indicators
+    const mediumIndicators = [
       'all tests pass',
       'build successful',
       'deployment complete',
       'feature implemented',
       'bug fixed',
-      'task finished',
-      'implementation complete'
+      'requirements met',
+      'objective achieved'
     ];
     
-    return completionIndicators.some(indicator => lowerOutput.includes(indicator));
-  }
-
-  /**
-   * Generate next prompt based on current result
-   */
-  private generateNextPrompt(currentOutput: string, originalPrompt: string): string {
-    // Simple continuation logic - could be enhanced with AI analysis
-    if (currentOutput.toLowerCase().includes('error') || currentOutput.toLowerCase().includes('failed')) {
-      return `The previous attempt encountered issues. Please fix the errors and continue with: ${originalPrompt}`;
+    // Weak indicators (need additional context)
+    const weakIndicators = [
+      'done',
+      'complete',
+      'finished',
+      'ready',
+      'working as expected'
+    ];
+    
+    let confidence = 0;
+    let reason = 'incomplete';
+    
+    // Check strong indicators
+    for (const indicator of strongIndicators) {
+      if (lowerOutput.includes(indicator)) {
+        confidence = 0.9;
+        reason = 'explicit_completion_statement';
+        break;
+      }
     }
     
-    return `Continue with the task. Previous output: ${currentOutput.substring(0, 500)}... Please proceed with the next steps.`;
+    // Check medium indicators if no strong match
+    if (confidence === 0) {
+      for (const indicator of mediumIndicators) {
+        if (lowerOutput.includes(indicator)) {
+          confidence = 0.7;
+          reason = 'success_indicator_found';
+          break;
+        }
+      }
+    }
+    
+    // Check weak indicators if no medium match
+    if (confidence === 0) {
+      for (const indicator of weakIndicators) {
+        if (lowerOutput.includes(indicator)) {
+          // Only consider weak indicators if they appear with context
+          if (lowerOutput.includes('task ' + indicator) || 
+              lowerOutput.includes('implementation ' + indicator) ||
+              lowerOutput.includes('work ' + indicator)) {
+            confidence = 0.5;
+            reason = 'weak_completion_indicator';
+            break;
+          }
+        }
+      }
+    }
+    
+    // Additional context checks to improve confidence
+    if (confidence > 0) {
+      // Check if output discusses next steps or remaining work (reduces confidence)
+      const continueIndicators = [
+        'next step',
+        'to do',
+        'remaining',
+        'still need',
+        'not yet',
+        'pending',
+        'in progress'
+      ];
+      
+      for (const continueIndicator of continueIndicators) {
+        if (lowerOutput.includes(continueIndicator)) {
+          confidence = Math.max(0, confidence - 0.2);
+          break;
+        }
+      }
+      
+      // Check if original prompt keywords are addressed
+      const promptKeywords = this.extractKeywords(lowerPrompt);
+      const outputKeywords = this.extractKeywords(lowerOutput);
+      const keywordMatch = promptKeywords.filter(k => outputKeywords.includes(k)).length / promptKeywords.length;
+      
+      if (keywordMatch > 0.7) {
+        confidence = Math.min(1.0, confidence + 0.1);
+      }
+    }
+    
+    // Early completion detection (before iteration 3) requires higher confidence
+    if (iteration < 3 && confidence < 0.8) {
+      confidence = 0;
+      reason = 'early_completion_requires_high_confidence';
+    }
+    
+    return {
+      isComplete: confidence >= 0.6,
+      confidence,
+      reason
+    };
+  }
+  
+  /**
+   * Extract keywords from text for completion analysis
+   */
+  private extractKeywords(text: string): string[] {
+    const words = text.split(/\W+/).filter(word => word.length > 3);
+    const commonWords = ['that', 'this', 'with', 'from', 'they', 'been', 'have', 'were', 'said', 'each', 'which', 'their', 'will', 'about', 'could', 'there', 'when', 'what', 'make', 'like', 'into', 'time', 'very', 'after', 'first', 'well', 'just', 'than', 'over', 'think', 'also', 'back', 'other', 'many', 'then', 'them', 'these', 'come', 'work', 'life', 'only', 'through', 'before', 'here', 'where', 'much', 'should', 'being', 'now'];
+    
+    return words.filter(word => !commonWords.includes(word.toLowerCase())).slice(0, 10);
+  }
+  
+  /**
+   * Select appropriate error recovery strategy
+   */
+  private selectRecoveryStrategy(error: any, consecutiveErrors: number, iteration: number): {
+    name: string;
+    description: string;
+  } {
+    const errorMessage = error?.message?.toLowerCase() || '';
+    
+    if (error instanceof NetworkError || errorMessage.includes('network') || errorMessage.includes('timeout')) {
+      return {
+        name: 'network_retry',
+        description: 'Retry with simplified approach due to network issues'
+      };
+    }
+    
+    if (error instanceof AuthenticationError) {
+      return {
+        name: 'auth_recovery',
+        description: 'Attempt authentication recovery and retry'
+      };
+    }
+    
+    if (consecutiveErrors >= 2) {
+      return {
+        name: 'simplification',
+        description: 'Break down task into smaller, simpler steps'
+      };
+    }
+    
+    if (iteration > 5) {
+      return {
+        name: 'alternative_approach',
+        description: 'Try completely different approach to the problem'
+      };
+    }
+    
+    return {
+      name: 'standard_retry',
+      description: 'Retry with error context and guidance'
+    };
+  }
+  
+  /**
+   * Calculate adaptive delay based on execution performance
+   */
+  private calculateAdaptiveDelay(consecutiveErrors: number, iteration: number, results: any[]): number {
+    let baseDelay = 1000; // 1 second base
+    
+    // Increase delay for consecutive errors
+    if (consecutiveErrors > 0) {
+      baseDelay *= Math.pow(1.5, consecutiveErrors);
+    }
+    
+    // Longer delay for later iterations to allow for reflection
+    if (iteration > 5) {
+      baseDelay += 1000;
+    }
+    
+    // Check average execution time and adjust
+    if (results.length > 0) {
+      const avgDuration = results.reduce((sum, r) => sum + (r.duration || 0), 0) / results.length;
+      if (avgDuration > 30000) { // If iterations are taking >30s, add more delay
+        baseDelay += 2000;
+      }
+    }
+    
+    return Math.min(baseDelay, 15000); // Cap at 15 seconds
   }
 
   /**
-   * Generate error recovery prompt
+   * Generate enhanced next prompt with context and guidance
    */
-  private generateErrorRecoveryPrompt(error: any, originalPrompt: string): string {
+  private generateEnhancedNextPrompt(
+    currentOutput: string, 
+    originalPrompt: string, 
+    iteration: number,
+    results: any[]
+  ): string {
+    const outputPreview = currentOutput.substring(0, 800);
+    const hasErrors = currentOutput.toLowerCase().includes('error') || currentOutput.toLowerCase().includes('failed');
+    
+    let prompt = '';
+    
+    if (iteration === 1) {
+      // First iteration - provide context about progress
+      prompt = `ORIGINAL TASK: ${originalPrompt}\n\nPROGRESS FROM ITERATION 1:\n${outputPreview}${currentOutput.length > 800 ? '...' : ''}\n\n`;
+      
+      if (hasErrors) {
+        prompt += 'I notice there were some issues in the first attempt. Please analyze what went wrong, fix any errors, and continue with the task step by step.';
+      } else {
+        prompt += 'Good progress! Please continue with the next logical steps to complete the task.';
+      }
+    } else {
+      // Later iterations - provide more comprehensive context
+      prompt = `CONTINUING MULTI-STEP TASK: ${originalPrompt}\n\n`;
+      prompt += `CURRENT ITERATION: ${iteration + 1}\n`;
+      prompt += `LATEST PROGRESS:\n${outputPreview}${currentOutput.length > 800 ? '...' : ''}\n\n`;
+      
+      // Analyze patterns from previous results
+      const successfulSteps = results.filter(r => !r.hasError).length;
+      const totalSteps = results.length;
+      
+      prompt += `EXECUTION SUMMARY: ${successfulSteps}/${totalSteps} iterations successful\n\n`;
+      
+      if (hasErrors) {
+        prompt += 'The latest iteration encountered issues. Please:';
+        prompt += '\n1. Identify what specific problems occurred';
+        prompt += '\n2. Adjust your approach to avoid these issues';
+        prompt += '\n3. Continue working toward completing the original task';
+        
+        // Add specific guidance for repeated failures
+        if (iteration > 3) {
+          prompt += '\n\nNote: Since we\'re several iterations in, consider breaking down remaining work into smaller, more manageable steps.';
+        }
+      } else {
+        prompt += 'Great progress! Please analyze what still needs to be done and continue with the next steps.';
+        
+        // Add completion check for later iterations
+        if (iteration > 2) {
+          prompt += ' If you believe the task is now complete, please clearly state "TASK COMPLETED" and summarize what was accomplished.';
+        }
+      }
+    }
+    
+    prompt += '\n\nPlease proceed with the next appropriate step.';
+    return prompt;
+  }
+
+  /**
+   * Generate sophisticated error recovery prompt based on strategy
+   */
+  private generateRecoveryPrompt(
+    error: any, 
+    originalPrompt: string, 
+    strategy: { name: string; description: string },
+    results: any[]
+  ): string {
     const errorMessage = error?.message || 'Unknown error';
-    return `The previous attempt failed with error: ${errorMessage}. Please try a different approach for: ${originalPrompt}`;
+    const errorType = error?.constructor?.name || 'Error';
+    
+    let prompt = `TASK RECOVERY NEEDED\n\n`;
+    prompt += `ORIGINAL TASK: ${originalPrompt}\n\n`;
+    prompt += `ERROR ENCOUNTERED: ${errorType} - ${errorMessage}\n\n`;
+    prompt += `RECOVERY STRATEGY: ${strategy.name} (${strategy.description})\n\n`;
+    
+    switch (strategy.name) {
+      case 'network_retry':
+        prompt += 'Due to network/connectivity issues, please:';
+        prompt += '\n1. Try a simpler version of the current step';
+        prompt += '\n2. Focus on core functionality first';
+        prompt += '\n3. Avoid operations that might require extended connectivity';
+        prompt += '\n4. Proceed step-by-step with basic implementation';
+        break;
+        
+      case 'auth_recovery':
+        prompt += 'Due to authentication issues, please:';
+        prompt += '\n1. Assume authentication will be resolved externally';
+        prompt += '\n2. Focus on the core task implementation';
+        prompt += '\n3. Document any authentication requirements';
+        prompt += '\n4. Proceed with the main task logic';
+        break;
+        
+      case 'simplification':
+        prompt += 'Let\'s break this down into simpler steps. Please:';
+        prompt += '\n1. Identify the single most important next step';
+        prompt += '\n2. Implement just that one step completely';
+        prompt += '\n3. Test/verify that step works';
+        prompt += '\n4. Don\'t try to do multiple things at once';
+        break;
+        
+      case 'alternative_approach':
+        prompt += 'Let\'s try a completely different approach. Please:';
+        prompt += '\n1. Step back and reconsider the problem';
+        prompt += '\n2. Think of alternative ways to achieve the same goal';
+        prompt += '\n3. Choose a fundamentally different implementation strategy';
+        prompt += '\n4. Start fresh with this new approach';
+        break;
+        
+      default:
+        prompt += 'Please address the error and continue with the task:';
+        prompt += '\n1. Analyze what caused this specific error';
+        prompt += '\n2. Implement a fix or workaround';
+        prompt += '\n3. Continue with the original task objectives';
+    }
+    
+    // Add context from successful previous steps
+    const successfulResults = results.filter(r => !r.hasError && r.output.length > 0);
+    if (successfulResults.length > 0) {
+      prompt += '\n\nSUCCESSFUL PROGRESS SO FAR:\n';
+      const lastSuccess = successfulResults[successfulResults.length - 1];
+      prompt += lastSuccess.output.substring(0, 300) + (lastSuccess.output.length > 300 ? '...' : '');
+    }
+    
+    prompt += '\n\nPlease implement the recovery approach and continue working toward completing the original task.';
+    return prompt;
   }
 
   /**

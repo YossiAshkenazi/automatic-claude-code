@@ -570,6 +570,14 @@ The v2.0 SDK architecture is operational, but nested execution requires this dir
     const executionId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const startTime = Date.now();
     
+    // Check if we're running in a nested Claude Code session - this is the primary entry point
+    const isNestedSession = process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT === 'cli';
+    
+    if (isNestedSession) {
+      this.logger.debug(`Detected nested session at entry point - using direct execution mode [${executionId}]`);
+      return this.executeDirectMode(prompt, options, executionId);
+    }
+    
     this.logger.debug(`Starting SDK execution [${executionId}]`, { 
       promptLength: prompt.length,
       options: { ...options, sessionId: options.sessionId ? 'redacted' : undefined }

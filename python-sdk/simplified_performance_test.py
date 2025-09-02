@@ -483,10 +483,10 @@ class SimplifiedPerformanceTestSuite:
                 error_start = time.time()
                 
                 try:
-                    if asyncio.iscoroutinefunction(scenario):
-                        await scenario()
-                    else:
-                        scenario()
+                    # Handle lambda functions that return coroutines
+                    result = scenario()
+                    if asyncio.iscoroutine(result):
+                        await result
                     # If no error was raised, that's unexpected
                 except Exception as e:
                     # Error was properly handled

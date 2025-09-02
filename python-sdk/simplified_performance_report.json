@@ -1,0 +1,116 @@
+{
+  "summary": {
+    "total_tests": 6,
+    "successful_tests": 5,
+    "failed_tests": 1,
+    "success_rate_percent": 83.33333333333334,
+    "total_execution_time_seconds": 29.863,
+    "total_memory_usage_mb": 3.84
+  },
+  "performance_metrics": {
+    "fastest_test": "error_handling_performance",
+    "slowest_test": "memory_patterns",
+    "most_memory_intensive": "concurrent_operations",
+    "avg_test_duration_ms": 4977.151433626811
+  },
+  "test_results": [
+    {
+      "test_name": "options_creation_performance",
+      "success": true,
+      "execution_time": 0.47551536560058594,
+      "memory_usage_mb": 0.01953125,
+      "error_message": null,
+      "additional_metrics": {
+        "configs_created": 1000,
+        "configs_per_second": 2102.9814646199266,
+        "memory_per_config_kb": 0.02
+      }
+    },
+    {
+      "test_name": "cli_detection_performance",
+      "success": true,
+      "execution_time": 7.2251574993133545,
+      "memory_usage_mb": 0.63671875,
+      "error_message": null,
+      "additional_metrics": {
+        "detections_performed": 10,
+        "avg_detection_time_ms": 722.5034236907959,
+        "min_detection_time_ms": 0.0021457672119140625,
+        "max_detection_time_ms": 1944.1514015197754,
+        "detection_times_ms": [
+          1781.552791595459,
+          1944.1514015197754,
+          0.0054836273193359375,
+          0.0030994415283203125,
+          1815.6025409698486
+        ]
+      }
+    },
+    {
+      "test_name": "process_manager_performance",
+      "success": true,
+      "execution_time": 0.0034933090209960938,
+      "memory_usage_mb": 0.50390625,
+      "error_message": null,
+      "additional_metrics": {
+        "operations_performed": 103,
+        "operations_per_second": 29484.938028938028
+      }
+    },
+    {
+      "test_name": "memory_patterns",
+      "success": true,
+      "execution_time": 17.613728046417236,
+      "memory_usage_mb": -0.42578125,
+      "error_message": null,
+      "additional_metrics": {
+        "cycles_completed": 10,
+        "memory_samples_mb": [
+          0.22265625,
+          0.00390625,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.65234375,
+          0.0,
+          0.0
+        ],
+        "avg_cycle_growth_mb": -0.042578125,
+        "memory_leak_detected": false,
+        "memory_variance": 0.05077938503689236
+      }
+    },
+    {
+      "test_name": "concurrent_operations",
+      "success": true,
+      "execution_time": 4.542819976806641,
+      "memory_usage_mb": 2.66015625,
+      "error_message": null,
+      "additional_metrics": {
+        "concurrent_tasks": 20,
+        "successful_tasks": 20,
+        "failed_tasks": 0,
+        "success_rate": 1.0,
+        "tasks_per_second": 4.4025517414535384
+      }
+    },
+    {
+      "test_name": "error_handling_performance",
+      "success": false,
+      "execution_time": 0.0021944046020507812,
+      "memory_usage_mb": 0.015625,
+      "error_message": null,
+      "additional_metrics": {
+        "error_scenarios_tested": 5,
+        "errors_properly_handled": 3,
+        "error_handling_rate": 0.6
+      }
+    }
+  ],
+  "recommendations": [
+    "Fix 1 failing tests before production use",
+    "Optimize performance - 2 tests took >5 seconds"
+  ]
+}

@@ -511,6 +511,14 @@ export class SDKClaudeExecutor extends EventEmitter {
    * TODO: Re-enable when browser session manager TS errors are fixed
    */
   async checkBrowserAuthentication(): Promise<boolean> {
+    // Check if we're running within Claude Code (nested session)
+    const isNestedSession = process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT === 'cli';
+    
+    if (isNestedSession) {
+      this.logger.debug('Detected nested Claude Code session - bypassing authentication check');
+      return true; // Assume parent session is authenticated
+    }
+    
     this.logger.debug('Browser authentication check temporarily disabled');
     // For now, assume browser authentication is available
     // This will be properly implemented once browser session manager TS issues are resolved
@@ -1191,6 +1199,14 @@ export class SDKClaudeExecutor extends EventEmitter {
     attempt: number,
     executionId: string
   ): Promise<SDKResult> {
+    // Check if we're running in a nested Claude Code session
+    const isNestedSession = process.env.CLAUDECODE === '1' || process.env.CLAUDE_CODE_ENTRYPOINT === 'cli';
+    
+    if (isNestedSession) {
+      this.logger.debug(`Detected nested session - using direct execution mode [${executionId}]`);
+      return this.executeDirectMode(prompt, options, executionId);
+    }
+    
     if (!claudeSDK || !(claudeSDK.query || claudeSDK.default?.query)) {
       throw new SDKNotInstalledError('Claude Code SDK query function not available');
     }

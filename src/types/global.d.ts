@@ -332,11 +332,14 @@ declare module 'blessed-contrib' {
     left?: number | string;
     width?: number | string;
     height?: number | string;
+    right?: number | string;
+    bottom?: number | string;
     stroke?: string;
     fill?: string;
     percent?: number;
     data?: any;
     showLabel?: boolean;
+    [key: string]: any; // Allow any additional properties
   }
 
   export function gauge(options?: GaugeOptions): any;

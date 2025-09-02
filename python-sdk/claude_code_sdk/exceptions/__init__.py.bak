@@ -1,0 +1,35 @@
+"""
+Claude Code SDK - Exception Classes
+"""
+
+from .errors import (
+    ClaudeCodeError,
+    ClaudeTimeoutError,
+    ClaudeAuthError,
+    ClaudeNotFoundError,
+    ClaudeConfigError,
+    RateLimitError,
+    QuotaExceededError,
+    InvalidModelError,
+    SessionCorruptedError,
+    ResourceExhaustionError,
+    NetworkError,
+    ProcessError
+)
+
+__all__ = [
+    'ClaudeCodeError',
+    'ClaudeTimeoutError', 
+    'ClaudeAuthError',
+    'ClaudeNotFoundError',
+    'ClaudeConfigError',
+    'RateLimitError',
+    'QuotaExceededError',
+    'InvalidModelError',
+    'SessionCorruptedError',
+    'ResourceExhaustionError',
+    'NetworkError',
+    'ProcessError'
+]from .errors import classify_error, is_recoverable_error
+classify_error,
+is_recoverable_error

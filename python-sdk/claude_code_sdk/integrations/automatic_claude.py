@@ -30,7 +30,9 @@ class AutomaticClaudeIntegration:
                  api_port: int = 4005,
                  enable_dual_agent: bool = True,
                  enable_monitoring: bool = True,
-                 session_id: Optional[str] = None):
+                 session_id: Optional[str] = None,
+                 dashboard_url: Optional[str] = None,
+                 api_url: Optional[str] = None):
         """
         Initialize integration
         
@@ -46,6 +48,10 @@ class AutomaticClaudeIntegration:
         self.enable_dual_agent = enable_dual_agent
         self.enable_monitoring = enable_monitoring
         self.session_id = session_id or f"python-sdk-{int(time.time())}"
+        
+        # URL properties for testing compatibility
+        self.dashboard_url = dashboard_url or f"http://localhost:{monitoring_port}"
+        self.api_url = api_url or f"http://localhost:{api_port}"
         
         # Initialize monitoring if enabled
         self.monitoring = None
@@ -276,6 +282,13 @@ class AutomaticClaudeIntegration:
             'session_time': session_time,
             'final_result': worker_results[-1]['final_result'] if worker_results else ''
         }
+    
+    def create_session(self) -> str:
+        """Create a new session ID"""
+        import time
+        new_session_id = f"python-sdk-{int(time.time())}-{hash(str(time.time()))}"
+        self.session_id = new_session_id
+        return new_session_id
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get execution statistics"""

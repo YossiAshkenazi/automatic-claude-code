@@ -26,7 +26,7 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  // setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'], // Commented out - setup file doesn't exist
   testTimeout: 10000,
   verbose: true,
   transformIgnorePatterns: [

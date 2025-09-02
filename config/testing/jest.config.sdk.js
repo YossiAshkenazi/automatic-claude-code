@@ -9,7 +9,7 @@ module.exports = {
   rootDir: baseDir,
   roots: ['<rootDir>'],
   testMatch: ['**/test-sdk-integration.ts'],
-  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  // setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'], // Commented out - setup file doesn't exist
   collectCoverage: true,
   collectCoverageFrom: [
     'src/services/sdkClaudeExecutor.ts',

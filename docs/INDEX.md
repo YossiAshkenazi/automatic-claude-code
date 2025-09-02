@@ -36,7 +36,7 @@ Welcome to the Automatic Claude Code documentation. All documentation has been o
 - [Migration v1.2.0](./migration/MIGRATION-v1.2.0.md) - v1.2.0 specific migration
 
 ### 🧪 [Testing](./testing/)
-- [Testing Guide](./testing/TESTING_GUIDE.md) - Comprehensive testing documentation
+- [Testing Guide](./testing/TESTING_GUIDE_ROOT.md) - Comprehensive testing documentation
 - [Authentication Testing Guide](./testing/TESTING_GUIDE_ROOT.md) - Authentication fix testing
 - [Build and Test Report](./testing/BUILD-AND-TEST-REPORT-2025-09-01.md) - Latest build report
 - [Dual-Agent Test Summary](./testing/DUAL-AGENT-TEST-SUMMARY.md) - Dual-agent testing results

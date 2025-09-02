@@ -13,7 +13,7 @@ Welcome to the comprehensive documentation for the Automatic Claude Code PTY-enh
 - Best practices for PTY session management
 - Common patterns and PTY-specific troubleshooting
 
-### 🐳 [Docker Deployment Guide](../DOCKER.md) **(NEW)**
+### 🐳 [Docker Deployment Guide](./setup/DOCKER.md) **(NEW)**
 **Complete containerization and deployment guide**
 - Docker image building and configuration
 - Development environment setup

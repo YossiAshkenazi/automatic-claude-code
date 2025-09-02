@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/yossiashkenazi/automatic-claude-code/discussions
+    about: Ask questions, share ideas, and discuss with the community
+  - name: 📚 Documentation
+    url: https://github.com/yossiashkenazi/automatic-claude-code/tree/main/python-sdk/docs
+    about: Read the comprehensive SDK documentation
+  - name: 🚀 Quick Start Guide
+    url: https://github.com/yossiashkenazi/automatic-claude-code/blob/main/python-sdk/QUICKSTART.md
+    about: Get started with the Claude Code Python SDK
+  - name: 🔒 Security Issues
+    url: https://github.com/yossiashkenazi/automatic-claude-code/security/advisories
+    about: Report security vulnerabilities privately
+  - name: 📦 PyPI Package
+    url: https://pypi.org/project/claude-code-sdk/
+    about: View releases and installation instructions

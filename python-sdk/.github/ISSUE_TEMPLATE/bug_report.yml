@@ -1,0 +1,170 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior in the Claude Code Python SDK
+title: "[BUG] "
+labels: ["bug", "needs-triage"]
+projects: ["yossiashkenazi/automatic-claude-code"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out this template to help us understand and reproduce the issue.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight Checklist
+      description: Please confirm you've completed these steps before submitting
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: I have read the documentation and troubleshooting guides
+          required: true
+        - label: I am using the latest version of the SDK
+          required: true
+        - label: I have tested with the latest Claude CLI version
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: SDK Version
+      description: What version of claude-code-sdk are you using?
+      placeholder: e.g., 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: What version of Python are you using?
+      placeholder: e.g., 3.11.0
+    validations:
+      required: true
+
+  - type: input
+    id: claude-cli-version
+    attributes:
+      label: Claude CLI Version
+      description: What version of Claude CLI do you have installed?
+      placeholder: Run `claude --version` to check
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Windows
+        - macOS
+        - Linux (Ubuntu)
+        - Linux (Other)
+        - Other (please specify in description)
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+      placeholder: Describe the issue you're experiencing
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Describe what should have happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Describe what actually happened instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior
+      placeholder: |
+        1. Initialize SDK client with...
+        2. Call method X with parameters...
+        3. Observe error/unexpected behavior...
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: code-sample
+    attributes:
+      label: Code Sample
+      description: Minimal code that reproduces the issue
+      render: python
+      placeholder: |
+        from claude_code_sdk import ClaudeSDKClient
+        
+        # Your minimal reproduction code here
+    validations:
+      required: false
+
+  - type: textarea
+    id: error-logs
+    attributes:
+      label: Error Messages / Logs
+      description: Any error messages, stack traces, or relevant log output
+      render: text
+      placeholder: Paste error messages or logs here
+    validations:
+      required: false
+
+  - type: dropdown
+    id: usage-context
+    attributes:
+      label: Usage Context
+      description: How are you using the SDK?
+      options:
+        - Standalone Python application
+        - Integration with automatic-claude-code
+        - Dual-agent mode
+        - Jupyter notebook
+        - Other (please specify in additional context)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, or relevant information
+      placeholder: Add any other context about the problem here
+    validations:
+      required: false
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact Level
+      description: How severely does this bug affect your usage?
+      options:
+        - Critical (completely unusable)
+        - High (major functionality broken)
+        - Medium (workaround exists)
+        - Low (minor inconvenience)
+    validations:
+      required: true

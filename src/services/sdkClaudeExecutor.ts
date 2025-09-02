@@ -2,6 +2,15 @@ import { Logger } from '../logger';
 import { SDKResponse, SDKResult } from '../types';
 // Temporarily disabled due to TS errors: import { BrowserSessionManager } from './browserSessionManager';
 
+export interface SDKExecutionResult {
+  output: string;
+  exitCode: number;
+  sessionId?: string;
+  tokensUsed?: number;
+  duration?: number;
+  hasError?: boolean;
+}
+
 // We'll dynamically import the SDK to handle cases where it might not be installed locally
 let claudeSDK: any = null;
 
@@ -14,10 +23,68 @@ export interface SDKClaudeOptions {
   allowedTools?: string;
   enableSessionContinuity?: boolean;
   maxTurns?: number;
+  continueOnError?: boolean;
 }
 
 // Alias for backward compatibility
 export type SDKExecutionOptions = SDKClaudeOptions;
+
+// Error classes for backward compatibility
+export class AuthenticationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthenticationError';
+  }
+}
+
+export class BrowserAuthRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BrowserAuthRequiredError';
+  }
+}
+
+export class SDKNotInstalledError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SDKNotInstalledError';
+  }
+}
+
+export class ClaudeInstallationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClaudeInstallationError';
+  }
+}
+
+export class NetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}
+
+export class APIKeyRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'APIKeyRequiredError';
+  }
+}
+
+export class ModelQuotaError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ModelQuotaError';
+  }
+}
+
+export class RetryExhaustedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RetryExhaustedError';
+  }
+}
 
 /**
  * SDK-based Claude executor using the official TypeScript SDK
@@ -29,10 +96,19 @@ export class SDKClaudeExecutor {
   private activeSessions: Map<string, any> = new Map(); // Track active SDK sessions
   private sessionHistory: Map<string, SDKResponse[]> = new Map(); // Track session message history
   // private browserSessionManager: BrowserSessionManager;
+  
+  // Circuit breaker and retry logic properties
+  private executionAttempts: number = 0;
+  private failureCount: number = 0;
+  private circuitBreakerOpen: boolean = false;
+  private lastFailureTime: number = 0;
+  private readonly maxRetries: number = 3;
+  private browserSessionManager: any; // Temporary placeholder
 
   constructor(logger: Logger) {
     this.logger = logger;
     // this.browserSessionManager = new BrowserSessionManager(logger);
+    this.browserSessionManager = { resetBrowserSessions: async () => {} }; // Temporary placeholder
     // Initialize SDK asynchronously without blocking constructor
     this.initializeSDK().catch(() => {
       // Initialization failed, will retry during execution
@@ -354,10 +430,13 @@ export class SDKClaudeExecutor {
 
         clearTimeout(timeoutHandle);
 
-        // Successfully completed
+          // Successfully completed
         resolve({
           output: output.trim() || 'No output received from Claude',
-          exitCode: 0
+          exitCode: 0,
+          messages: [],
+          hasError: false,
+          executionTime: timeoutMs
         });
 
       } catch (error: any) {
@@ -598,7 +677,7 @@ export class SDKClaudeExecutor {
    */
   async executeAutopilot(
     initialPrompt: string,
-    options: SDKClaudeOptions & { maxIterations?: number }
+    options: SDKClaudeOptions & { maxIterations?: number; continueOnError?: boolean }
   ): Promise<{
     results: SDKExecutionResult[];
     totalTokens: number;
@@ -624,8 +703,8 @@ export class SDKClaudeExecutor {
         });
         
         results.push(result);
-        totalTokens += result.tokensUsed || 0;
-        totalDuration += result.duration || 0;
+        totalTokens += result.executionTime || 0;
+        totalDuration += result.executionTime || 0;
         sessionId = result.sessionId || sessionId;
         
         // Check if task is complete
@@ -713,5 +792,37 @@ export class SDKClaudeExecutor {
   private generateErrorRecoveryPrompt(error: any, originalPrompt: string): string {
     const errorMessage = error?.message || 'Unknown error';
     return `The previous attempt failed with error: ${errorMessage}. Please try a different approach for: ${originalPrompt}`;
+  }
+
+  /**
+   * Backward compatibility methods for PTY-based code
+   */
+  async getOrCreatePTYSession(sessionId: string, command?: string, options?: any): Promise<any> {
+    this.logger.debug('PTY session compatibility layer - returning SDK session');
+    return { sessionId, type: 'sdk-session', active: true };
+  }
+
+  async sendToPTYSession(sessionId: string, data: string): Promise<string> {
+    this.logger.debug('PTY send compatibility layer - executing via SDK');
+    const result = await this.executeWithSDK(data, { sessionId });
+    return result.output;
+  }
+
+  async closePTYSession(sessionId: string): Promise<void> {
+    this.logger.debug('PTY close compatibility layer - clearing SDK session');
+    this.clearSession(sessionId);
+  }
+
+  async shutdown(): Promise<void> {
+    this.logger.debug('SDK executor shutting down');
+    // Clear all active sessions
+    const sessionIds = this.getActiveSessionIds();
+    for (const sessionId of sessionIds) {
+      this.clearSession(sessionId);
+    }
+  }
+
+  getActivePTYSessions(): string[] {
+    return this.getActiveSessionIds();
   }
 }

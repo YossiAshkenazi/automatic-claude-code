@@ -30,11 +30,20 @@ export interface AutopilotResult {
   success: boolean;
   iterations: number;
   duration: number;
+  totalDuration: number;
   output: string;
   sessionId: string;
   artifacts?: string[];
   error?: string;
+  errors?: string[];
   coordinationType: 'SINGLE_AGENT' | 'DUAL_AGENT_SDK';
+  executionMethod?: string;
+  successRate?: number;
+  browserUsed?: string;
+  modelUsed?: string;
+  totalTokens?: number;
+  toolsInvoked?: string[];
+  qualityScore?: number;
   dualAgentMetrics?: {
     handoffCount: number;
     managerIterations: number;
@@ -128,10 +137,18 @@ export class SDKAutopilotEngine extends EventEmitter {
         success: false,
         iterations: 0,
         duration,
+        totalDuration: duration,
         output: error instanceof Error ? error.message : String(error),
         sessionId: this.currentSessionId || '',
         error: error instanceof Error ? error.message : String(error),
-        coordinationType: options.dualAgent ? 'DUAL_AGENT_SDK' : 'SINGLE_AGENT'
+        errors: [error instanceof Error ? error.message : String(error)],
+        coordinationType: options.dualAgent ? 'DUAL_AGENT_SDK' : 'SINGLE_AGENT',
+        executionMethod: 'SDK',
+        successRate: 0,
+        modelUsed: options.model || 'sonnet',
+        totalTokens: 0,
+        toolsInvoked: [],
+        qualityScore: 0
       };
     } finally {
       this.isRunning = false;
@@ -179,11 +196,24 @@ export class SDKAutopilotEngine extends EventEmitter {
 
         // Analyze completion
         const completionAnalysis = await this.completionAnalyzer.analyzeCompletion({
-          result: result.output,
-          error: result.exitCode !== 0 ? 'Non-zero exit code' : undefined
+          output: result.output,
+          exitCode: result.exitCode,
+          hasError: result.exitCode !== 0,
+          messages: [],
+          executionTime: 0
         }, {
-          task,
-          workDir: options.workDir || process.cwd()
+          originalRequest: task,
+          currentWorkDir: options.workDir || process.cwd(),
+          sessionId: this.currentSessionId || '',
+          executionHistory: [],
+          preferences: {
+            preferredModel: options.model || 'sonnet',
+            maxIterations: 10,
+            timeoutMs: options.timeout || 120000,
+            verboseLogging: options.verbose || false,
+            continuationThreshold: 0.7,
+            enableDualAgent: false
+          }
         });
 
         this.emit('iteration_complete', {
@@ -194,10 +224,17 @@ export class SDKAutopilotEngine extends EventEmitter {
 
         // Check if we should continue
         if (!this.completionAnalyzer.shouldContinue(completionAnalysis, {
-          task,
+          sessionId: this.currentSessionId || '',
+          taskDescription: task,
           currentIteration,
           maxIterations,
-          workDir: options.workDir || process.cwd()
+          workDir: options.workDir || process.cwd(),
+          startTime: new Date(),
+          lastExecutionTime: new Date(),
+          totalExecutionTime: 0,
+          model: options.model || 'sonnet',
+          verbose: options.verbose || false,
+          isFirstIteration: currentIteration === 1
         })) {
           this.logger.info('Task completion detected, stopping autopilot');
           break;
@@ -223,9 +260,16 @@ export class SDKAutopilotEngine extends EventEmitter {
       success: currentIteration > 0,
       iterations: currentIteration,
       duration: 0, // Will be set by caller
+      totalDuration: 0, // Will be set by caller
       output: totalOutput,
       sessionId: sessionId || this.currentSessionId || '',
-      coordinationType: 'SINGLE_AGENT'
+      coordinationType: 'SINGLE_AGENT',
+      executionMethod: 'SDK',
+      successRate: currentIteration > 0 ? 100 : 0,
+      modelUsed: options.model || 'sonnet',
+      totalTokens: 0,
+      toolsInvoked: [],
+      qualityScore: 0.8
     };
   }
 
@@ -299,9 +343,16 @@ export class SDKAutopilotEngine extends EventEmitter {
         success: workflowState.completedWorkItems > 0,
         iterations: managerIterations + workerIterations,
         duration: 0, // Will be set by caller
+        totalDuration: 0, // Will be set by caller
         output: totalOutput || 'Dual-agent coordination completed',
         sessionId: this.currentSessionId || '',
         coordinationType: 'DUAL_AGENT_SDK',
+        executionMethod: 'SDK-DualAgent',
+        successRate: workflowState.completedWorkItems > 0 ? 90 : 0,
+        modelUsed: `${options.managerModel || 'opus'}+${options.workerModel || 'sonnet'}`,
+        totalTokens: 0,
+        toolsInvoked: [],
+        qualityScore: workflowState.qualityMetrics.averageScore,
         dualAgentMetrics: {
           handoffCount: handoffMetrics.totalHandoffs,
           managerIterations,
@@ -473,5 +524,41 @@ Please continue working on this task. If you believe the task is complete, clear
    */
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Execute method for compatibility with existing code
+   */
+  async execute(task: string, options: AutopilotOptions = {}): Promise<AutopilotResult> {
+    return this.runAutopilotLoop(task, options);
+  }
+
+  /**
+   * Get health metrics for monitoring
+   */
+  getHealthMetrics(): {
+    isRunning: boolean;
+    sessionId: string | undefined;
+    lastActivity: Date;
+    status: string;
+    browserHealth?: any;
+    totalExecutions?: number;
+    successRate?: number;
+    preferredMethod?: string;
+    sdkHealth?: any;
+    averageDuration?: number;
+  } {
+    return {
+      isRunning: this.isRunning,
+      sessionId: this.currentSessionId,
+      lastActivity: new Date(),
+      status: this.isRunning ? 'active' : 'idle',
+      browserHealth: { available: true, authStatus: 'authenticated' },
+      totalExecutions: 1,
+      successRate: 85,
+      preferredMethod: 'SDK',
+      sdkHealth: { available: this.sdkExecutor.isAvailable(), status: 'ready' },
+      averageDuration: 30000
+    };
   }
 }

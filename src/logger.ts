@@ -325,6 +325,10 @@ export class Logger extends EventEmitter {
     this.log(LogLevel.DEBUG, message, details);
   }
 
+  public isDebugEnabled(): boolean {
+    return process.env.DEBUG === '1' || process.env.NODE_ENV === 'development';
+  }
+
   public info(message: string, details?: Record<string, unknown> | string | number | boolean): void {
     this.log(LogLevel.INFO, message, details);
   }

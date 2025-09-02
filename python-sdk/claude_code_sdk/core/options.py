@@ -173,23 +173,36 @@ class ClaudeCodeOptions:
         return self.from_dict(current_dict)
     
     def get_cli_args(self) -> List[str]:
-        """Convert options to Claude CLI command-line arguments"""
+        """Convert options to secure Claude CLI command-line arguments"""
         args = []
         
+        # Security: Sanitize all string arguments to prevent injection
+        def sanitize_arg(value: str) -> str:
+            """Sanitize CLI argument to prevent injection attacks"""
+            if not isinstance(value, str):
+                value = str(value)
+            # Remove dangerous characters that could be used for injection
+            dangerous_chars = [';', '&', '|', '`', '$', '(', ')', '<', '>', '"', "'", '\\']
+            for char in dangerous_chars:
+                value = value.replace(char, '')
+            return value.strip()
+        
         if self.model != "sonnet":
-            args.extend(['--model', self.model])
+            args.extend(['--model', sanitize_arg(self.model)])
         
         if self.max_turns != 10:
-            args.extend(['--max-turns', str(self.max_turns)])
+            args.extend(['--max-turns', str(int(self.max_turns))])  # Ensure integer
         
         if self.allowed_tools:
-            args.extend(['--allowed-tools', ','.join(self.allowed_tools)])
+            # Sanitize each tool name
+            tools = [sanitize_arg(tool) for tool in self.allowed_tools]
+            args.extend(['--allowed-tools', ','.join(tools)])
         
         if self.verbose:
             args.append('--verbose')
         
         if self.system_prompt:
-            args.extend(['--system-prompt', self.system_prompt])
+            args.extend(['--system-prompt', sanitize_arg(self.system_prompt)])
         
         if not self.continue_conversation:
             args.append('--no-continue')
@@ -197,9 +210,22 @@ class ClaudeCodeOptions:
         return args
     
     def get_process_env(self) -> Dict[str, str]:
-        """Get complete environment variables for Claude process"""
-        env = os.environ.copy()
-        env.update(self.environment)
+        """Get secure environment variables for Claude process"""
+        # Security: Use allowlist approach for environment variables
+        SAFE_ENV_VARS = {
+            'PATH', 'HOME', 'USERPROFILE', 'TEMP', 'TMP', 
+            'PYTHONPATH', 'ANTHROPIC_API_KEY', 'CLAUDE_CLI_PATH',
+            'APPDATA', 'LOCALAPPDATA'
+        }
+        
+        # Start with safe environment variables only
+        env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_VARS}
+        
+        # Add custom environment variables (still filtered)
+        for k, v in self.environment.items():
+            if k in SAFE_ENV_VARS or k.startswith('CLAUDE_'):
+                env[k] = str(v)  # Ensure string values
+        
         return env
 
 # Predefined option sets for common use cases

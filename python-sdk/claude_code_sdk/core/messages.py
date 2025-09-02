@@ -3,7 +3,7 @@ Claude Code SDK - Message Types
 Defines the message hierarchy for Claude Code interactions
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, field
 from typing import Dict, Any, Optional, Union, List
 from datetime import datetime
 from abc import ABC, abstractmethod
@@ -13,11 +13,11 @@ import json
 class BaseMessage(ABC):
     """Base class for all Claude Code messages"""
     type: str
-    timestamp: Optional[datetime] = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now())
     
     def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = datetime.now()
+        # timestamp is now always set by default_factory
+        pass
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert message to dictionary for serialization"""

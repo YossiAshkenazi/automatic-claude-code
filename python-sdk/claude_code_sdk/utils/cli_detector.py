@@ -95,7 +95,30 @@ class CLIDetector:
                     if claude_path.exists():
                         paths.append(str(claude_path))
         
-        paths.extend([str(p) for p in npm_paths if isinstance(p, Path) and p.exists()])
+        # Security: Validate paths to prevent path traversal attacks
+        def validate_safe_path(path_str: str) -> bool:
+            """Validate that path is safe and doesn't contain path traversal"""
+            try:
+                resolved_path = Path(path_str).resolve()
+                path_str_resolved = str(resolved_path)
+                
+                # Security: Prevent path traversal attacks
+                dangerous_patterns = ['../', '..\\', '/etc/', '/usr/', '/root/', 'C:\\Windows\\System32']
+                if any(pattern in path_str_resolved for pattern in dangerous_patterns):
+                    return False
+                    
+                return resolved_path.exists()
+            except (OSError, ValueError):
+                return False
+        
+        # Safely extend paths with validation
+        for p in npm_paths:
+            if isinstance(p, Path):
+                if validate_safe_path(str(p)):
+                    paths.append(str(p))
+            elif isinstance(p, str):
+                if validate_safe_path(p):
+                    paths.append(p)
         return paths
     
     def _get_unix_paths(self) -> List[str]:

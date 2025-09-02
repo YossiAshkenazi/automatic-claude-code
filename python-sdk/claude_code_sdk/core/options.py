@@ -42,6 +42,9 @@ class ClaudeCodeOptions:
     verbose: bool = False
     """Enable verbose logging output"""
     
+    additional_args: List[str] = field(default_factory=list)
+    """Additional CLI arguments to pass to Claude (e.g., ['--dangerously-skip-permissions'])"""
+    
     # === CLI OPTIONS ===
     claude_cli_path: Optional[str] = None
     """Path to Claude CLI executable (auto-detected if not provided)"""
@@ -224,6 +227,14 @@ class ClaudeCodeOptions:
         
         if not self.continue_conversation:
             args.append('--no-continue')
+        
+        # Add any additional arguments (e.g., --dangerously-skip-permissions)
+        if self.additional_args:
+            for arg in self.additional_args:
+                # Security: Sanitize additional arguments too
+                sanitized_arg = sanitize_arg(arg)
+                if sanitized_arg:  # Only add non-empty args
+                    args.append(sanitized_arg)
         
         return args
     

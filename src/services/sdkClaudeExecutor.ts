@@ -94,18 +94,20 @@ export class SDKClaudeExecutor {
     // Convert to current user
     const currentUserPath = knownWorkingPath.replace('C:\\Users\\yossi', userHome);
     
-    // Direct path checks (most likely to succeed)
+    // Direct path checks (npm first since Claude Code is installed via npm)
     const searchPaths = [
+      // npm global locations (PRIORITY - Claude Code installed via npm)
+      path.join(userHome, 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'sdk.mjs'),
+      path.join(userHome, 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'sdk.js'),
+      path.join(userHome, 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'index.js'),
+      path.join(userHome, '.npm-global', 'node_modules', '@anthropic-ai', 'claude-code', 'sdk.mjs'),
+      
       currentUserPath,
       
-      // Try different version patterns
+      // Try different version patterns (lower priority)
       ...this.generateVersionPaths(localAppData, 'pnpm', 'global', '5', '.pnpm'),
       ...this.generateVersionPaths(localAppData, 'pnpm', 'global', '6', '.pnpm'),
       ...this.generateVersionPaths(localAppData, 'pnpm', 'global', '7', '.pnpm'),
-      
-      // npm global locations
-      path.join(userHome, 'AppData', 'Roaming', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'sdk.mjs'),
-      path.join(userHome, '.npm-global', 'node_modules', '@anthropic-ai', 'claude-code', 'sdk.mjs'),
       
       // System-wide paths
       'C:\\Program Files\\nodejs\\node_modules\\@anthropic-ai\\claude-code\\sdk.mjs',

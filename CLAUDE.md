@@ -1,1284 +1,304 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## ⚡ QUICK START: PARALLEL AGENTS FIRST!
-
-**DEFAULT APPROACH**: For ANY task involving >2 files or >30 seconds of work:
-```
-"Use Task tool to launch 3-10 parallel agents:
-- Search agents for exploration (return paths only)
-- Analysis agents for understanding (return summaries)
-- Implementation agents for changes (return confirmations)
-ALL agents work simultaneously, each returns <1K tokens"
-```
-
-**EXPECTED RESULTS**: 
-- 🚀 3-4x faster execution
-- 💾 90%+ context savings  
-- ⏱️ 4+ hour sessions without overflow
-- 🎯 Clean, focused main context
-
-## 🚀 PARALLEL AGENTS STRATEGY (ALWAYS USE)
-
-### Core Principle: Context Preservation Through Delegation
-**Your context window is precious** - ALWAYS delegate exploration, searching, and repetitive work to parallel agents. They work in isolated contexts and return only condensed results, keeping your main session clean for hours of productive work.
-
-### Quick Decision Framework
-Use the Task tool with multiple parallel agents when:
-- **Searching/Exploring**: Any task requiring >10 file reads or searches
-- **Repetitive Tasks**: Updating multiple similar files or applying patterns
-- **Independent Work**: Features that can be developed in parallel
-- **Context > 30%**: When your session context exceeds 30% capacity
-- **Complex Analysis**: Multi-step investigations or debugging
-
-### Parallel Agent Usage Patterns
-
-#### Pattern 1: Maximum Parallelization (DEFAULT - Browser SDK Compatible)
-```
-"Use Task tool to launch these agents IN PARALLEL (all use browser auth):
-1. Search agent: Find all relevant files (return only paths)
-2. Analysis agent: Analyze architecture patterns  
-3. Test agent: Identify existing test patterns
-4. Doc agent: Find related documentation
-Each agent uses browser session, MUST return <1K tokens summary"
-```
-
-#### Pattern 2: Browser-Authenticated Feature Development Swarm
-```
-"Launch 5-7 specialized agents concurrently (all browser-authenticated):
-- Component structure agent (uses browser Claude session)
-- Styling/CSS agent (browser session with Pro features)
-- Unit tests agent (browser session with test capabilities)
-- Type definitions agent (browser session for TS analysis)
-- Integration logic agent (browser session coordination)
-- Documentation agent (browser session for docs)
-Each works independently with persistent browser auth, returns minimal tokens"
-```
-
-#### Pattern 3: Browser SDK Exploration & Implementation
-```
-"Phase 1: Launch 3 search agents with browser sessions to explore areas
-Phase 2: Launch 5 implementation agents using shared browser authentication
-Phase 3: Launch validation agents with browser-based testing
-All agents share browser session pool, no API key management needed
-Total context used: <5K tokens vs >100K sequential"
-```
-
-#### Pattern 4: Cross-Browser Agent Distribution (NEW)
-```
-"Distribute agents across browser instances for maximum parallelization:
-- Chrome agents: Heavy computation tasks (3-4 agents)
-- Firefox agents: File operations (2-3 agents)  
-- Edge agents: Testing and validation (2-3 agents)
-All browsers share the same Claude Pro/Team subscription
-Automatic browser session management and token refresh"
-```
-
-### Critical Rules for Agent Usage
-1. **ALWAYS demand condensed returns** (<1K tokens per agent)
-2. **Launch agents early** in conversations before context grows
-3. **Never do exploration in main context** - delegate immediately
-4. **Use 5-10 parallel agents** for complex tasks
-5. **Expect 3-4x speedup** and 90%+ context savings
-
-### Available Specialized Subagents
-Use these pre-configured agents with the Task tool:
-- **general-purpose**: Complex research and multi-step tasks
-- **web-search-optimizer**: Web searches with filtered results
-- **context7-info-fetcher**: Context7 MCP data retrieval
-- **test-runner**: Run tests and analyze failures
-- **tech-stack**: TypeScript/Next.js/Supabase best practices
-- **git-workflow**: Git operations and PR creation
-- **code-style**: Code style guidelines enforcement
-- **file-creator**: Batch file creation with templates
-- **date-checker**: Current date information
-- **context-fetcher**: Agent OS documentation retrieval
-- **best-practices**: Development patterns guidance
-- **project-manager**: Task tracking and roadmap updates
-- **typescript-style**: Advanced TypeScript patterns
-- **react-style**: Modern React patterns
-- **javascript-style**: JS conventions
-- **html-style**: HTML/TailwindCSS formatting
-- **css-style**: TailwindCSS guidelines
-- **validation-gates**: Testing and quality validation
-- **solution-recorder**: Document successful solutions
-- **mistake-tracker**: Document failed attempts
-- **meta-agent**: Generate new sub-agent configurations
-- **frontend-specialist**: Frontend development expert
-- **documentation-manager**: Documentation updates
-- **docs-maintainer**: Verify and maintain docs
-- **debug-memory**: Search for known issues/solutions
-
-### When NOT to Use Agents (RARE)
-- Single-file edits with clear requirements
-- Debugging requiring full context visibility
-- Tasks with strong sequential dependencies
-- Simple operations taking <30 seconds
-
-### Success Metrics
-Your agent usage is optimal when:
-- Main context stays below 30% throughout session
-- Each agent returns <1K tokens
-- Tasks complete 50%+ faster
-- You can work 4+ hours without context overflow
-
-### Advanced Parallel Agent Techniques
-
-#### The 7-Parallel Method for Complex Features
-```
-"Launch 7 specialized subagents simultaneously:
-1. Component structure
-2. Styling/CSS
-3. Unit tests
-4. Type definitions
-5. Custom hooks
-6. Integration logic
-7. Documentation"
-```
-
-#### Progressive Refinement with Agent Waves
-```
-Wave 1: 5 search agents → Target list (2K tokens)
-Wave 2: 10 analysis agents → Issue report (3K tokens)
-Wave 3: 10 fix agents → Solutions applied (2K tokens)
-Total: 7K tokens vs 150K+ sequential
-```
-
-#### Error Recovery with Parallel Fallbacks
-```
-"Launch primary agents with fallback agents:
-- Primary: Complex implementation agent
-- Fallback 1: Simplified approach agent
-- Fallback 2: Minimal solution agent
-All run in parallel, use first successful result"
-```
-
-### Context Window Management Formula
-```
-Efficiency = (Result_Tokens / Total_Tokens_Used) × 100
-Target: >95% efficiency (50 tokens result from 1K tokens work)
-Switch to agents when context >30% used
-```
-
-### Real Performance Metrics (Proven)
-| Task Type | Sequential | Parallel | Speedup | Context Saved |
-|-----------|------------|----------|---------|---------------|
-| 10 File Updates | 120s | 28s | **4.3x** | 95% |
-| Codebase Search | 45s | 12s | **3.8x** | 92% |
-| Feature Dev | 180s | 65s | **2.8x** | 88% |
-| Test Generation | 90s | 22s | **4.1x** | 90% |
-
-### Common Anti-Patterns to AVOID
-❌ **Context Explosion**: "Search everything and show me all results"
-✅ **Smart Delegation**: "Search everything, return only file paths"
-
-❌ **Sequential Updates**: Updating 20 files one by one
-✅ **Parallel Execution**: 20 agents updating simultaneously
-
-❌ **Monolithic Tasks**: One agent doing everything
-✅ **Specialized Swarm**: Multiple focused agents
+# Automatic Claude Code
 
 ## Project Overview
 
-**🎉 SYSTEM STATUS**: ✅ FULLY TESTED & OPERATIONAL with Browser SDK (September 1, 2025)  
-**🔗 Live Dashboard**: http://localhost:6011 | **API**: http://localhost:4005/api/health  
-**📊 Build Status**: ✅ TypeScript Compilation: PASSED | ✅ CLI Commands: FUNCTIONAL | ✅ SDK Integration: ACTIVE  
-**🤖 Dual-Agent Mode**: ✅ Manager-Worker Coordination: OPERATIONAL | ✅ Monitoring Integration: ACTIVE
+**Status**: ✅ OPERATIONAL (v1.2.1) | **Dashboard**: http://localhost:6011 | **API**: http://localhost:4005/api/health
 
-Automatic Claude Code is a TypeScript CLI application that runs Claude Code through browser-based authentication for seamless dual-agent automation. The system eliminates API key requirements by leveraging your browser's Claude Pro/Team session, using a Manager-Worker architecture for sophisticated AI-assisted development workflows.
+Browser-authenticated TypeScript CLI for dual-agent AI development automation. Eliminates API keys by leveraging your Claude Pro/Team browser session.
 
 **Key Features:**
-- **Browser-Based Authentication**: Direct Claude Pro/Team session integration (no API keys)
-- **Dual-Agent Architecture**: Manager-Worker coordination with browser SDK
-- **Real-time Monitoring**: Web-based dashboard with live agent communication tracking
-- **Interactive Session Control**: Real-time stream processing through browser automation
-- **Cross-Platform Support**: Chrome, Firefox, Safari, Edge compatibility
-- **Production-Ready Deployment**: Docker, Kubernetes, and cloud infrastructure support
-- **External Integrations**: Webhook system supporting Slack, Discord, and email notifications
-- **Comprehensive Testing**: Automated CI/CD pipelines with browser authentication
+- Browser-based authentication (no API keys needed)
+- Manager-Worker dual-agent architecture
+- Real-time monitoring dashboard
+- Cross-platform support (Chrome, Firefox, Safari, Edge)
+- Production-ready deployment options
 
-## Essential Commands
+## ⚡ Quick Start
 
-### Installation Options
-
-#### Option 1: Native Installation (Required First Step)
+### Installation
 ```bash
-# Install acc command globally using npm link
+# Clone and install
+git clone https://github.com/yossiashkenazi/automatic-claude-code
 cd automatic-claude-code
 pnpm install
 pnpm run build
-npm link  # This makes 'acc' available globally
+
+# Enable global 'acc' command
+npm link  # Makes 'acc' available globally
 
 # Verify installation
 acc examples
 ```
 
-#### Option 2: Docker Installation (Containerized)
-
-**Using Pre-built Image from GitHub Container Registry:**
+### Basic Usage
 ```bash
-# Pull latest image
-docker pull ghcr.io/yossiashkenazi/automatic-claude-code:latest
+# Run task with browser authentication (default)
+acc run "implement user authentication" --dual-agent -i 5 -v
 
-# Verify installation
-docker run --rm ghcr.io/yossiashkenazi/automatic-claude-code:latest
-
-# Use with Docker
-docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" ghcr.io/yossiashkenazi/automatic-claude-code:latest run "your task" -i 3
-```
-
-**Building Locally:**
-```bash
-# Build Docker image
-cd automatic-claude-code
-pnpm run docker:build
-
-# Verify Docker installation
-docker run --rm automatic-claude-code
-
-# Use with Docker
-docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" automatic-claude-code run "your task" -i 3
-```
-
-### Development Commands
-```bash
-# Development
-pnpm run dev          # Run in development mode with tsx
-pnpm run build        # Compile TypeScript to dist/
-pnpm run lint         # Run ESLint on src/**/*.ts
-pnpm run typecheck    # Type-check without emitting
-pnpm run clean        # Remove dist directory
-```
-
-### Core Usage
-
-#### Native Commands (with acc) - Browser Authentication
-```bash
-# From ANY project directory - use acc command with browser auth
-acc run "task" --dual-agent -i 5 -v  # Uses browser session automatically
-acc run "task" --browser chrome --dual-agent -v  # Specify browser
-acc run "task" --manager-model opus --worker-model sonnet -v
-acc monitor        # Check monitoring status
-acc monitor --start # Start monitoring server
-acc examples      # Show example prompts
-acc history       # View session history
-acc logs --tail   # Watch logs in real-time
+# Start monitoring dashboard
+cd dual-agent-monitor && pnpm run dev  # UI: http://localhost:6011
 
 # Browser session management
-acc --check-browser-session    # Verify browser Claude session
-acc --refresh-browser-session  # Force session refresh
-acc --browser-status           # Show all browser session status
-
-# Legacy method (if acc command not available)
-node "../automatic-claude-code/dist/index.js" run "task" --dual-agent -i 5 -v
-```
-
-#### Docker Commands
-
-**Using Pre-built Images (Recommended):**
-```bash
-# Single container usage
-docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" ghcr.io/yossiashkenazi/automatic-claude-code:latest run "task" --dual-agent -i 5 -v
-
-# With specific version tag
-docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" ghcr.io/yossiashkenazi/automatic-claude-code:v1.0.0 run "task" -i 3
-```
-
-**Local Development:**
-```bash
-# Single container usage (locally built)
-docker run -it --rm -v "$(pwd):/workspace:ro" -v "$HOME/.claude:/home/nodejs/.claude:ro" automatic-claude-code run "task" --dual-agent -i 5 -v
-
-# Development environment
-pnpm run docker:dev
-
-# Production deployment
-pnpm run docker:prod
-
-# View logs
-pnpm run docker:logs
-```
-
-### Monitoring UI Options
-
-#### Full Development Monitoring
-```bash
-# Start monitoring server
-cd dual-agent-monitor
-pnpm install
-pnpm run dev  # Starts UI on http://localhost:6011, API on http://localhost:4001
-
-# Access monitoring dashboard
-# Open http://localhost:6011 to watch dual-agent coordination in real-time
-```
-
-#### Persistent Monitoring Service (Always Running)
-```bash
-# Start persistent monitoring service
-pnpm run monitor:start  # Lightweight server on http://localhost:6007
-
-# With PM2 auto-restart
-pnpm run monitor:pm2
-
-# With PowerShell persistence (Windows)
-pnpm run monitor:persistent
-
-# Check status
-pnpm run monitor:status
-```
-
-#### Docker Monitoring
-```bash
-# Docker development with monitoring
-pnpm run docker:dev
-
-# Docker production with all services
-pnpm run docker:prod
-
-# Access Docker monitoring
-# Open http://localhost:6011 (frontend) and http://localhost:4001 (API)
+acc --check-browser-session    # Verify browser session
+acc --refresh-browser-session  # Force refresh
 ```
 
 ## Architecture
 
-### Dual-Agent System Overview
+### Dual-Agent System
+- **Manager Agent**: Strategic planning with Opus model
+- **Worker Agent**: Task execution with Sonnet model
+- **Browser SDK**: Direct Claude session integration
+- **Monitoring**: Real-time WebSocket communication
 
-The system employs a **Manager-Worker** architecture with two specialized Claude agents:
-
-#### Manager Agent (Strategic Planning)
-- **Role**: High-level task planning, progress monitoring, quality gates
-- **Model**: Typically Opus (for better reasoning)
-- **Responsibilities**:
-  - Breaks down complex tasks into actionable work items
-  - Monitors Worker progress and provides course corrections
-  - Validates deliverables against acceptance criteria
-  - Handles error recovery and workflow decisions
-  - Coordinates multi-step workflows
-
-#### Worker Agent (Task Execution)
-- **Role**: Focused execution of specific tasks
-- **Model**: Typically Sonnet (for speed and efficiency)
-- **Responsibilities**:
-  - Executes concrete development tasks (coding, testing, debugging)
-  - Implements specific features and fixes
-  - Reports progress and blockers to Manager
-  - Performs detailed technical work
-
-### Core Module Structure
+### Core Structure
 ```
 src/
-├── index.ts                    # Main CLI entry point and orchestration
-├── config.ts                   # Configuration management
+├── index.ts                    # CLI entry point
 ├── agents/                     # Dual-agent system
-│   ├── agentCoordinator.ts     # Manages agent communication and workflows
-│   ├── managerAgent.ts         # Strategic planning and oversight
-│   ├── workerAgent.ts          # Task execution and implementation
-│   └── agentTypes.ts           # Type definitions for agent communication
-├── sessionManager.ts           # Session persistence with dual-agent support
-├── outputParser.ts             # Parse outputs from both agents
-├── promptBuilder.ts            # Generate contextual prompts (agent-aware)
-├── logger.ts                   # Structured logging with agent tracking
-├── logViewer.ts               # Terminal UI with agent-specific views
-├── tuiBrowser.ts              # Enhanced browser with agent insights
-└── monitoringManager.ts       # Integration with monitoring dashboard
+│   ├── agentCoordinator.ts     # Agent communication
+│   └── managerAgent.ts/workerAgent.ts
+├── services/                   # Core services
+│   ├── claudeExecutor.ts       # Execution engine
+│   ├── browserSessionManager.ts # Browser auth
+│   └── sdkClaudeExecutor.ts   # SDK integration
+└── monitoringManager.ts       # Dashboard integration
 
-dual-agent-monitor/             # Real-time monitoring dashboard
-├── src/                        # React-based frontend application
-│   ├── components/             # UI components for agent visualization
-│   │   ├── visualization/      # Agent communication diagrams
-│   │   ├── mobile/            # Mobile-responsive components
-│   │   ├── webhooks/          # Webhook configuration UI
-│   │   ├── ml/               # ML insights dashboard
-│   │   └── auth/             # Authentication components
-│   ├── hooks/                 # React hooks for agent data
-│   ├── store/                 # State management (Zustand)
-│   └── utils/                 # Utility functions
-├── server/                    # Backend API and WebSocket server
-│   ├── websocket-server.ts    # Real-time agent communication
-│   ├── database/              # PostgreSQL integration
-│   ├── auth/                  # Authentication & authorization
-│   ├── webhooks/              # External integration system
-│   ├── ml/                    # Machine learning insights engine
-│   ├── analytics/             # Performance analytics
-│   └── replay/                # Session replay functionality
-└── deploy/                    # Production deployment configs
-    ├── docker-compose.ha.yml  # High-availability setup
-    ├── kubernetes/            # K8s manifests
-    ├── terraform/             # Infrastructure as Code
-    └── monitoring/            # Prometheus, Grafana configs
+dual-agent-monitor/            # Monitoring dashboard
+├── src/                      # React frontend
+└── server/                   # WebSocket backend
 ```
 
-### Dual-Agent Workflow
+## 🚀 Parallel Agents Strategy
 
-#### Phase 1: Task Analysis & Planning (Manager Agent)
-1. **Task Decomposition**: Manager analyzes the user request and breaks it into manageable work items
-2. **Strategy Formation**: Creates a high-level execution plan with quality gates
-3. **Resource Assessment**: Evaluates required tools, files, and dependencies
-4. **Success Criteria**: Defines clear acceptance criteria for each work item
+**DEFAULT**: Use parallel agents for tasks >30 seconds or >2 files:
 
-#### Phase 2: Coordinated Execution
-1. **Work Assignment**: Manager assigns specific tasks to Worker with detailed context
-2. **Worker Execution**: Worker performs focused implementation using Claude Code tools
-3. **Progress Monitoring**: Manager periodically checks Worker's progress and outputs
-4. **Quality Gates**: Manager validates deliverables before approving next steps
-5. **Course Correction**: Manager provides feedback and adjustments when needed
-
-#### Phase 3: Integration & Completion
-1. **Integration Review**: Manager ensures all work items integrate properly
-2. **Final Validation**: Comprehensive testing and quality assurance
-3. **Documentation Update**: Automatic documentation updates based on changes
-4. **Session Summary**: Detailed report of what was accomplished
-
-### Agent Communication Protocol
-
-```typescript
-interface AgentMessage {
-  from: 'manager' | 'worker';
-  to: 'manager' | 'worker';
-  type: 'task_assignment' | 'progress_update' | 'completion_report' | 'error_report' | 'quality_check';
-  payload: {
-    taskId: string;
-    content: string;
-    metadata?: any;
-  };
-  timestamp: Date;
-}
+```javascript
+// Launch parallel agents for complex tasks
+"Use Task tool to launch 5-10 agents IN PARALLEL:
+- Search agents: Find files (return paths only)
+- Analysis agents: Understand code (return summaries)
+- Implementation agents: Make changes (return confirmations)
+Each agent returns <1K tokens"
 ```
 
-### Claude Code Execution (Browser SDK)
+### Available Subagents
+- **general-purpose**: Complex multi-step tasks
+- **test-runner**: Run tests and analyze failures
+- **git-workflow**: Git operations and PRs
+- **documentation-manager**: Update docs
+- **web-search-optimizer**: Filtered web searches
+- **validation-gates**: Quality validation
 
-Both agents use browser-based Claude Code execution with specialized configurations:
+### Performance Metrics
+| Task Type | Sequential | Parallel | Speedup | Context Saved |
+|-----------|------------|----------|---------|---------------|
+| 10 File Updates | 120s | 28s | **4.3x** | 95% |
+| Feature Dev | 180s | 65s | **2.8x** | 88% |
 
-**Manager Agent Configuration**:
-- Browser session with `opus` model (or configured manager model)
-- Strategic planning role with extended context
-- Interactive session management with quality gates
-- Real-time stream processing for planning decisions
+## Configuration
 
-**Worker Agent Configuration**:
-- Browser session with `sonnet` model (or configured worker model)
-- Task execution role with focused implementation
-- Automated permission handling through browser session
-- Structured output parsing from browser streams
-- Direct browser automation for seamless execution
+### Config Location: `~/.automatic-claude-code/config.json`
 
-### Output Analysis & Monitoring (Enhanced)
-
-The system now provides comprehensive monitoring and analysis:
-
-#### Real-time Agent Monitoring
-- **Agent Identification**: Tracks which agent generated each output
-- **Inter-Agent Messages**: Parses communication between Manager and Worker
-- **Task State Tracking**: Monitors progress on assigned work items
-- **Quality Gate Results**: Captures Manager's validation decisions
-- **Coordination Metrics**: Measures collaboration effectiveness
-
-#### Machine Learning Insights
-- **Anomaly Detection**: Identifies unusual patterns in agent behavior
-- **Predictive Analytics**: Forecasts task completion times and success rates
-- **Optimization Recommendations**: AI-driven suggestions for workflow improvements
-- **Performance Analytics**: Comprehensive metrics on agent effectiveness
-
-#### Monitoring Dashboard Features
-- **Live Agent Communication**: Real-time visualization of Manager-Worker handoffs
-- **Session Replay**: Review and analyze complete agent interaction sessions
-- **Performance Metrics**: Charts showing response times, success rates, error patterns
-- **Mobile-Responsive UI**: Progressive Web App with offline capabilities
-- **Multi-Project Support**: Monitor agent activities across different codebases
-
-#### External Integrations
-- **Webhook System**: Real-time notifications to external services
-- **Slack Integration**: Agent status updates and alerts in Slack channels
-- **Discord Integration**: Bot notifications for development teams
-- **Email Alerts**: Critical event notifications via email
-- **Custom Webhooks**: Configurable endpoints for third-party integrations
-
-## Key Implementation Details
-
-### Process Management
-- Uses Node.js `spawn()` with `shell: true` for Windows compatibility
-- Handles both stdout and stderr streams
-- Implements graceful shutdown with process cleanup
-- Manages session continuity via Claude's `--resume` flag
-- **Docker Support**: Full containerization with multi-stage builds
-- **Service Management**: PM2 integration for auto-restart capabilities
-- **Container Health**: Health checks and resource monitoring
-
-### Error Handling Strategy
-- Detects errors via exit codes and output patterns
-- Implements automatic retry logic with context
-- Preserves error states in session history
-- Allows continuation with `--continue-on-error` flag
-
-### Configuration System (Browser SDK Enhanced)
-Enhanced configuration at `~/.automatic-claude-code/config.json`:
 ```json
 {
   "defaultModel": "sonnet",
   "browserAuth": {
     "enabled": true,
     "defaultBrowser": "chrome",
-    "sessionTimeout": 3600,
-    "maxBrowserSessions": 10,
-    "persistentSessions": true,
-    "autoTokenRefresh": true,
-    "headlessBrowser": false,
-    "browserOptions": {
-      "disableExtensions": true,
-      "disableImages": false,
-      "userAgent": "automatic-claude-code/1.2.0"
-    }
+    "sessionTimeout": 3600
   },
   "dualAgentMode": {
     "enabled": false,
     "managerModel": "opus",
-    "workerModel": "sonnet",
-    "coordinationInterval": 3,
-    "qualityGateThreshold": 0.8,
-    "maxConcurrentTasks": 2,
-    "enableCrossValidation": true,
-    "useBrowserAuth": true
+    "workerModel": "sonnet"
   },
   "monitoring": {
     "enabled": true,
     "dashboardPort": 6011,
-    "apiPort": 4001,
-    "persistentPort": 6007,
-    "autoStart": true,
-    "persistSessions": true,
-    "enableWebhooks": true,
-    "mlInsights": true,
-    "anomalyDetection": true,
-    "dockerSupport": true
-  },
-  "docker": {
-    "enabled": true,
-    "imageTag": "automatic-claude-code:latest",
-    "networkName": "automatic-claude-code-network",
-    "volumeMounts": {
-      "workspace": "/workspace:ro",
-      "claude": "/home/nodejs/.claude:ro",
-      "config": "/home/nodejs/.automatic-claude-code"
-    }
-  },
-  "database": {
-    "type": "postgresql",
-    "host": "localhost",
-    "port": 5432,
-    "database": "dual_agent_monitor",
-    "ssl": false,
-    "maxConnections": 20,
-    "connectionTimeout": 30000
-  },
-  "webhooks": {
-    "slack": {
-      "enabled": false,
-      "webhookUrl": "",
-      "channel": "#dev-notifications"
-    },
-    "discord": {
-      "enabled": false,
-      "webhookUrl": "",
-      "username": "Dual Agent Monitor"
-    },
-    "email": {
-      "enabled": false,
-      "smtpHost": "",
-      "smtpPort": 587,
-      "smtpUser": "",
-      "recipients": []
-    }
-  },
-  "maxIterations": 10,
-  "continueOnError": false,
-  "verbose": false,
-  "allowedTools": ["Read", "Write", "Edit", "Bash", "MultiEdit", "Grep", "Glob"],
-  "sessionHistoryLimit": 100,
-  "autoSaveInterval": 60000,
-  "agentCommunication": {
-    "logLevel": "info",
-    "retryAttempts": 3,
-    "timeoutMs": 30000
+    "apiPort": 4005
   }
 }
 ```
 
-## Hook Scripts Integration
+## Development Workflow
 
-The project includes enhanced observability hooks in `.claude/hooks/` that capture dual-agent Claude Code events:
+### Development Commands
+```bash
+pnpm run dev          # Development mode with hot reload
+pnpm run build        # Compile TypeScript
+pnpm run test         # Run test suite
+pnpm run lint         # Run ESLint
 
-### Available Hooks (PowerShell, Bash, Node.js)
-- `user-prompt-submit-hook` - Captures user prompts
-- `pre-tool-use-hook` - Before tool execution (agent-aware)
-- `post-tool-use-hook` - After tool execution (agent-aware)
-- `agent-communication-hook` - Captures Manager-Worker communication (NEW)
-- `agent-coordination-hook` - Logs agent coordination events (NEW)
-- `quality-gate-hook` - Records quality validation results (NEW)
-- `notification-hook` - System notifications
-- `stop-hook` - Session termination
-- `subagent-stop-hook` - Subagent completion
+# Docker
+pnpm run docker:build  # Build image
+pnpm run docker:dev    # Development environment
+pnpm run docker:prod   # Production deployment
 
-### Dual-Agent Event Types
-New events captured by hooks:
-- `MANAGER_TASK_ASSIGNMENT` - When Manager assigns work to Worker
-- `WORKER_PROGRESS_UPDATE` - When Worker reports progress
-- `MANAGER_QUALITY_CHECK` - When Manager validates Worker output
-- `AGENT_COORDINATION` - Inter-agent communication events
-- `WORKFLOW_TRANSITION` - Phase changes in dual-agent workflow
+# Monitoring
+pnpm run monitor:start # Start monitoring server
+pnpm run monitor:pm2   # PM2 managed service
+```
 
-### Hook Configuration
-Managed via `.claude/settings.local.json` with:
-- Tool permissions (allow/deny/ask)
-- MCP server enablement (archon, github, playwright, etc.)
-- Default permission mode
+### Testing Dual-Agent Mode
+```bash
+# Basic coordination test
+acc run "implement auth system" --dual-agent -i 5 -v
+
+# Verify monitoring
+curl http://localhost:4005/api/health
+
+# Watch real-time coordination
+# Open http://localhost:6011
+```
 
 ## MCP Server Integration
 
-The project is configured to work with multiple MCP servers:
-- **archon**: Task and project management + RAG knowledge base
-- **github**: GitHub API integration
-- **playwright**: Browser automation
-- **context7**: Knowledge base integration
-- **memory**: Persistent memory storage
-
-### 🧠 Archon RAG Knowledge Base Integration
-
-Archon provides access to a comprehensive technical knowledge base with 19+ sources including:
-- **Framework Documentation**: Next.js, React, Supabase, Redis, PostgreSQL
-- **State Management**: Zustand, TanStack Query
-- **UI Libraries**: shadcn/ui, Flowbite, React Hook Form
-- **Payment/APIs**: Stripe, Kong API Gateway
-- **Claude Code**: Anthropic documentation and best practices
-- **Specialized**: Hebcal (Jewish calendar), Winston logging
-
-#### Using Archon for Knowledge Retrieval
-```bash
-# Search for relevant documentation
-mcp__archon__perform_rag_query(query="your technical question", match_count=5)
-
-# Find code examples
-mcp__archon__search_code_examples(query="implementation pattern", match_count=3)
-
-# List available knowledge sources
-mcp__archon__get_available_sources()
-```
-
-#### When to Use Archon RAG
-1. **Architecture Decisions**: Query best practices for frameworks in use
-2. **Implementation Patterns**: Find proven code examples from documentation
-3. **Library Integration**: Get official implementation guidance
-4. **Performance Optimization**: Access optimization patterns from Redis/PostgreSQL docs
-5. **UI Components**: Reference shadcn/ui and Flowbite patterns
-
-#### Archon + Parallel Agents Pattern
-```
-"Use Task tool to launch these agents with Archon integration:
-1. Research agent: Use mcp__archon__perform_rag_query for best practices
-2. Code agent: Use mcp__archon__search_code_examples for patterns
-3. Implementation agent: Apply findings to codebase
-Each returns condensed, actionable insights"
-```
-
-## Monitoring API Integration
-
-### External Monitoring Endpoint
-
-The system provides a RESTful API endpoint for external monitoring tools and integrations:
-
-#### POST /api/monitoring
-**URL**: `http://localhost:4001/api/monitoring`
-
-**Purpose**: Receives real-time dual-agent coordination data from the main application
-
-**Request Format**:
-```json
-{
-  "agentType": "manager" | "worker",
-  "messageType": "coordination_event" | "prompt" | "response" | "error",
-  "message": "Event description or content",
-  "metadata": {
-    "eventType": "MANAGER_TASK_ASSIGNMENT" | "WORKER_PROGRESS_UPDATE" | "AGENT_COORDINATION",
-    "eventData": { /* Event-specific data */ },
-    "timestamp": "2024-08-31T12:00:00.000Z",
-    "workflowPhase": "planning" | "execution" | "validation" | "completion",
-    "overallProgress": 0.75
-  },
-  "sessionInfo": {
-    "task": "User task description",
-    "workDir": "/path/to/project"
-  }
-}
-```
-
-**Response Format**:
-```json
-{
-  "success": true
-}
-```
-
-**Error Response**:
-```json
-{
-  "success": false,
-  "error": "Error message"
-}
-```
-
-#### Integration in AgentCoordinator
-
-The monitoring integration is automatically triggered during agent coordination:
-
-```typescript
-// Automatically called during agent communication
-this.emitCoordinationEvent('AGENT_COORDINATION', 'manager', {
-  phase: 'task_assignment',
-  workItems: assignedTasks,
-  qualityGates: validationCriteria
-});
-```
-
-**Event Types Sent**:
-- `MANAGER_TASK_ASSIGNMENT`: When Manager assigns work to Worker
-- `WORKER_PROGRESS_UPDATE`: When Worker reports progress
-- `MANAGER_QUALITY_CHECK`: When Manager validates Worker output
-- `AGENT_COORDINATION`: General coordination events
-- `WORKFLOW_TRANSITION`: Phase changes in dual-agent workflow
-- `MANAGER_WORKER_HANDOFF`: Task handoffs between agents
-
-#### Usage Examples
-
-**curl Command**:
-```bash
-curl -X POST http://localhost:4001/api/monitoring \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agentType": "manager",
-    "messageType": "coordination_event", 
-    "message": "Task assignment initiated",
-    "metadata": {
-      "eventType": "MANAGER_TASK_ASSIGNMENT",
-      "workflowPhase": "planning",
-      "overallProgress": 0.25
-    },
-    "sessionInfo": {
-      "task": "Implement authentication system",
-      "workDir": "/path/to/project"
-    }
-  }'
-```
-
-**JavaScript Integration**:
+### Archon (Task Management + RAG)
 ```javascript
-const monitoringData = {
-  agentType: 'worker',
-  messageType: 'response',
-  message: 'Authentication module completed',
-  metadata: {
-    eventType: 'WORKER_PROGRESS_UPDATE',
-    completedTasks: ['JWT setup', 'User model', 'Auth middleware'],
-    overallProgress: 0.8
-  }
-};
+// Search documentation
+mcp__archon__perform_rag_query(query="authentication patterns", match_count=5)
 
-fetch('http://localhost:4001/api/monitoring', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(monitoringData)
-});
+// Find code examples
+mcp__archon__search_code_examples(query="jwt implementation", match_count=3)
+
+// Task management
+mcp__archon__create_task(project_id="...", title="...", assignee="AI IDE Agent")
 ```
 
-**Benefits**:
-- Real-time visibility into agent coordination
-- External tool integration (dashboards, alerts, analytics)
-- Session persistence and replay capabilities
-- Performance monitoring and optimization insights
-- Custom webhook and notification support
+### Available MCP Servers
+- **archon**: Task management + 19+ knowledge sources
+- **github**: Repository operations
+- **playwright**: Browser automation
+- **context7**: Documentation retrieval
+- **memory**: Persistent storage
+
+## Hook Scripts
+
+Located in `.claude/hooks/`:
+- User prompt capture
+- Tool execution monitoring
+- Agent communication tracking
+- Quality gate validation
+
+Configuration via `.claude/settings.local.json`
 
 ## Production Deployment
 
-### Infrastructure Decision Matrix
-
-Choose your deployment strategy based on requirements:
-
-| Use Case | Team Size | Recommended Option | Complexity | Cost |
-|----------|-----------|-------------------|------------|------|
-| Development/Testing | 1-3 developers | Local + Docker | Low | Free |
-| Small Team Production | 3-10 users | Docker Compose | Medium | Low |
-| Enterprise/Scale | 10+ users | Kubernetes + Cloud | High | Medium-High |
-| Multi-Region | Global teams | Terraform + CDN | Very High | High |
-
-### Quick Production Setup
-The system includes comprehensive deployment infrastructure:
-
+### Docker (Recommended)
 ```bash
-# 1. High-Availability Docker Compose
+# Using pre-built image
+docker pull ghcr.io/yossiashkenazi/automatic-claude-code:latest
+
+# Run with volumes
+docker run -it --rm \
+  -v "$(pwd):/workspace:ro" \
+  -v "$HOME/.claude:/home/nodejs/.claude:ro" \
+  ghcr.io/yossiashkenazi/automatic-claude-code:latest \
+  run "your task" --dual-agent -i 5
+```
+
+### High Availability
+```bash
 cd dual-agent-monitor/deploy
-cp .env.production .env
 docker-compose -f docker-compose.ha.yml up -d
+```
 
-# 2. Kubernetes Deployment
+### Kubernetes
+```bash
 kubectl apply -f dual-agent-monitor/deploy/kubernetes/
-
-# 3. Terraform (AWS/Azure/GCP)
-cd dual-agent-monitor/deploy/terraform
-terraform init && terraform apply
 ```
 
-### Deployment Options
-- **Single Server**: Docker Compose with PostgreSQL, Redis, nginx
-- **High Availability**: Load balancer, multiple app instances, database clustering
-- **Kubernetes**: Full container orchestration with auto-scaling
-- **Cloud Infrastructure**: Terraform modules for AWS, Azure, GCP
-- **Monitoring Stack**: Prometheus, Grafana, Alertmanager integration
+## Troubleshooting
 
-### Production Features
-- **SSL/TLS**: Automatic certificate management with Let's Encrypt
-- **Database**: PostgreSQL with backup automation and connection pooling
-- **Caching**: Redis for session storage and real-time data
-- **Load Balancing**: HAProxy with health checks and failover
-- **Monitoring**: Comprehensive metrics, logging, and alerting
-- **Security**: Firewall rules, security headers, authentication
-- **Scaling**: Auto-scaling based on CPU, memory, and request metrics
-
-### Security Best Practices
-
-#### SSL/TLS Configuration
+### Browser Authentication Issues
 ```bash
-# Automatic certificate renewal with Let's Encrypt
-certbot certonly --webroot -w /var/www/html -d your-domain.com
-
-# Configure nginx with SSL
-server {
-    listen 443 ssl http2;
-    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512;
-}
-```
-
-#### Firewall Rules
-```bash
-# Basic firewall configuration
-ufw allow 22/tcp    # SSH
-ufw allow 80/tcp    # HTTP
-ufw allow 443/tcp   # HTTPS
-ufw allow 4001/tcp  # Monitoring API (internal only)
-ufw deny 6011/tcp   # Block direct dashboard access
-```
-
-#### Environment Security
-```bash
-# Secure environment variables
-echo "CLAUDE_API_KEY=your_key_here" > .env.production
-chmod 600 .env.production
-
-# Database security
-psql -c "CREATE USER monitor_user WITH PASSWORD 'secure_password';"
-psql -c "GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO monitor_user;"
-```
-
-## Testing & Development Workflow
-
-### Local Development ✅ VERIFIED WORKING
-```bash
-# 1. Install dependencies
-pnpm install
-
-# 2. Start monitoring dashboard (in separate terminal)
-cd dual-agent-monitor && pnpm run dev
-
-# 3. Run in development mode (uses tsx for hot reload)
-pnpm run dev
-
-# 4. Test a simple task
-pnpm run dev run "create a hello world function" -i 2 -v
-
-# 5. Build and test production ✅ TESTED SUCCESSFULLY
-pnpm run build                    # ✅ TypeScript compilation: PASSED
-node dist/index.js --version      # ✅ Returns: 1.2.0
-node dist/index.js examples       # ✅ Shows all example commands
-node dist/index.js run "task" -i 1 -v  # ✅ SDK integration active
-```
-
-### ✅ Verified System Components (September 1, 2025)
-```bash
-# Build verification
-✅ pnpm run build                 # TypeScript compilation successful
-✅ node dist/index.js --version   # CLI functional (v1.2.0)
-✅ node dist/index.js examples    # All commands available
-
-# SDK integration testing
-✅ SDK execution attempt          # Browser auth attempted first
-✅ Fallback to CLI mode          # Graceful degradation working
-✅ Error handling                # User guidance provided
-
-# Monitoring system testing
-✅ http://localhost:4005/api/health  # API healthy, WebSocket active
-✅ Dashboard accessible           # UI responding at :6011
-✅ Real-time data flow           # Monitoring events sent successfully
-
-# Dual-agent coordination
-✅ Manager-Worker initialization  # Agents spawn successfully
-✅ Coordination events           # Inter-agent communication active
-✅ Monitoring integration        # Real-time dashboard updates
-```
-
-### Monitoring Dashboard Development
-```bash
-# Frontend development server (React + Vite)
-cd dual-agent-monitor
-pnpm install
-pnpm run dev  # Runs on http://localhost:6011
-
-# Backend WebSocket server (in separate terminal)
-cd dual-agent-monitor/server
-pnpm run dev  # Runs on http://localhost:4001
-```
-
-### Testing Checklist
-
-#### Single-Agent Mode (Legacy)
-1. **Basic Functionality**: `acc run "create test.txt with hello" -i 1`
-   - If acc command not available: `node "../automatic-claude-code/dist/index.js" run "create test.txt with hello" -i 1`
-2. **Error Recovery**: Test with intentionally failing tasks
-3. **Session Continuity**: Verify `--resume` functionality
-4. **Output Parsing**: Check both JSON and text fallback modes
-5. **Hook Execution**: Monitor `.claude/hooks/` script triggers
-
-#### Dual-Agent Mode (Enhanced) ✅ VERIFIED OPERATIONAL
-1. **Agent Coordination**: `acc run "implement user auth system" --dual-agent -i 5 -v` ✅ TESTED
-   - If acc command not available: `node "../automatic-claude-code/dist/index.js" run "implement user auth system" --dual-agent -i 5 -v`
-2. **Manager Planning**: ✅ Manager creates proper task breakdown - VERIFIED
-3. **Worker Execution**: ✅ Worker executes assigned tasks correctly - VERIFIED
-4. **Quality Gates**: ✅ Manager validation of Worker outputs - ACTIVE
-5. **Error Recovery**: ✅ Agent error handling and recovery - FUNCTIONAL
-6. **Inter-Agent Communication**: ✅ Agent message exchange via dashboard - OPERATIONAL
-7. **Performance Comparison**: ✅ Dual vs single agent effectiveness - MEASURABLE
-8. **Complex Workflows**: ✅ Multi-step architecture changes - SUPPORTED
-9. **Concurrent Task Handling**: ✅ Parallel work item execution - ACTIVE
-10. **Cross-Validation**: ✅ Manager reviewing Worker solutions - IMPLEMENTED
-11. **Monitoring Integration**: ✅ Dashboard displays agent activities - VERIFIED WORKING
-12. **Webhook Notifications**: ✅ Slack/Discord/email integrations - CONFIGURED
-13. **ML Insights**: ✅ Anomaly detection and predictive analytics - AVAILABLE
-14. **Session Persistence**: ✅ PostgreSQL storage and replay - FUNCTIONAL
-15. **Mobile Interface**: ✅ Responsive design and PWA features - RESPONSIVE
-
-**Test Results Summary (September 1, 2025)**:
-- ✅ All 15 dual-agent test scenarios: PASSED
-- ✅ Manager-Worker coordination: ACTIVE
-- ✅ Real-time monitoring data flow: OPERATIONAL
-- ✅ WebSocket connections: STABLE (1 active connection)
-- ✅ Dashboard UI responsiveness: CONFIRMED
-- ✅ Error handling and fallback logic: ROBUST
-
-#### Automated Testing Infrastructure
-The system includes comprehensive test suites:
-- **Unit Tests**: Component-level testing with Jest/Vitest
-- **Integration Tests**: API and database integration testing
-- **E2E Tests**: Full workflow testing with Playwright
-- **Performance Tests**: Load testing and performance benchmarking
-- **CI/CD Pipeline**: Automated testing on GitHub Actions
-- **Security Testing**: Dependency scanning and vulnerability assessment
-
-#### Performance Validation Checklist
-
-**API Performance Requirements**:
-- [ ] Monitoring API response time < 100ms (95th percentile)
-- [ ] WebSocket connection establishment < 500ms
-- [ ] Session creation/retrieval < 200ms
-- [ ] Database query performance < 50ms average
-- [ ] Memory usage < 512MB per agent process
-
-**Load Testing Scenarios**:
-```bash
-# Basic load test with Artillery
-npm install -g artillery
-artillery quick --count 50 --num 10 http://localhost:4001/api/health
-
-# Dual-agent coordination load test
-artillery run tests/load/dual-agent-workflow.yml
-
-# WebSocket connection stress test
-artillery run tests/load/websocket-connections.yml
-```
-
-**Production Readiness Criteria**:
-- [ ] All health checks passing
-- [ ] SSL certificates valid and auto-renewing
-- [ ] Database backups automated and tested
-- [ ] Monitoring alerts configured and tested
-- [ ] Log rotation and retention policies active
-- [ ] Security scans passing (no critical vulnerabilities)
-- [ ] Load balancer health checks responding
-- [ ] Disaster recovery procedures documented and tested
-
-## Recent Updates (Updated: 2025-09-01)
-
-### Latest Major Changes (2025-09-01)
-- **Browser SDK Integration (v1.2.0)**: ✅ COMPLETED & TESTED - Revolutionary browser-based authentication system
-  - ✅ **Eliminated API Key Requirements**: Direct Claude Pro/Team session integration via browser
-  - ✅ **Cross-Browser Support**: Chrome, Firefox, Safari, Edge compatibility with automatic detection
-  - ✅ **Session Management**: Persistent browser sessions with automatic token refresh
-  - ✅ **Interactive Stream Processing**: Real-time communication through browser SDK
-  - ✅ **Parallel Agent Enhancement**: Browser session pool for concurrent agent execution
-  - ✅ **Comprehensive Troubleshooting**: Browser-specific debugging and error recovery
-  - ✅ **Build Verification**: TypeScript compilation successful, all CLI commands functional
-  - ✅ **Integration Testing**: SDK fallback logic verified, dual-agent coordination active
-  - ✅ **Monitoring Dashboard**: Real-time WebSocket communication confirmed operational
-- **Dashboard UI Enhancements**: Comprehensive improvements to monitoring interface reliability
-  - ✅ **Fixed Critical Data Consistency**: Resolved hardcoded session counts in Sidebar - now shows dynamic real-time data
-  - ✅ **Enhanced WebSocket Reliability**: Added comprehensive error handling, reconnection logic, and heartbeat monitoring
-  - ✅ **Browser Integration Monitoring**: Real-time browser session status and health tracking
-  - ✅ **Enhanced Mobile Experience**: Improved responsive design with browser session indicators
-- **Technical Improvements**: 
-  - Fixed `dual-agent-monitor/src/components/ui/Sidebar.tsx` - replaced hardcoded `badge: 3` with dynamic session count
-  - Updated `dual-agent-monitor/src/components/mobile/MobileApp.tsx` - replaced hardcoded badge values with real-time calculations
-  - Enhanced WebSocket reliability in `dual-agent-monitor/src/hooks/useWebSocket.ts`
-  - Added comprehensive error boundaries throughout the application
-  - Created extensive test suite with data consistency validation
-  - Built production-ready build pipeline with TypeScript safety
-
-### Previous Changes (2024-09-01)
-- **Automated CI/CD Pipelines**: Robust GitHub Actions workflows for continuous integration
-  - Fixed failing workflows with proper pnpm integration
-  - Multiple workflow options (simple-ci.yml, main.yml, ci.yml) with resilient error handling  
-  - Automated Docker image building and publishing to GitHub Container Registry
-  - Multi-architecture support (linux/amd64, linux/arm64) with automated testing
-  - Dependabot configuration for automated dependency updates
-- **GitHub Container Registry Integration**: Pre-built Docker images available
-  - `ghcr.io/yossiashkenazi/automatic-claude-code:latest` for latest builds
-  - Semantic versioning with `v*` tags automatically published
-  - Multi-platform support and automated testing in CI/CD
-  - Pull request validation with container builds
-
-### Previous Changes (2024-08-31)
-- **Complete Docker Containerization**: Full Docker support with multi-stage builds
-  - Dockerfile with development and production targets
-  - docker-compose.yml for development environment
-  - docker-compose.prod.yml for production deployment
-  - .dockerignore and .env.example for proper configuration
-- **Persistent Monitoring Service**: Always-running monitoring server
-  - monitoring-server.js with auto-restart capabilities
-  - PM2 integration for process management
-  - PowerShell and batch startup scripts
-  - Health checks and status monitoring
-- **Enhanced Package Scripts**: 30+ new Docker and monitoring commands
-  - docker:build, docker:dev, docker:prod family
-  - monitor:start, monitor:pm2, monitor:persistent commands
-  - Service management and backup utilities
-- **Service Reliability**: Multiple startup and recovery options
-  - Auto-restart on crashes
-  - Process health monitoring
-  - Container health checks
-  - Graceful shutdown handling
-
-### Previous Changes
-- **Global Command Installation**: Added `npm link` setup for global `acc` command access
-- **Monitoring Port Configuration**: Multiple monitoring options (6007 persistent, 6011 full)
-- **ML Service Temporary Disable**: Disabled problematic ML components for stability
-- **Enhanced Monitoring Integration**: Added `/api/monitoring` endpoint for dual-agent coordination
-- **Improved Cross-Directory Usage**: Streamlined usage from any project directory
-
-### Major Features Added
-- **Production Deployment Infrastructure**: Complete Docker, Kubernetes, and Terraform configurations
-- **Machine Learning Insights Engine**: Anomaly detection, predictive analytics, optimization recommendations
-- **External Integrations**: Comprehensive webhook system with Slack, Discord, and email support
-- **Mobile-Responsive Dashboard**: Progressive Web App with offline capabilities
-- **Database Integration**: PostgreSQL support with schema management and data persistence
-- **Authentication & Authorization**: User management system with role-based permissions
-- **Session Replay**: Record and replay complete agent interaction sessions
-- **Automated Testing**: CI/CD pipelines with unit, integration, and E2E tests
-
-### Architecture Enhancements
-- **Monitoring Backend**: Express + WebSocket server for real-time agent communication
-- **React Frontend**: Modern UI with Zustand state management and responsive design
-- **Analytics Service**: Performance metrics collection and analysis
-- **Security Layer**: SSL/TLS, firewall rules, and security headers
-- **Scaling Infrastructure**: Auto-scaling, load balancing, and high availability setup
-
-### Developer Experience Improvements
-- **Live Agent Visualization**: Real-time Manager-Worker communication diagrams
-- **Performance Analytics**: Detailed metrics on agent effectiveness and coordination
-- **Multi-Project Support**: Monitor agent activities across different codebases
-- **Quick Setup Guide**: Simplified deployment with QUICK-SETUP.md
-- **Comprehensive Documentation**: Production deployment guide (DEPLOYMENT.md)
-
-### Breaking Changes
-- **Port Configuration**: Multiple monitoring options available
-  - Persistent monitor: port 6007 (lightweight, always running)
-  - Full dashboard: port 6011 (development mode) ✅ Enhanced UI with data consistency fixes
-  - API server: port 4005 (WebSocket + REST) ✅ Improved reliability and error handling
-- **Command Installation**: `acc` command now requires `npm link` for global installation
-- **Configuration Schema**: Extended config.json with Docker, monitoring, database, and webhook settings
-- **Docker Integration**: New container-based deployment options available
-- **Service Management**: Multiple startup options (native, PM2, Docker, PowerShell)
-- **ML Service**: Machine Learning features temporarily disabled to ensure core functionality
-- **Database Requirement**: PostgreSQL recommended for production, in-memory fallback for development
-
-## Troubleshooting Guide
-
-### Browser SDK Authentication Issues
-
-#### Browser Session Not Detected
-```bash
-# Check if Claude is accessible in browser
-open https://claude.ai
-# or: xdg-open https://claude.ai (Linux)
-# or: start https://claude.ai (Windows)
-
-# Verify browser session is active
+# Check browser session
 acc --check-browser-session
 
-# Force browser session refresh
-acc run "test task" --refresh-browser-session -i 1
+# Force refresh
+acc run "test" --refresh-browser-session -i 1
 
-# Debug browser detection
+# Debug mode
 DEBUG=browser:* acc run "test" --dual-agent -v
-```
-
-#### Browser Launch Problems
-```bash
-# Check default browser
-which google-chrome || which firefox || which safari
-
-# Test browser automation
-acc --test-browser-automation
 
 # Try different browsers
-acc run "task" --browser chrome --dual-agent -i 2
 acc run "task" --browser firefox --dual-agent -i 2
-acc run "task" --browser edge --dual-agent -i 2
-
-# Use headless browser mode
-acc run "task" --headless-browser --dual-agent -i 2
 ```
 
-#### Session Management Issues
+### Common Issues
+
+**acc command not found**:
 ```bash
-# Clear browser session cache
-acc --clear-browser-cache
-
-# Reset all browser sessions
-acc --reset-browser-sessions
-
-# Monitor browser session health
-acc --monitor-browser-sessions
-
-# Debug browser session management
-DEBUG=session:* acc run "test" --dual-agent -v
+cd automatic-claude-code
+npm link  # Re-run installation
 ```
 
-### Common Issues and Solutions
+**Browser session not detected**:
+1. Open https://claude.ai in your browser
+2. Sign in to your Claude account
+3. Run `acc --check-browser-session`
 
-#### Monitoring Server Won't Start
+**Monitoring not connecting**:
 ```bash
-# Check port conflicts
-netstat -tulpn | grep :4001
+# Check ports
+netstat -an | grep -E "4005|6011"
 
-# Kill conflicting processes
-sudo lsof -ti:4001 | xargs kill -9
-
-# Restart with debug logging
-DEBUG=* pnpm run dev
+# Restart services
+pnpm run monitor:stop
+pnpm run monitor:start
 ```
 
-#### Dual-Agent Coordination Issues (Browser Mode)
-```bash
-# Check Claude CLI installation
-claude --version
+## Recent Updates (2025-09-02)
 
-# Verify browser-based agent processes
-ps aux | grep chrome | grep claude
-ps aux | grep firefox | grep claude
+### v1.2.1 - Critical Fixes
+- **Fixed**: Documentation accuracy (removed misleading PTY references)
+- **Fixed**: Global `acc` command installation issues
+- **Enhanced**: Browser authentication error messages
+- **Added**: Comprehensive troubleshooting guidance
 
-# Debug agent communication with browser sessions
-DEBUG=agent:browser:* acc run "test" --dual-agent -v
+### v1.2.0 - Browser SDK Integration
+- **Revolutionary**: Direct browser authentication (no API keys)
+- **Added**: Cross-browser support with session management
+- **Enhanced**: Dual-agent coordination with browser SDK
+- **Improved**: Global command availability with `npm link`
 
-# Test browser coordination
-acc --test-dual-agent-browser-coordination
-```
-
-#### Database Connection Problems
-```bash
-# Test PostgreSQL connection
-psql -h localhost -p 5432 -U monitor_user -d dual_agent_monitor
-
-# Check connection pool status
-SELECT * FROM pg_stat_activity;
-
-# Reset connections if needed
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle';
-```
-
-#### Performance Issues
-```bash
-# Monitor system resources
-top -p $(pgrep -d, node)
-
-# Check memory usage
-ps aux --sort=-%mem | head
-
-# Analyze slow queries
-SELECT query, mean_time, calls FROM pg_stat_statements ORDER BY mean_time DESC LIMIT 10;
-```
-
-### Real-World Usage Examples
-
-#### Example 1: E-commerce Feature Development
-```bash
-# Complex multi-component task
-acc run "Build a complete shopping cart system with Redis caching, payment integration, and admin dashboard" --dual-agent -i 10 -v
-
-# Expected Manager breakdown:
-# 1. Database schema design
-# 2. Redis cache implementation
-# 3. Payment gateway integration
-# 4. Admin interface development
-# 5. Testing and validation
-```
-
-#### Example 2: API Security Audit
-```bash
-# Security-focused task
-acc run "Perform complete security audit of REST API, implement rate limiting, add input validation, and create security documentation" --dual-agent -i 8 -v
-
-# Expected coordination:
-# Manager: Strategic security assessment
-# Worker: Implementation of specific security measures
-```
-
-#### Example 3: Performance Optimization
-```bash
-# Performance improvement task
-acc run "Optimize database queries, implement caching strategies, and add performance monitoring for high-traffic endpoints" --dual-agent -i 6 -v
-
-# Expected workflow:
-# Manager: Analysis and bottleneck identification
-# Worker: Implementation of optimizations
-```
+### Previous Major Updates
+- Docker containerization with CI/CD pipelines
+- PostgreSQL database integration
+- Machine learning insights engine
+- Webhook system (Slack, Discord, email)
+- Session replay functionality
 
 ## Important Notes
 
-- **Package Manager**: Project uses pnpm (primary) with npm fallback for WSL compatibility
-- **Monitoring Ports**: Current operational configuration  
-  - Full Dashboard (6011) - React UI with real-time monitoring
-  - API Server (4005) - WebSocket + REST API with health checks
-  - Tested and verified operational (September 1, 2025)
-- **Container Support**: Full Docker containerization available
-  - Single container for ACC CLI
-  - Multi-service development environment
-  - Production-ready deployment with database and monitoring
-- **Service Reliability**: Multiple startup and management options
-  - Native Node.js execution
-  - PM2 process management with auto-restart
-  - Docker containers with health checks
-  - PowerShell/batch scripts for Windows
-- **Database Setup**: PostgreSQL recommended for production, in-memory fallback for development
-- **Session Storage**: All sessions persisted to database with replay capabilities
-- **Process Spawning**: Uses shell execution for cross-platform compatibility
-- **Claude CLI Required**: Must have Claude Code CLI installed and in PATH (or use Docker)
-- **Webhook Configuration**: External integrations configurable via config.json or dashboard UI
-- **Cross-Platform**: Native support for Windows, macOS, Linux, plus Docker for any platform
+- **Package Manager**: pnpm (primary), npm fallback for WSL
+- **Claude CLI Required**: Must have Claude Code CLI installed
+- **Browser First**: Always attempts browser auth before API fallback
+- **Session Persistence**: All sessions saved to database
+- **Cross-Platform**: Windows, macOS, Linux + Docker support
+
+## Quick Reference
+
+### Essential Commands
+```bash
+acc run "task" --dual-agent -i 5 -v   # Run with dual agents
+acc monitor                            # Check monitoring
+acc history                            # View session history
+acc logs --tail                        # Watch logs
+acc examples                           # Show examples
+```
+
+### Monitoring Endpoints
+- Dashboard UI: http://localhost:6011
+- API Health: http://localhost:4005/api/health
+- WebSocket: ws://localhost:4005
+
+### File Paths
+- Config: `~/.automatic-claude-code/config.json`
+- Sessions: `~/.automatic-claude-code/sessions/`
+- Logs: `~/.automatic-claude-code/logs/`
+
+---
+
+*For detailed documentation, see `/docs` directory*

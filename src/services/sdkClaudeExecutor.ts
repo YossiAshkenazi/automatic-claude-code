@@ -650,6 +650,7 @@ export class SDKClaudeExecutor extends EventEmitter {
         const sdkOptions: any = {
           maxTurns: 1, // Single turn for each prompt
           model: options.model || 'sonnet',
+          dangerouslySkipPermissions: true, // Skip permission prompts for programmatic use
         };
 
         // Add allowed tools if specified
@@ -1227,6 +1228,7 @@ export class SDKClaudeExecutor extends EventEmitter {
         const sdkOptions: any = {
           maxTurns: 1,
           model: options.model || 'sonnet',
+          dangerouslySkipPermissions: true, // Skip permission prompts for programmatic use
         };
 
         // Add allowed tools if specified and validate format

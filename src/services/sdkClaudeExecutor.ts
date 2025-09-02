@@ -1356,7 +1356,31 @@ export class SDKClaudeExecutor extends EventEmitter {
           clearTimeout(timeoutHandle);
           this.logger.error(`SDK message processing failed [${executionId}]`, { error: String(iteratorError) });
           
-          if (String(iteratorError).toLowerCase().includes('network')) {
+          const errorStr = String(iteratorError).toLowerCase();
+          
+          // Check for invalid API key error
+          if (errorStr.includes('process exited with code 1') || errorStr.includes('claude code process exited')) {
+            // Check if ANTHROPIC_API_KEY is set
+            if (process.env.ANTHROPIC_API_KEY) {
+              reject(new APIKeyRequiredError(
+                `${chalk.red.bold('Invalid API Key Detected')}\n\n` +
+                `${chalk.yellow('The ANTHROPIC_API_KEY environment variable is set but appears to be invalid.')}\n\n` +
+                `${chalk.blue('Solutions:')}\n` +
+                `${chalk.blue('1.')} Remove the invalid key: ${chalk.cyan('unset ANTHROPIC_API_KEY')}\n` +
+                `${chalk.blue('2.')} Or set a valid key: ${chalk.cyan('export ANTHROPIC_API_KEY="your-valid-key"')}\n\n` +
+                `${chalk.gray('Claude Code will use browser authentication if no API key is set.')}`
+              ));
+            } else {
+              reject(new AuthenticationError(
+                `${chalk.red.bold('Authentication Failed')}\n\n` +
+                `${chalk.yellow('Claude Code requires authentication.')}\n\n` +
+                `${chalk.blue('To fix:')}\n` +
+                `${chalk.blue('1.')} Run: ${chalk.cyan('claude')}\n` +
+                `${chalk.blue('2.')} Complete the browser authentication\n` +
+                `${chalk.blue('3.')} Try your command again`
+              ));
+            }
+          } else if (errorStr.includes('network')) {
             reject(new NetworkError(`Network error during processing: ${iteratorError}`));
           } else {
             reject(new Error(`Message processing failed: ${iteratorError}`));

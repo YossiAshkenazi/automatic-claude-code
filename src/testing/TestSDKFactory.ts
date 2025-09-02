@@ -16,6 +16,7 @@ import ProcessHandleTracker, {
   ProcessTerminationOptions, 
   HandleCleanupResult 
 } from './ProcessHandleTracker';
+import ShutdownManager, { ShutdownOptions } from './ShutdownManager';
 
 export interface TestSDKOptions {
   mockLevel: 'none' | 'session_only' | 'full_mock';
@@ -31,6 +32,9 @@ export interface TestSDKOptions {
   enableHandleTracking?: boolean;
   handleTrackingOptions?: HandleTrackingOptions;
   terminationOptions?: ProcessTerminationOptions;
+  // Shutdown management options
+  enableShutdownHooks?: boolean;
+  shutdownOptions?: ShutdownOptions;
 }
 
 export interface TestSDKInstance {
@@ -42,6 +46,10 @@ export interface TestSDKInstance {
   handleTracker?: ProcessHandleTracker;
   forceTermination?: (options?: ProcessTerminationOptions) => Promise<void>;
   getHandleStatistics?: () => any;
+  // Shutdown management
+  shutdownManager?: ShutdownManager;
+  gracefulShutdown?: (reason?: string) => Promise<void>;
+  getShutdownStatus?: () => any;
 }
 
 /**
@@ -51,6 +59,7 @@ export class TestSDKFactory {
   private static instances: Map<string, TestSDKInstance> = new Map();
   private static instanceCounter = 0;
   private static globalHandleTracker?: ProcessHandleTracker;
+  private static globalShutdownManager?: ShutdownManager;
 
   /**
    * Create an isolated SDK instance for testing
@@ -64,6 +73,7 @@ export class TestSDKFactory {
       enableLogging: false,
       logLevel: 'error',
       enableHandleTracking: true, // Enable handle tracking by default for tests
+      enableShutdownHooks: true,  // Enable shutdown hooks by default for tests
       ...overrides
     };
 
@@ -81,6 +91,7 @@ export class TestSDKFactory {
       processIsolation: true,
       enableLogging: false,
       enableHandleTracking: true, // Enable handle tracking for mocked tests
+      enableShutdownHooks: true,  // Enable shutdown hooks for mocked tests
       mockResponses
     };
 
@@ -100,6 +111,7 @@ export class TestSDKFactory {
       logLevel: 'info',
       timeoutMs: 30000, // 30 second timeout for real operations
       enableHandleTracking: true, // Critical for integration tests to prevent hanging
+      enableShutdownHooks: true,  // Critical for integration tests to ensure cleanup
       ...overrides
     };
 
@@ -123,6 +135,16 @@ export class TestSDKFactory {
     let handleTracker: ProcessHandleTracker | undefined;
     if (options.enableHandleTracking) {
       handleTracker = this.initializeHandleTracking(options, logger, instanceId);
+    }
+    
+    // Initialize shutdown management if enabled
+    let shutdownManager: ShutdownManager | undefined;
+    if (options.enableShutdownHooks) {
+      shutdownManager = this.initializeShutdownManager(options, logger, instanceId);
+      // Integrate handle tracker with shutdown manager
+      if (handleTracker) {
+        shutdownManager.setHandleTracker(handleTracker);
+      }
     }
     
     // Create SDK with test configuration
@@ -154,6 +176,20 @@ export class TestSDKFactory {
       return handleTracker ? handleTracker.getStatistics() : undefined;
     };
 
+    // Create graceful shutdown function
+    const gracefulShutdown = async (reason?: string) => {
+      if (shutdownManager) {
+        await shutdownManager.shutdown(reason || `Test instance ${instanceId} shutdown`);
+      } else {
+        await cleanup();
+      }
+    };
+
+    // Create shutdown status function
+    const getShutdownStatus = () => {
+      return shutdownManager ? shutdownManager.getStatus() : undefined;
+    };
+
     const instance: TestSDKInstance = {
       sdk,
       sessionId: instanceId,
@@ -161,7 +197,10 @@ export class TestSDKFactory {
       getMockLayer: mockLayer ? () => mockLayer! : undefined,
       handleTracker,
       forceTermination,
-      getHandleStatistics
+      getHandleStatistics,
+      shutdownManager,
+      gracefulShutdown,
+      getShutdownStatus
     };
 
     // Register instance for tracking
@@ -271,6 +310,65 @@ export class TestSDKFactory {
   }
 
   /**
+   * Initialize shutdown management for an instance
+   */
+  private static initializeShutdownManager(
+    options: TestSDKOptions, 
+    logger: Logger | undefined, 
+    instanceId: string
+  ): ShutdownManager {
+    const effectiveLogger = logger || new Logger(`shutdown-manager-${instanceId}`, { 
+      essentialMode: true, 
+      enableFileLogging: false 
+    });
+
+    const manager = ShutdownManager.getInstance(effectiveLogger, {
+      maxShutdownTime: 3000,
+      gracefulTimeout: 2000,
+      forceKillTimeout: 1000,
+      enableSignalHandlers: options.processIsolation, // Only in isolated tests
+      logProgress: options.enableLogging,
+      enableEscalation: true,
+      hookTimeout: 500,
+      parallelExecution: true,
+      ...options.shutdownOptions
+    });
+
+    // Register SDK-specific cleanup hooks
+    manager.registerHook(
+      `TestSDK-${instanceId}-Cleanup`,
+      async () => {
+        effectiveLogger?.debug(`Shutting down test SDK instance ${instanceId}`);
+        // This will be called during graceful shutdown
+      },
+      'normal',
+      {
+        timeoutMs: 1000,
+        description: `Clean up test SDK instance ${instanceId}`,
+        metadata: { instanceId, testInstance: true }
+      }
+    );
+
+    // Register mock layer cleanup if present
+    manager.registerHook(
+      `MockLayer-${instanceId}-Cleanup`,
+      async () => {
+        effectiveLogger?.debug(`Cleaning up mock layer for instance ${instanceId}`);
+        // Mock layer cleanup will be handled in the main cleanup
+      },
+      'low',
+      {
+        timeoutMs: 200,
+        description: `Clean up mock layer for instance ${instanceId}`,
+        dependencies: [`TestSDK-${instanceId}-Cleanup`]
+      }
+    );
+
+    effectiveLogger?.debug('Shutdown management initialized for test instance', { instanceId });
+    return manager;
+  }
+
+  /**
    * Generate unique instance ID
    */
   private static generateInstanceId(): string {
@@ -290,24 +388,34 @@ export class TestSDKFactory {
     }
 
     try {
-      // Cleanup handle tracker first (most critical for preventing hangs)
-      if (instance.handleTracker) {
+      // Use shutdown manager for graceful cleanup if available
+      if (instance.shutdownManager) {
         try {
-          const cleanupResult = await instance.handleTracker.forceCleanupAll({
-            maxWaitTime: 3000,
-            forceKillAfter: 2000,
-            enableSigkillFallback: false, // Don't kill process during test cleanup
-            logCleanupProgress: false
-          });
-
-          if (cleanupResult.failedHandles > 0) {
-            console.warn(`Handle cleanup for instance ${instanceId} had ${cleanupResult.failedHandles} failures`);
-          }
-
-          // Stop tracking
-          instance.handleTracker.stopTracking();
+          await instance.shutdownManager.shutdown(`Instance ${instanceId} cleanup`);
         } catch (error: any) {
-          console.warn(`Handle tracker cleanup failed for instance ${instanceId}:`, error.message);
+          console.warn(`Shutdown manager cleanup failed for instance ${instanceId}:`, error.message);
+        }
+      } else {
+        // Fallback to manual cleanup if no shutdown manager
+        // Cleanup handle tracker first (most critical for preventing hangs)
+        if (instance.handleTracker) {
+          try {
+            const cleanupResult = await instance.handleTracker.forceCleanupAll({
+              maxWaitTime: 3000,
+              forceKillAfter: 2000,
+              enableSigkillFallback: false, // Don't kill process during test cleanup
+              logCleanupProgress: false
+            });
+
+            if (cleanupResult.failedHandles > 0) {
+              console.warn(`Handle cleanup for instance ${instanceId} had ${cleanupResult.failedHandles} failures`);
+            }
+
+            // Stop tracking
+            instance.handleTracker.stopTracking();
+          } catch (error: any) {
+            console.warn(`Handle tracker cleanup failed for instance ${instanceId}:`, error.message);
+          }
         }
       }
 
@@ -348,6 +456,17 @@ export class TestSDKFactory {
 
     await Promise.all(cleanupPromises);
     this.instances.clear();
+
+    // Cleanup global shutdown manager
+    if (this.globalShutdownManager) {
+      try {
+        await this.globalShutdownManager.shutdown('Global test cleanup');
+        ShutdownManager.destroy();
+        this.globalShutdownManager = undefined;
+      } catch (error: any) {
+        console.warn('Global shutdown manager cleanup failed:', error.message);
+      }
+    }
 
     // Cleanup global handle tracker
     if (this.globalHandleTracker) {

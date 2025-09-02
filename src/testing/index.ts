@@ -39,6 +39,16 @@ export {
   TestProcessInfo,
   IPCMessage
 } from './IsolatedTestRunner';
+export { 
+  default as ShutdownManager,
+  ShutdownHook,
+  ShutdownPriority,
+  ShutdownOptions,
+  ShutdownResult,
+  HookExecutionResult,
+  ShutdownStatus,
+  ShutdownPhase
+} from './ShutdownManager';
 
 // Note: Convenience functions available as TestSDKFactory.createIsolated, etc.
 // to avoid circular dependency issues

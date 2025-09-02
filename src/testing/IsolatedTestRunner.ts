@@ -20,6 +20,7 @@ import ProcessHandleTracker, {
   ProcessTerminationOptions, 
   HandleCleanupResult 
 } from './ProcessHandleTracker';
+import ShutdownManager, { ShutdownOptions } from './ShutdownManager';
 import { TestSDKFactory, TestSDKOptions } from './TestSDKFactory';
 
 export interface IsolatedTestOptions {
@@ -44,6 +45,10 @@ export interface IsolatedTestOptions {
   enableProcessLogging: boolean; // Log child process stdout/stderr (default: false)
   logLevel: 'debug' | 'info' | 'warning' | 'error';
   preserveProcessOnFailure: boolean; // Keep process running for debugging (default: false)
+  
+  // Shutdown management
+  enableShutdownHooks: boolean; // Enable graceful shutdown hooks (default: true)
+  shutdownOptions?: ShutdownOptions; // Shutdown manager configuration
 }
 
 export interface IsolatedTestResult {
@@ -95,6 +100,7 @@ export class IsolatedTestRunner extends EventEmitter {
   private isShuttingDown: boolean = false;
   private processPool: Set<number> = new Set();
   private handleTracker: ProcessHandleTracker;
+  private shutdownManager?: ShutdownManager;
 
   // Statistics tracking
   private stats = {
@@ -140,10 +146,18 @@ export class IsolatedTestRunner extends EventEmitter {
       enableProcessLogging: false,
       logLevel: 'error',
       preserveProcessOnFailure: false,
+      enableShutdownHooks: true, // Enable shutdown hooks by default
+      shutdownOptions: options.shutdownOptions || {}, // Default empty shutdown options if not provided
       ...options
     };
 
     this.handleTracker = ProcessHandleTracker.getInstance(this.logger);
+    
+    // Initialize shutdown manager if enabled
+    if (this.defaultOptions.enableShutdownHooks) {
+      this.initializeShutdownManager();
+    }
+    
     this.setupShutdownHandlers();
     this.logger.info('IsolatedTestRunner initialized', { 
       maxConcurrentProcesses: this.defaultOptions.maxConcurrentProcesses,
@@ -826,6 +840,86 @@ runTest().catch(console.error);
   }
 
   /**
+   * Initialize shutdown manager for graceful shutdown coordination
+   */
+  private initializeShutdownManager(): void {
+    this.shutdownManager = ShutdownManager.getInstance(this.logger, {
+      maxShutdownTime: 10000, // Allow longer shutdown time for test runner
+      gracefulTimeout: 8000,
+      forceKillTimeout: 2000,
+      enableSignalHandlers: false, // Don't duplicate signal handlers
+      logProgress: this.defaultOptions.logLevel !== 'error',
+      enableEscalation: true,
+      hookTimeout: 2000, // Longer timeout for test cleanup
+      parallelExecution: true,
+      ...this.defaultOptions.shutdownOptions
+    });
+
+    // Set handle tracker for integration
+    this.shutdownManager.setHandleTracker(this.handleTracker);
+
+    // Register test runner specific hooks
+    this.registerShutdownHooks();
+
+    this.logger.debug('Shutdown manager initialized for test runner');
+  }
+
+  /**
+   * Register shutdown hooks for the test runner
+   */
+  private registerShutdownHooks(): void {
+    if (!this.shutdownManager) return;
+
+    // Critical: Stop accepting new processes
+    this.shutdownManager.registerHook(
+      'TestRunner-StopAcceptingProcesses',
+      async () => {
+        this.isShuttingDown = true;
+        this.logger.debug('Stopped accepting new test processes');
+      },
+      'critical',
+      {
+        timeoutMs: 100,
+        description: 'Stop accepting new test processes'
+      }
+    );
+
+    // High: Cleanup active processes
+    this.shutdownManager.registerHook(
+      'TestRunner-CleanupActiveProcesses',
+      async () => {
+        const cleanupPromises = Array.from(this.activeProcesses.values()).map(processInfo => 
+          this.forceCleanupProcess(processInfo, 'Shutdown requested')
+        );
+        await Promise.all(cleanupPromises);
+        this.logger.debug(`Cleaned up ${cleanupPromises.length} active test processes`);
+      },
+      'high',
+      {
+        timeoutMs: 5000,
+        description: 'Cleanup all active test processes',
+        dependencies: ['TestRunner-StopAcceptingProcesses']
+      }
+    );
+
+    // Normal: Clear process tracking
+    this.shutdownManager.registerHook(
+      'TestRunner-ClearTracking',
+      async () => {
+        this.activeProcesses.clear();
+        this.processPool.clear();
+        this.logger.debug('Cleared process tracking maps');
+      },
+      'normal',
+      {
+        timeoutMs: 500,
+        description: 'Clear process tracking data',
+        dependencies: ['TestRunner-CleanupActiveProcesses']
+      }
+    );
+  }
+
+  /**
    * Setup process shutdown handlers
    */
   private setupShutdownHandlers(): void {
@@ -834,11 +928,19 @@ runTest().catch(console.error);
     signals.forEach(signal => {
       process.on(signal as NodeJS.Signals, () => {
         this.logger.info(`Received ${signal} - initiating test runner shutdown`);
-        this.shutdown().then(() => {
-          process.exit(0);
-        }).catch(() => {
-          process.exit(1);
-        });
+        if (this.shutdownManager) {
+          this.shutdownManager.shutdown(`Signal: ${signal}`).then((result) => {
+            process.exit(result.success ? 0 : 1);
+          }).catch(() => {
+            process.exit(1);
+          });
+        } else {
+          this.shutdown().then(() => {
+            process.exit(0);
+          }).catch(() => {
+            process.exit(1);
+          });
+        }
       });
     });
 
@@ -857,21 +959,28 @@ runTest().catch(console.error);
       return;
     }
     
-    this.isShuttingDown = true;
     this.logger.info('Shutting down isolated test runner', { 
       activeProcesses: this.activeProcesses.size 
     });
     
-    // Force cleanup all active processes
-    const cleanupPromises = Array.from(this.activeProcesses.values()).map(processInfo => 
-      this.forceCleanupProcess(processInfo, 'Shutdown requested')
-    );
-    
-    await Promise.all(cleanupPromises);
-    
-    // Clear all tracking
-    this.activeProcesses.clear();
-    this.processPool.clear();
+    // Use shutdown manager if available
+    if (this.shutdownManager) {
+      await this.shutdownManager.shutdown('Manual test runner shutdown');
+    } else {
+      // Fallback to manual shutdown
+      this.isShuttingDown = true;
+      
+      // Force cleanup all active processes
+      const cleanupPromises = Array.from(this.activeProcesses.values()).map(processInfo => 
+        this.forceCleanupProcess(processInfo, 'Shutdown requested')
+      );
+      
+      await Promise.all(cleanupPromises);
+      
+      // Clear all tracking
+      this.activeProcesses.clear();
+      this.processPool.clear();
+    }
     
     this.logger.info('Isolated test runner shutdown complete');
   }

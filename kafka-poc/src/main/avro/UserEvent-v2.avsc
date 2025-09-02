@@ -1,0 +1,259 @@
+{
+  "type": "record",
+  "name": "UserEvent",
+  "namespace": "com.automaticclaudecode.kafka.avro",
+  "doc": "User event schema v2.0 - Demonstrates schema evolution with new fields",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Unique event identifier"
+    },
+    {
+      "name": "userId", 
+      "type": "string",
+      "doc": "User identifier"
+    },
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "EventType",
+        "symbols": [
+          "USER_CREATED", 
+          "USER_UPDATED", 
+          "USER_DELETED", 
+          "USER_LOGIN", 
+          "USER_LOGOUT",
+          "USER_PASSWORD_CHANGED",
+          "USER_PROFILE_COMPLETED",
+          "USER_TWO_FA_ENABLED"
+        ]
+      },
+      "doc": "Type of user event - extended with new event types"
+    },
+    {
+      "name": "timestamp",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Event timestamp in milliseconds"
+    },
+    {
+      "name": "sessionId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional session identifier"
+    },
+    {
+      "name": "metadata",
+      "type": {
+        "type": "record",
+        "name": "EventMetadata",
+        "fields": [
+          {
+            "name": "source",
+            "type": "string",
+            "doc": "Source system that generated the event"
+          },
+          {
+            "name": "version",
+            "type": "string",
+            "default": "2.0",
+            "doc": "Schema version - updated to 2.0"
+          },
+          {
+            "name": "correlationId",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Correlation ID for event tracing"
+          },
+          {
+            "name": "ipAddress",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Client IP address"
+          },
+          {
+            "name": "userAgent",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Client user agent"
+          },
+          {
+            "name": "deviceId",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "NEW FIELD: Device identifier for multi-device tracking"
+          },
+          {
+            "name": "requestId",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "NEW FIELD: Request ID for API call tracing"
+          },
+          {
+            "name": "region",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "NEW FIELD: Geographic region where event originated"
+          }
+        ]
+      },
+      "doc": "Event metadata information - enhanced with new tracking fields"
+    },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "UserEventPayload", 
+        "fields": [
+          {
+            "name": "email",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "User email address"
+          },
+          {
+            "name": "firstName",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "User first name"
+          },
+          {
+            "name": "lastName",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "User last name"
+          },
+          {
+            "name": "status",
+            "type": ["null", {
+              "type": "enum",
+              "name": "UserStatus",
+              "symbols": [
+                "ACTIVE", 
+                "INACTIVE", 
+                "SUSPENDED", 
+                "PENDING",
+                "EMAIL_VERIFICATION_PENDING",
+                "PHONE_VERIFICATION_PENDING"
+              ]
+            }],
+            "default": null,
+            "doc": "User status - extended with verification statuses"
+          },
+          {
+            "name": "preferences",
+            "type": ["null", {
+              "type": "map",
+              "values": "string"
+            }],
+            "default": null,
+            "doc": "User preferences as key-value pairs"
+          },
+          {
+            "name": "phoneNumber",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "NEW FIELD: User phone number"
+          },
+          {
+            "name": "dateOfBirth",
+            "type": ["null", {
+              "type": "int",
+              "logicalType": "date"
+            }],
+            "default": null,
+            "doc": "NEW FIELD: User date of birth as date logical type"
+          },
+          {
+            "name": "profileCompleteness",
+            "type": ["null", {
+              "type": "fixed",
+              "name": "Percentage",
+              "size": 1
+            }],
+            "default": null,
+            "doc": "NEW FIELD: Profile completeness percentage (0-100)"
+          },
+          {
+            "name": "accountTier",
+            "type": ["null", {
+              "type": "enum",
+              "name": "AccountTier",
+              "symbols": ["FREE", "BASIC", "PREMIUM", "ENTERPRISE"]
+            }],
+            "default": null,
+            "doc": "NEW FIELD: Account subscription tier"
+          },
+          {
+            "name": "securitySettings",
+            "type": ["null", {
+              "type": "record",
+              "name": "SecuritySettings",
+              "fields": [
+                {
+                  "name": "twoFactorEnabled",
+                  "type": "boolean",
+                  "default": false,
+                  "doc": "Two-factor authentication status"
+                },
+                {
+                  "name": "loginNotifications",
+                  "type": "boolean",
+                  "default": true,
+                  "doc": "Login notification preferences"
+                },
+                {
+                  "name": "passwordStrength",
+                  "type": ["null", {
+                    "type": "enum",
+                    "name": "PasswordStrength",
+                    "symbols": ["WEAK", "MEDIUM", "STRONG", "VERY_STRONG"]
+                  }],
+                  "default": null,
+                  "doc": "Password strength assessment"
+                }
+              ]
+            }],
+            "default": null,
+            "doc": "NEW FIELD: Security settings and preferences"
+          },
+          {
+            "name": "tags",
+            "type": ["null", {
+              "type": "array",
+              "items": "string"
+            }],
+            "default": null,
+            "doc": "NEW FIELD: User tags for categorization and segmentation"
+          }
+        ]
+      },
+      "doc": "Event payload with user-specific data - significantly enhanced"
+    },
+    {
+      "name": "previousValues",
+      "type": ["null", {
+        "type": "map",
+        "values": "string"
+      }],
+      "default": null,
+      "doc": "NEW FIELD: Previous values for update events (audit trail)"
+    },
+    {
+      "name": "changeReason",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "NEW FIELD: Reason for the change (for audit purposes)"
+    },
+    {
+      "name": "schemaEvolutionTest",
+      "type": ["null", "string"],
+      "default": "test-value-v2",
+      "doc": "NEW FIELD: Test field for schema evolution validation"
+    }
+  ]
+}

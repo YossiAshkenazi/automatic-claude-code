@@ -1,0 +1,132 @@
+spring:
+  application:
+    name: kafka-poc-docker
+  
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+    
+    producer:
+      properties:
+        schema.registry.url: ${SPRING_KAFKA_PRODUCER_PROPERTIES_SCHEMA_REGISTRY_URL:http://schema-registry:8081}
+    
+    consumer:
+      properties:
+        schema.registry.url: ${SPRING_KAFKA_CONSUMER_PROPERTIES_SCHEMA_REGISTRY_URL:http://schema-registry:8081}
+
+  redis:
+    host: ${SPRING_REDIS_HOST:redis}
+    port: ${SPRING_REDIS_PORT:6379}
+    password: ${SPRING_REDIS_PASSWORD:kafka-poc-redis}
+    timeout: 2000ms
+    jedis:
+      pool:
+        max-active: 20
+        max-idle: 10
+        min-idle: 5
+        max-wait: 2000ms
+
+# Docker-specific configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,kafka,env
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${MANAGEMENT_ZIPKIN_TRACING_ENDPOINT:http://zipkin:9411/api/v2/spans}
+
+# Logging configuration for containerized environment
+logging:
+  level:
+    com.automaticclaudecode.kafka: INFO
+    org.springframework.kafka: INFO
+    org.apache.kafka: WARN
+    brave: WARN
+    zipkin2: WARN
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{traceId},%X{spanId}] %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{traceId},%X{spanId}] %logger{36} - %msg%n"
+  file:
+    name: /app/logs/kafka-poc.log
+    max-size: 100MB
+    max-history: 7
+
+# Performance tuning for containerized environment
+server:
+  port: 8080
+  tomcat:
+    max-threads: 200
+    min-spare-threads: 10
+    max-connections: 10000
+    accept-count: 100
+    connection-timeout: 20000ms
+
+# JVM and container optimizations
+kafka-poc:
+  container:
+    environment: docker
+    resources:
+      memory:
+        heap-ratio: 0.75
+        gc-algorithm: G1GC
+      cpu:
+        threads: 4
+    monitoring:
+      enabled: true
+      interval: 30s
+    
+  topics:
+    user-events: user-events
+    order-events: order-events
+    notification-events: notification-events
+    dead-letter: dead-letter-queue
+
+  producer:
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+      max-delay: 10000
+    circuit-breaker:
+      failure-rate-threshold: 50
+      slow-call-rate-threshold: 50
+      slow-call-duration-threshold: 3000
+      permitted-number-of-calls-in-half-open-state: 5
+      sliding-window-size: 10
+      minimum-number-of-calls: 10
+
+  consumer:
+    retry:
+      max-attempts: 3
+      backoff-delay: 2000
+      max-delay: 30000
+    circuit-breaker:
+      failure-rate-threshold: 60
+      slow-call-rate-threshold: 60
+      slow-call-duration-threshold: 5000
+      permitted-number-of-calls-in-half-open-state: 3
+      sliding-window-size: 10
+      minimum-number-of-calls: 5
+
+# Health check configuration
+management:
+  health:
+    kafka:
+      enabled: true
+    redis:
+      enabled: true
+    db:
+      enabled: false
+  info:
+    env:
+      enabled: true
+    java:
+      enabled: true
+    os:
+      enabled: true

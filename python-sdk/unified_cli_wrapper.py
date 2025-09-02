@@ -153,9 +153,11 @@ class UnifiedCliWrapper:
             print(message.content)
     """
     
-    def __init__(self, provider: BaseCliWrapper):
+    def __init__(self, provider: BaseCliWrapper, options: Optional[UnifiedCliOptions] = None):
         self.provider = provider
-        self._provider_name = self._get_provider_name()
+        self.options = options or UnifiedCliOptions()
+        self.provider_name = self._get_provider_name()
+        self._provider_name = self.provider_name  # Compatibility alias
     
     def _get_provider_name(self) -> str:
         """Get provider name from wrapper type"""
@@ -195,7 +197,7 @@ class UnifiedCliWrapper:
         if not provider.is_available():
             raise RuntimeError(f"{provider_name.title()} CLI not found. Please install it first.")
         
-        return cls(provider)
+        return cls(provider, options)
     
     @staticmethod
     def _parse_model_string(model: str) -> tuple[str, Optional[str]]:
@@ -247,6 +249,46 @@ class UnifiedCliWrapper:
             "available": self.provider.is_available(),
             "wrapper_type": type(self.provider).__name__
         }
+    
+    def _detect_available_model(self) -> BaseCliWrapper:
+        """Detect and return the best available CLI wrapper"""
+        detector = ProviderDetector()
+        available = detector.detect_available_providers()
+        
+        # Priority: Claude > Gemini
+        if available.get('claude'):
+            claude_options = ClaudeCliOptions(
+                model=self.options.model.split(':')[1] if ':' in self.options.model else "sonnet",
+                max_turns=self.options.max_turns,
+                allowed_tools=self.options.allowed_tools,
+                verbose=self.options.verbose,
+                working_directory=self.options.working_directory,
+                timeout=self.options.timeout,
+                **self.options.extra_options.get('claude', {})
+            )
+            return ClaudeCliWrapper(claude_options)
+        elif available.get('gemini'):
+            gemini_options = GeminiCliOptions(
+                model=self.options.model.split(':')[1] if ':' in self.options.model else "gemini-2.5-pro",
+                max_turns=self.options.max_turns,
+                allowed_tools=self.options.allowed_tools,
+                verbose=self.options.verbose,
+                working_directory=self.options.working_directory,
+                timeout=self.options.timeout,
+                **self.options.extra_options.get('gemini', {})
+            )
+            return GeminiCliWrapper(gemini_options)
+        else:
+            raise RuntimeError("No supported CLI providers found")
+    
+    def _get_underlying_wrapper(self) -> Union[ClaudeCliWrapper, GeminiCliWrapper]:
+        """Get the underlying CLI wrapper"""
+        if isinstance(self.provider, UnifiedClaudeWrapper):
+            return self.provider.wrapper
+        elif isinstance(self.provider, UnifiedGeminiWrapper):
+            return self.provider.wrapper
+        else:
+            raise ValueError(f"Unknown provider type: {type(self.provider)}")
 
 # Convenience functions
 async def quick_query(prompt: str, model: str = "auto") -> str:

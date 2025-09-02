@@ -8,6 +8,7 @@ import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from '.
 import { AnalyticsService } from './analytics/AnalyticsService.js';
 import { SessionReplayManager } from './replay/SessionReplayManager.js';
 import { MLService } from './ml/MLService.js';
+import { AgentIntegrationService } from './services/AgentIntegrationService.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // Utility function to safely handle strings with unicode issues
@@ -28,7 +29,7 @@ function safeStringify(obj: any, replacer?: any, space?: number): string {
 
 const app = express();
 app.use(cors({
-  origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:6012', 'http://localhost:6013', 'http://localhost:6014', 'http://localhost:6015', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4001'],
+  origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:6012', 'http://localhost:6013', 'http://localhost:6014', 'http://localhost:6015', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4005'],
   credentials: true
 }));
 // Enhanced JSON parsing with better error handling
@@ -54,7 +55,7 @@ const wss = new WebSocketServer({ server });
 
 // Initialize in-memory database service for testing
 console.log('Using in-memory database for development/testing');
-const dbService = new InMemoryDatabaseService() as DatabaseInterface;
+const dbService = new InMemoryDatabaseService() as any;
 const analyticsService = new AnalyticsService(dbService as any);
 const replayManager = new SessionReplayManager(dbService as any);
 const mlService = new MLService(dbService as any, {
@@ -62,6 +63,7 @@ const mlService = new MLService(dbService as any, {
   insightGenerationInterval: 5 * 60 * 1000, // 5 minutes
   anomalyDetectionSensitivity: 'medium'
 });
+const agentIntegration = new AgentIntegrationService();
 const clients = new Set<WebSocket>();
 
 // Initialize services
@@ -84,6 +86,63 @@ analyticsService.subscribeToRealTime((metrics) => {
 //     timestamp: update.timestamp
 //   });
 // }); // Temporarily disabled
+
+// Subscribe to AgentIntegrationService events
+agentIntegration.on('agents:started', (data) => {
+  broadcast({
+    type: 'agents:started',
+    data: data
+  });
+});
+
+agentIntegration.on('agent:message', (message) => {
+  broadcast({
+    type: 'agent:message',
+    data: message
+  });
+});
+
+agentIntegration.on('agents:error', (error) => {
+  broadcast({
+    type: 'agents:error',
+    data: error
+  });
+});
+
+agentIntegration.on('agents:stopped', (data) => {
+  broadcast({
+    type: 'agents:stopped',
+    data: data
+  });
+});
+
+agentIntegration.on('metrics:updated', (metrics) => {
+  broadcast({
+    type: 'metrics:updated',
+    data: metrics
+  });
+});
+
+agentIntegration.on('task:assigned', (task) => {
+  broadcast({
+    type: 'task:assigned',
+    data: task
+  });
+});
+
+agentIntegration.on('task:completed', (task) => {
+  broadcast({
+    type: 'task:completed',
+    data: task
+  });
+});
+
+agentIntegration.on('session:ended', (session) => {
+  broadcast({
+    type: 'session:ended',
+    data: session
+  });
+});
 
 // In-memory storage for active sessions (will be replaced by database later)
 let currentSession: DualAgentSession | null = null;
@@ -226,42 +285,57 @@ wss.on('connection', (ws) => {
 
         case 'agents:start':
           try {
-            // Create new session in database
-            const sessionId = await dbService.createSession({
-              startTime: new Date(),
-              status: 'running',
-              initialTask: data.task || 'Agent task',
-              workDir: process.cwd()
+            // Start real agents using AgentIntegrationService
+            await agentIntegration.startAgents(data.task || 'Default task', {
+              managerModel: data.managerModel || 'opus',
+              workerModel: data.workerModel || 'sonnet',
+              maxIterations: data.maxIterations || 10,
+              verbose: data.verbose || false
             });
             
-            currentSession = await dbService.getSession(sessionId);
+            // Get the current session from AgentIntegrationService
+            const integrationSession = agentIntegration.getCurrentSession();
             
-            broadcast({
-              type: 'agents:started',
-              data: {
-                sessionId: sessionId,
-                task: data.task
-              }
-            });
+            if (integrationSession) {
+              // Create corresponding database session
+              const sessionId = await dbService.createSession({
+                startTime: integrationSession.startTime,
+                status: 'running',
+                initialTask: data.task || 'Agent task',
+                workDir: process.cwd()
+              });
+              
+              currentSession = await dbService.getSession(sessionId);
+              
+              // The broadcast will be handled by the AgentIntegrationService event listener
+            }
           } catch (error: any) {
+            console.error('Error starting agents:', error);
             ws.send(JSON.stringify({
               type: 'error',
-              message: error.message
+              message: `Failed to start agents: ${error.message}`
             }));
           }
           break;
 
         case 'agents:stop':
-          if (currentSession) {
-            await dbService.updateSessionStatus(currentSession.id, 'completed', new Date());
-            currentSession = await dbService.getSession(currentSession.id);
+          try {
+            // Stop real agents using AgentIntegrationService
+            await agentIntegration.stopAgents();
             
-            broadcast({
-              type: 'agents:stopped',
-              data: {
-                sessionId: currentSession?.id
-              }
-            });
+            // Update database session status
+            if (currentSession) {
+              await dbService.updateSessionStatus(currentSession.id, 'completed', new Date());
+              currentSession = await dbService.getSession(currentSession.id);
+            }
+            
+            // The broadcast will be handled by the AgentIntegrationService event listener
+          } catch (error: any) {
+            console.error('Error stopping agents:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to stop agents: ${error.message}`
+            }));
           }
           break;
 
@@ -659,19 +733,38 @@ app.post('/api/sessions', async (req, res) => {
 
 app.post('/api/agents/start', async (req, res) => {
   try {
-    const sessionId = await dbService.createSession({
-      startTime: new Date(),
-      status: 'running',
-      initialTask: req.body.task || 'Agent task',
-      workDir: process.cwd()
+    const { task, managerModel, workerModel, maxIterations, verbose } = req.body;
+    
+    // Start real agents using AgentIntegrationService
+    await agentIntegration.startAgents(task || 'Default task', {
+      managerModel: managerModel || 'opus',
+      workerModel: workerModel || 'sonnet',
+      maxIterations: maxIterations || 10,
+      verbose: verbose || false
     });
     
-    currentSession = await dbService.getSession(sessionId);
+    // Get the current session from AgentIntegrationService
+    const integrationSession = agentIntegration.getCurrentSession();
     
-    res.json({
-      success: true,
-      sessionId: sessionId
-    });
+    if (integrationSession) {
+      // Create corresponding database session
+      const sessionId = await dbService.createSession({
+        startTime: integrationSession.startTime,
+        status: 'running',
+        initialTask: task || 'Agent task',
+        workDir: process.cwd()
+      });
+      
+      currentSession = await dbService.getSession(sessionId);
+      
+      res.json({
+        success: true,
+        sessionId: sessionId,
+        integrationSessionId: integrationSession.id
+      });
+    } else {
+      throw new Error('Failed to get integration session');
+    }
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -682,11 +775,90 @@ app.post('/api/agents/start', async (req, res) => {
 
 app.post('/api/agents/stop', async (req, res) => {
   try {
+    // Stop real agents using AgentIntegrationService
+    await agentIntegration.stopAgents();
+    
+    // Update database session status
     if (currentSession) {
       await dbService.updateSessionStatus(currentSession.id, 'completed', new Date());
       currentSession = await dbService.getSession(currentSession.id);
     }
+    
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Additional agent integration endpoints
+app.get('/api/agents/status', async (req, res) => {
+  try {
+    const currentIntegrationSession = agentIntegration.getCurrentSession();
+    const allIntegrationSessions = agentIntegration.getAllSessions();
+    
+    res.json({
+      success: true,
+      currentSession: currentIntegrationSession,
+      allSessions: allIntegrationSessions,
+      isRunning: !!currentIntegrationSession && currentIntegrationSession.status === 'active'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/agents/message', async (req, res) => {
+  try {
+    const { agent, message } = req.body;
+    
+    if (!agent || !message) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'agent and message are required' 
+      });
+    }
+    
+    if (agent !== 'manager' && agent !== 'worker') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'agent must be "manager" or "worker"' 
+      });
+    }
+    
+    agentIntegration.sendMessageToAgent(agent, message);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/sessions/:sessionId', async (req, res) => {
+  try {
+    const session = agentIntegration.getSession(req.params.sessionId);
+    
+    if (!session) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Session not found' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      session: session
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/sessions/:sessionId/export', async (req, res) => {
+  try {
+    const exportData = agentIntegration.exportSessionData(req.params.sessionId);
+    
+    res.header('Content-Type', 'application/json');
+    res.header('Content-Disposition', `attachment; filename="agent-session-${req.params.sessionId}.json"`);
+    res.send(exportData);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -1665,7 +1837,7 @@ app.get('/api/replay/status', async (req, res) => {
 
 
 // Enhanced port configuration with proper environment variable handling
-const DEFAULT_PORT = 4001;
+const DEFAULT_PORT = 4005;
 const PORT = parseInt(process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT.toString(), 10);
 
 server.listen(PORT, async () => {

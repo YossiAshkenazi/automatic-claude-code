@@ -91,7 +91,7 @@ class MCPToolManager:
         """Log the result of a tool operation."""
         self.tool_results.append(result)
         
-        status_icon = "✅" if result.success else "❌"
+        status_icon = "[OK]" if result.success else "[FAIL]"
         duration_str = f" ({result.duration:.1f}s)" if result.duration else ""
         
         print(f"   {status_icon} {result.tool_name}{duration_str}")
@@ -148,10 +148,10 @@ async def file_system_integration_example():
                 }
             ]
             
-            print("📁 Executing file system operations...")
+            print("[FILE] Executing file system operations...")
             
             for operation in file_operations:
-                print(f"\n🔧 {operation['name']}:")
+                print(f"\n[TOOL] {operation['name']}:")
                 start_time = time.time()
                 
                 try:
@@ -178,7 +178,7 @@ async def file_system_integration_example():
                     tool_manager.log_tool_result(result)
                     
     except Exception as e:
-        print(f"❌ File system integration error: {e}")
+        print(f"[FAIL] File system integration error: {e}")
         
     print()
 
@@ -224,7 +224,7 @@ async def web_browsing_integration_example():
             print("🌐 Executing web browsing operations...")
             
             for operation in web_operations:
-                print(f"\n🔧 {operation['name']}:")
+                print(f"\n[TOOL] {operation['name']}:")
                 start_time = time.time()
                 
                 try:
@@ -251,7 +251,7 @@ async def web_browsing_integration_example():
                     tool_manager.log_tool_result(result)
                     
     except Exception as e:
-        print(f"❌ Web browsing integration error: {e}")
+        print(f"[FAIL] Web browsing integration error: {e}")
         
     print()
 
@@ -306,7 +306,7 @@ async def github_integration_example():
             print("🐙 Executing GitHub operations...")
             
             for operation in github_operations:
-                print(f"\n🔧 {operation['name']}:")
+                print(f"\n[TOOL] {operation['name']}:")
                 start_time = time.time()
                 
                 try:
@@ -334,7 +334,7 @@ async def github_integration_example():
                     tool_manager.log_tool_result(result)
                     
     except Exception as e:
-        print(f"❌ GitHub integration error: {e}")
+        print(f"[FAIL] GitHub integration error: {e}")
         
     print()
 
@@ -394,7 +394,7 @@ async def memory_and_knowledge_integration_example():
             print("🧠 Executing memory and knowledge operations...")
             
             for operation in knowledge_operations:
-                print(f"\n🔧 {operation['name']}:")
+                print(f"\n[TOOL] {operation['name']}:")
                 start_time = time.time()
                 
                 try:
@@ -422,7 +422,7 @@ async def memory_and_knowledge_integration_example():
                     tool_manager.log_tool_result(result)
                     
     except Exception as e:
-        print(f"❌ Memory and knowledge integration error: {e}")
+        print(f"[FAIL] Memory and knowledge integration error: {e}")
         
     print()
 
@@ -478,7 +478,7 @@ async def archon_integration_example():
             print("🏛️ Executing Archon operations...")
             
             for operation in archon_operations:
-                print(f"\n🔧 {operation['name']}:")
+                print(f"\n[TOOL] {operation['name']}:")
                 start_time = time.time()
                 
                 try:
@@ -506,7 +506,7 @@ async def archon_integration_example():
                     tool_manager.log_tool_result(result)
                     
     except Exception as e:
-        print(f"❌ Archon integration error: {e}")
+        print(f"[FAIL] Archon integration error: {e}")
         
     print()
 
@@ -539,7 +539,7 @@ async def complex_workflow_integration_example():
             about what tools were used and their results.
             '''
             
-            print("🔄 Executing complex multi-tool workflow...")
+            print("[RETRY] Executing complex multi-tool workflow...")
             start_time = time.time()
             
             try:
@@ -561,10 +561,10 @@ async def complex_workflow_integration_example():
                 tool_manager.log_tool_result(result)
                 
                 if result.success:
-                    print(f"\n✅ Complex workflow completed successfully in {duration:.1f}s")
+                    print(f"\n[OK] Complex workflow completed successfully in {duration:.1f}s")
                     print(f"   Multiple MCP tools coordinated seamlessly")
                 else:
-                    print(f"\n❌ Complex workflow failed after {duration:.1f}s")
+                    print(f"\n[FAIL] Complex workflow failed after {duration:.1f}s")
                     print(f"   Error: {result.error}")
                     
             except Exception as e:
@@ -577,7 +577,7 @@ async def complex_workflow_integration_example():
                 tool_manager.log_tool_result(result)
                 
     except Exception as e:
-        print(f"❌ Complex workflow error: {e}")
+        print(f"[FAIL] Complex workflow error: {e}")
         
     print()
 
@@ -608,7 +608,7 @@ async def generate_mcp_integration_report(tool_manager: MCPToolManager):
             operation_types[op_type] = []
         operation_types[op_type].append(result)
     
-    print(f"📊 Overall Statistics:")
+    print(f"[STATS] Overall Statistics:")
     print(f"   Total operations: {len(tool_manager.tool_results)}")
     print(f"   Successful: {len(successful_operations)} ({len(successful_operations)/len(tool_manager.tool_results)*100:.1f}%)")
     print(f"   Failed: {len(failed_operations)}")
@@ -639,11 +639,11 @@ async def generate_mcp_integration_report(tool_manager: MCPToolManager):
         print(f"   {tool}: {success_rate:.1f}% success rate, {avg_time:.1f}s avg")
         
     if failed_operations:
-        print(f"\n❌ Failed Operations:")
+        print(f"\n[FAIL] Failed Operations:")
         for result in failed_operations:
             print(f"   {result.tool_name}: {result.error}")
             
-    print(f"\n🎯 Integration Assessment:")
+    print(f"\n[RESULT] Integration Assessment:")
     overall_success_rate = len(successful_operations) / len(tool_manager.tool_results) * 100
     
     if overall_success_rate >= 90:
@@ -663,7 +663,7 @@ async def main():
     """
     Main function demonstrating all MCP tool integration patterns.
     """
-    print("🚀 Claude SDK Client - MCP Tool Integration Examples")
+    print("[START] Claude SDK Client - MCP Tool Integration Examples")
     print("=" * 55)
     print()
     
@@ -688,7 +688,7 @@ async def main():
     # Generate comprehensive report
     await generate_mcp_integration_report(tool_manager)
     
-    print("\n✅ All MCP tool integration examples completed!")
+    print("\n[OK] All MCP tool integration examples completed!")
     print()
     print("MCP integration capabilities demonstrated:")
     print("- File system operations (read, write, directory management)")

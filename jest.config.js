@@ -1,11 +1,12 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
+  roots: ['<rootDir>/tests'],
   testMatch: [
-    '**/__tests__/**/*.test.ts',
-    '!**/__tests__/manual/**',
-    '!**/__tests__/setup.ts'
+    '**/unit/**/*.test.ts',
+    '**/unit/**/*.test.js',
+    '!**/fixtures/**',
+    '!**/support/**'
   ],
   transform: {
     '^.+\\.ts$': ['ts-jest', {
@@ -20,21 +21,22 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tests/support/setup.ts'],
   testTimeout: 10000,
   verbose: true,
   transformIgnorePatterns: [
     'node_modules/(?!(strip-ansi|ansi-regex|chalk|boxen|cli-progress|ora|blessed|blessed-contrib|cli-highlight|cli-table3)/)'
   ],
   moduleNameMapper: {
-    '^strip-ansi$': '<rootDir>/src/__tests__/__mocks__/strip-ansi.js',
-    '^chalk$': '<rootDir>/src/__tests__/__mocks__/chalk.js',
-    '^boxen$': '<rootDir>/src/__tests__/__mocks__/boxen.js',
-    '^cli-progress$': '<rootDir>/src/__tests__/__mocks__/cli-progress.js',
-    '^ora$': '<rootDir>/src/__tests__/__mocks__/ora.js',
-    '^blessed$': '<rootDir>/src/__tests__/__mocks__/blessed.js',
-    '^blessed-contrib$': '<rootDir>/src/__tests__/__mocks__/blessed-contrib.js',
-    '^cli-highlight$': '<rootDir>/src/__tests__/__mocks__/cli-highlight.js',
-    '^cli-table3$': '<rootDir>/src/__tests__/__mocks__/cli-table3.js'
+    '^@/(.*)$': '<rootDir>/src/$1',
+    '^strip-ansi$': '<rootDir>/tests/fixtures/mocks/strip-ansi.js',
+    '^chalk$': '<rootDir>/tests/fixtures/mocks/chalk.js',
+    '^boxen$': '<rootDir>/tests/fixtures/mocks/boxen.js',
+    '^cli-progress$': '<rootDir>/tests/fixtures/mocks/cli-progress.js',
+    '^ora$': '<rootDir>/tests/fixtures/mocks/ora.js',
+    '^blessed$': '<rootDir>/tests/fixtures/mocks/blessed.js',
+    '^blessed-contrib$': '<rootDir>/tests/fixtures/mocks/blessed-contrib.js',
+    '^cli-highlight$': '<rootDir>/tests/fixtures/mocks/cli-highlight.js',
+    '^cli-table3$': '<rootDir>/tests/fixtures/mocks/cli-table3.js'
   }
 };

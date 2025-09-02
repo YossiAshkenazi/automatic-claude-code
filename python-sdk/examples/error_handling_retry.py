@@ -243,9 +243,9 @@ async def basic_error_handling_example():
                 response = await client.execute(test_case['prompt'])
                 
                 if response.success:
-                    print(f"  ✅ Success: {response.result[:50]}...")
+                    print(f"  [OK] Success: {response.result[:50]}...")
                 else:
-                    print(f"  ❌ Failed: {response.error}")
+                    print(f"  [FAIL] Failed: {response.error}")
                     
         except ClaudeTimeoutError as e:
             print(f"  ⏰ Timeout: {e}")
@@ -294,7 +294,7 @@ async def retry_strategies_example():
     test_prompt = "Create a Python function to validate email addresses with regex"
     
     for i, config in enumerate(retry_configs, 1):
-        print(f"\n🔄 Strategy {i}: {config.strategy.value}")
+        print(f"\n[RETRY] Strategy {i}: {config.strategy.value}")
         print(f"   Max attempts: {config.max_attempts}, Base delay: {config.base_delay}s")
         
         start_time = time.time()
@@ -309,9 +309,9 @@ async def retry_strategies_example():
                 duration = time.time() - start_time
                 
                 if result['success']:
-                    print(f"  ✅ Succeeded on attempt {result['attempt']} ({duration:.1f}s total)")
+                    print(f"  [OK] Succeeded on attempt {result['attempt']} ({duration:.1f}s total)")
                 else:
-                    print(f"  ❌ Failed after {result.get('attempt', 'unknown')} attempts ({duration:.1f}s total)")
+                    print(f"  [FAIL] Failed after {result.get('attempt', 'unknown')} attempts ({duration:.1f}s total)")
                     print(f"     Error: {result.get('error', 'Unknown')[:60]}...")
                     
         except Exception as e:
@@ -346,11 +346,11 @@ async def error_classification_example():
         
         print(f"   Error Type: {type(error).__name__}")
         print(f"   Classification: {classification}")
-        print(f"   Recoverable: {'✅' if recoverable else '❌'}")
+        print(f"   Recoverable: {'[OK]' if recoverable else '[FAIL]'}")
         
         # Suggest handling strategy
         if isinstance(error, RateLimitError):
-            print(f"   🔄 Strategy: Wait and retry with exponential backoff")
+            print(f"   [RETRY] Strategy: Wait and retry with exponential backoff")
         elif isinstance(error, ClaudeAuthError):
             print(f"   🔐 Strategy: Check authentication, don't retry")
         elif isinstance(error, NetworkError):
@@ -429,7 +429,7 @@ async def circuit_breaker_example():
     problematic_options = ClaudeCodeOptions(timeout=1)  # Very short timeout
     
     for operation_name, should_simulate_success in operations:
-        print(f"\n🔧 {operation_name}")
+        print(f"\n[TOOL] {operation_name}")
         
         state = circuit_breaker.get_state()
         print(f"   Circuit State: {state['state']} (failures: {state['failure_count']})")
@@ -442,20 +442,20 @@ async def circuit_breaker_example():
         try:
             if should_simulate_success:
                 # Simulate successful operation
-                print("   ✅ Operation succeeded")
+                print("   [OK] Operation succeeded")
                 circuit_breaker.record_success()
             else:
                 # Simulate failure
                 raise ClaudeTimeoutError("Simulated timeout")
                 
         except Exception as e:
-            print(f"   ❌ Operation failed: {e}")
+            print(f"   [FAIL] Operation failed: {e}")
             circuit_breaker.record_failure()
             
         # Brief pause to simulate time passing
         await asyncio.sleep(0.5)
         
-    print(f"\n🔍 Final Circuit Breaker State: {circuit_breaker.get_state()}")
+    print(f"\n[SEARCH] Final Circuit Breaker State: {circuit_breaker.get_state()}")
     print()
 
 
@@ -493,7 +493,7 @@ async def fallback_mechanisms_example():
             ]
             
             for strategy_name, options, description in strategies:
-                print(f"   🎯 Trying {strategy_name} strategy: {description}")
+                print(f"   [RESULT] Trying {strategy_name} strategy: {description}")
                 
                 try:
                     async with ClaudeSDKClient(options) as client:
@@ -507,7 +507,7 @@ async def fallback_mechanisms_example():
                                 'description': description
                             }
                         else:
-                            print(f"      ❌ {strategy_name} failed: {response.error}")
+                            print(f"      [FAIL] {strategy_name} failed: {response.error}")
                             
                 except Exception as e:
                     print(f"      💥 {strategy_name} exception: {type(e).__name__}")
@@ -527,15 +527,15 @@ async def fallback_mechanisms_example():
     ]
     
     for i, prompt in enumerate(test_prompts, 1):
-        print(f"\n📝 Test {i}: {prompt[:50]}...")
+        print(f"\n[NOTE] Test {i}: {prompt[:50]}...")
         
         result = await fallback_client.execute_with_fallbacks(prompt)
         
         if result['success']:
-            print(f"   ✅ Success using {result['strategy_used']} strategy")
+            print(f"   [OK] Success using {result['strategy_used']} strategy")
             print(f"      Result preview: {result['result'][:100]}...")
         else:
-            print(f"   ❌ All strategies failed")
+            print(f"   [FAIL] All strategies failed")
             print(f"      Attempted: {', '.join(result.get('strategies_attempted', []))}")
             
     print()
@@ -545,7 +545,7 @@ async def main():
     """
     Main function demonstrating all error handling and retry patterns.
     """
-    print("🚀 Claude SDK Client - Error Handling & Retry Examples")
+    print("[START] Claude SDK Client - Error Handling & Retry Examples")
     print("=" * 60)
     print()
     
@@ -556,7 +556,7 @@ async def main():
     await circuit_breaker_example()
     await fallback_mechanisms_example()
     
-    print("✅ All error handling examples completed!")
+    print("[OK] All error handling examples completed!")
     print()
     print("Key patterns demonstrated:")
     print("- Basic error classification and handling")

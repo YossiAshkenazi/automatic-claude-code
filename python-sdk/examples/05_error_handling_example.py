@@ -41,20 +41,20 @@ async def basic_error_handling():
     wrapper = ClaudeCliWrapper(options)
     
     # Test 1: CLI availability check
-    print("\n🔍 Test 1: CLI Availability Check")
+    print("\n[SEARCH] Test 1: CLI Availability Check")
     try:
         if wrapper.is_available():
-            print("✅ Claude CLI is available")
+            print("[OK] Claude CLI is available")
         else:
-            print("❌ Claude CLI not found")
-            print("💡 Solution: Install with 'npm install -g @anthropic-ai/claude-code'")
+            print("[FAIL] Claude CLI not found")
+            print("[TIP] Solution: Install with 'npm install -g @anthropic-ai/claude-code'")
             return
     except Exception as e:
-        print(f"❌ Error checking CLI availability: {e}")
+        print(f"[FAIL] Error checking CLI availability: {e}")
         return
     
     # Test 2: Invalid model handling
-    print("\n🔍 Test 2: Invalid Model Handling")
+    print("\n[SEARCH] Test 2: Invalid Model Handling")
     try:
         invalid_options = ClaudeCliOptions(model="invalid-model")
         invalid_wrapper = ClaudeCliWrapper(invalid_options)
@@ -62,11 +62,11 @@ async def basic_error_handling():
         response = await invalid_wrapper.execute_sync("Hello")
         print(f"Unexpected success: {response}")
     except Exception as e:
-        print(f"❌ Expected error with invalid model: {type(e).__name__}: {e}")
-        print("✅ Error handled gracefully")
+        print(f"[FAIL] Expected error with invalid model: {type(e).__name__}: {e}")
+        print("[OK] Error handled gracefully")
     
     # Test 3: Timeout handling
-    print("\n🔍 Test 3: Timeout Handling")
+    print("\n[SEARCH] Test 3: Timeout Handling")
     try:
         timeout_options = ClaudeCliOptions(
             model="sonnet",
@@ -81,10 +81,10 @@ async def basic_error_handling():
         print(f"Unexpected success: {response[:100]}...")
         
     except asyncio.TimeoutError:
-        print("❌ Timeout error occurred (expected)")
-        print("✅ Timeout handled gracefully")
+        print("[FAIL] Timeout error occurred (expected)")
+        print("[OK] Timeout handled gracefully")
     except Exception as e:
-        print(f"❌ Other error: {type(e).__name__}: {e}")
+        print(f"[FAIL] Other error: {type(e).__name__}: {e}")
     finally:
         await wrapper.cleanup()
 
@@ -92,7 +92,7 @@ async def basic_error_handling():
 async def retry_logic_example():
     """Demonstrate retry logic with exponential backoff"""
     
-    print("\n🔄 Error Handling Example - Retry Logic")
+    print("\n[RETRY] Error Handling Example - Retry Logic")
     print("=" * 50)
     
     async def execute_with_retry(
@@ -108,7 +108,7 @@ async def retry_logic_example():
                 logger.info(f"Attempt {attempt + 1}/{max_retries + 1}")
                 
                 response = await wrapper.execute_sync(prompt)
-                logger.info("✅ Success!")
+                logger.info("[OK] Success!")
                 return response
                 
             except asyncio.TimeoutError:
@@ -116,21 +116,21 @@ async def retry_logic_example():
                 
                 if attempt < max_retries:
                     delay = base_delay * (2 ** attempt)  # Exponential backoff
-                    logger.info(f"🔄 Retrying in {delay:.1f}s...")
+                    logger.info(f"[RETRY] Retrying in {delay:.1f}s...")
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("❌ All retry attempts exhausted")
+                    logger.error("[FAIL] All retry attempts exhausted")
                     raise
                     
             except Exception as e:
-                logger.error(f"❌ Unexpected error on attempt {attempt + 1}: {e}")
+                logger.error(f"[FAIL] Unexpected error on attempt {attempt + 1}: {e}")
                 
                 if attempt < max_retries:
                     delay = base_delay * (2 ** attempt)
-                    logger.info(f"🔄 Retrying in {delay:.1f}s...")
+                    logger.info(f"[RETRY] Retrying in {delay:.1f}s...")
                     await asyncio.sleep(delay)
                 else:
-                    logger.error("❌ All retry attempts exhausted")
+                    logger.error("[FAIL] All retry attempts exhausted")
                     raise
         
         return None
@@ -145,11 +145,11 @@ async def retry_logic_example():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
     try:
-        print("🎯 Testing retry logic with a complex query...")
+        print("[RESULT] Testing retry logic with a complex query...")
         
         prompt = "Explain the concept of machine learning in simple terms"
         
@@ -158,13 +158,13 @@ async def retry_logic_example():
         elapsed = time.time() - start_time
         
         if result:
-            print(f"✅ Success after {elapsed:.2f}s")
-            print(f"📝 Response: {result[:200]}...")
+            print(f"[OK] Success after {elapsed:.2f}s")
+            print(f"[NOTE] Response: {result[:200]}...")
         else:
-            print("❌ Failed after all retries")
+            print("[FAIL] Failed after all retries")
             
     except Exception as e:
-        print(f"❌ Final error: {type(e).__name__}: {e}")
+        print(f"[FAIL] Final error: {type(e).__name__}: {e}")
     
     finally:
         await wrapper.cleanup()
@@ -198,7 +198,7 @@ async def graceful_degradation_example():
             wrapper = UnifiedCliWrapper(options)
             
             if not wrapper.is_available():
-                logger.warning(f"⚠️  {model_name} not available")
+                logger.warning(f"[WARN]  {model_name} not available")
                 return None
             
             logger.info(f"🤖 Trying {model_name}...")
@@ -208,22 +208,22 @@ async def graceful_degradation_example():
             return response
             
         except Exception as e:
-            logger.error(f"❌ {model_name} failed: {e}")
+            logger.error(f"[FAIL] {model_name} failed: {e}")
             return None
     
-    print(f"🎯 Query: {prompt}")
-    print("🔄 Trying models in preference order...")
+    print(f"[RESULT] Query: {prompt}")
+    print("[RETRY] Trying models in preference order...")
     
     for model_id, model_name in model_fallbacks:
         result = await try_model(model_id, model_name)
         
         if result:
-            print(f"\n✅ Success with {model_name}!")
-            print(f"📝 Response: {result}")
+            print(f"\n[OK] Success with {model_name}!")
+            print(f"[NOTE] Response: {result}")
             break
     else:
-        print("\n❌ All models failed - no fallback available")
-        print("💡 Consider checking network connectivity or CLI installations")
+        print("\n[FAIL] All models failed - no fallback available")
+        print("[TIP] Consider checking network connectivity or CLI installations")
 
 
 async def comprehensive_error_scenarios():
@@ -235,7 +235,7 @@ async def comprehensive_error_scenarios():
     error_tests = [
         ("Empty prompt", ""),
         ("Very long prompt", "x" * 10000),
-        ("Special characters", "Hello 🌍 测试 🚀"),
+        ("Special characters", "Hello 🌍 测试 [START]"),
         ("Code injection attempt", "'; rm -rf /; echo 'hello'"),
         ("JSON breaking characters", '{"key": "value with "quotes" and \n newlines"}')
     ]
@@ -250,13 +250,13 @@ async def comprehensive_error_scenarios():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
     results = []
     
     for test_name, test_prompt in error_tests:
-        print(f"\n🔍 Testing: {test_name}")
+        print(f"\n[SEARCH] Testing: {test_name}")
         
         try:
             start_time = time.time()
@@ -273,12 +273,12 @@ async def comprehensive_error_scenarios():
                     'response_length': len(response)
                 })
                 
-                print(f"✅ Success - {len(response)} chars in {elapsed:.2f}s")
+                print(f"[OK] Success - {len(response)} chars in {elapsed:.2f}s")
             else:
-                print("⚠️  Skipped empty prompt test")
+                print("[WARN]  Skipped empty prompt test")
                 
         except Exception as e:
-            print(f"❌ Failed: {type(e).__name__}: {str(e)[:100]}")
+            print(f"[FAIL] Failed: {type(e).__name__}: {str(e)[:100]}")
             results.append({
                 'test': test_name,
                 'success': False,
@@ -286,17 +286,17 @@ async def comprehensive_error_scenarios():
             })
     
     # Summary
-    print(f"\n📊 Test Results Summary:")
+    print(f"\n[STATS] Test Results Summary:")
     print("=" * 40)
     
     successes = sum(1 for r in results if r.get('success', False))
     total = len(results)
     
-    print(f"✅ Successful: {successes}/{total}")
-    print(f"❌ Failed: {total - successes}/{total}")
+    print(f"[OK] Successful: {successes}/{total}")
+    print(f"[FAIL] Failed: {total - successes}/{total}")
     
     for result in results:
-        status = "✅" if result.get('success') else "❌"
+        status = "[OK]" if result.get('success') else "[FAIL]"
         print(f"  {status} {result['test']}")
     
     await wrapper.cleanup()
@@ -305,7 +305,7 @@ async def comprehensive_error_scenarios():
 async def logging_and_monitoring_example():
     """Demonstrate proper logging and monitoring"""
     
-    print("\n📊 Error Handling Example - Logging & Monitoring")
+    print("\n[STATS] Error Handling Example - Logging & Monitoring")
     print("=" * 50)
     
     # Custom logger for this example
@@ -375,7 +375,7 @@ async def logging_and_monitoring_example():
     monitored_wrapper = MonitoredClaudeWrapper(options)
     
     if not monitored_wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
     test_queries = [
@@ -385,17 +385,17 @@ async def logging_and_monitoring_example():
         "Write a haiku about programming"
     ]
     
-    print("🔍 Running monitored queries...")
+    print("[SEARCH] Running monitored queries...")
     
     for i, query in enumerate(test_queries, 1):
         try:
             if query:
                 response = await monitored_wrapper.execute_sync(query)
-                print(f"✅ Query {i}: Success ({len(response)} chars)")
+                print(f"[OK] Query {i}: Success ({len(response)} chars)")
             else:
-                print(f"⚠️  Query {i}: Skipped (empty)")
+                print(f"[WARN]  Query {i}: Skipped (empty)")
         except Exception as e:
-            print(f"❌ Query {i}: Failed - {e}")
+            print(f"[FAIL] Query {i}: Failed - {e}")
     
     # Show statistics
     stats = monitored_wrapper.get_stats()
@@ -428,5 +428,5 @@ if __name__ == "__main__":
     input("\n⏸️  Press Enter for logging and monitoring example...")
     asyncio.run(logging_and_monitoring_example())
     
-    print("\n✅ All error handling examples completed!")
-    print("💡 Check 'claude_wrapper_errors.log' for detailed logging output")
+    print("\n[OK] All error handling examples completed!")
+    print("[TIP] Check 'claude_wrapper_errors.log' for detailed logging output")

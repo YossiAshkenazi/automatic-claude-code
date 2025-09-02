@@ -236,14 +236,14 @@ async def basic_conversation_example():
             
             # Show conversation summary
             summary = conversation.get_conversation_summary()
-            print(f"\n📊 Conversation Summary:")
+            print(f"\n[STATS] Conversation Summary:")
             print(f"   Session ID: {summary['session_id']}")
             print(f"   Turns: {summary['turns_count']}")
             print(f"   Total Duration: {summary['total_duration']:.1f}s")
             print(f"   State: {summary['state']}")
             
     except Exception as e:
-        print(f"❌ Conversation error: {e}")
+        print(f"[FAIL] Conversation error: {e}")
         
     print()
 
@@ -263,7 +263,7 @@ async def context_aware_conversation_example():
             conversation.update_context("tech_stack", ["Python", "FastAPI", "SQLite"])
             conversation.update_context("current_feature", "user_authentication")
             
-            print("📝 Initial context set:")
+            print("[NOTE] Initial context set:")
             print(f"   Project: {conversation.session.context['project_type']}")
             print(f"   Stack: {conversation.session.context['tech_stack']}")
             print(f"   Feature: {conversation.session.context['current_feature']}")
@@ -298,12 +298,12 @@ async def context_aware_conversation_example():
                 await asyncio.sleep(0.5)
                 
             # Final context state
-            print(f"\n📊 Final Context State:")
+            print(f"\n[STATS] Final Context State:")
             for key, value in conversation.session.context.items():
                 print(f"   {key}: {value}")
                 
     except Exception as e:
-        print(f"❌ Context conversation error: {e}")
+        print(f"[FAIL] Context conversation error: {e}")
         
     print()
 
@@ -324,7 +324,7 @@ async def branching_conversation_example():
             print(f"   {i}. {message}")
             turn = await manager.send_message(message)
             branch_turns.append(turn)
-            print(f"      ✅ Response: {len(turn.assistant_response)} chars in {turn.duration:.1f}s")
+            print(f"      [OK] Response: {len(turn.assistant_response)} chars in {turn.duration:.1f}s")
             
         return branch_turns
     
@@ -357,7 +357,7 @@ async def branching_conversation_example():
             memory_turns = await explore_branch(conversation, "Memory Efficiency", memory_branch)
             
             # Synthesis
-            print("\n🔄 Synthesizing branches:")
+            print("\n[RETRY] Synthesizing branches:")
             synthesis_turn = await conversation.send_message(
                 "Based on our discussion of both performance and memory considerations, "
                 "what would be the best balanced approach for sorting a 10GB dataset?"
@@ -366,14 +366,14 @@ async def branching_conversation_example():
             
             # Summary
             summary = conversation.get_conversation_summary()
-            print(f"\n📊 Branching Conversation Summary:")
+            print(f"\n[STATS] Branching Conversation Summary:")
             print(f"   Total turns: {summary['turns_count']}")
             print(f"   Performance branch: {len(perf_turns)} turns")
             print(f"   Memory branch: {len(memory_turns)} turns")
             print(f"   Total duration: {summary['total_duration']:.1f}s")
             
     except Exception as e:
-        print(f"❌ Branching conversation error: {e}")
+        print(f"[FAIL] Branching conversation error: {e}")
         
     print()
 
@@ -470,7 +470,7 @@ async def conversation_with_state_persistence_example():
             print(f"   Cleaned up {session_file}")
             
     except Exception as e:
-        print(f"❌ Persistence example error: {e}")
+        print(f"[FAIL] Persistence example error: {e}")
         
     print()
 
@@ -525,7 +525,7 @@ async def concurrent_conversations_example():
     }
     
     try:
-        print(f"🚀 Starting {len(conversation_topics)} concurrent conversations...")
+        print(f"[START] Starting {len(conversation_topics)} concurrent conversations...")
         
         # Run all conversations concurrently
         start_time = time.time()
@@ -540,7 +540,7 @@ async def concurrent_conversations_example():
         total_duration = time.time() - start_time
         
         # Analyze results
-        print(f"\n📊 Concurrent Conversations Results ({total_duration:.1f}s total):")
+        print(f"\n[STATS] Concurrent Conversations Results ({total_duration:.1f}s total):")
         
         successful_conversations = 0
         total_turns = 0
@@ -548,15 +548,15 @@ async def concurrent_conversations_example():
         
         for result in results:
             if isinstance(result, Exception):
-                print(f"   ❌ Exception: {result}")
+                print(f"   [FAIL] Exception: {result}")
             elif result.get('error'):
-                print(f"   ❌ {result['topic']}: {result['error']}")
+                print(f"   [FAIL] {result['topic']}: {result['error']}")
             else:
                 successful_conversations += 1
                 total_turns += result['turns_count']
                 total_conversation_time += result['total_duration']
                 
-                print(f"   ✅ {result['topic']}: {result['turns_count']} turns in {result['total_duration']:.1f}s")
+                print(f"   [OK] {result['topic']}: {result['turns_count']} turns in {result['total_duration']:.1f}s")
                 
         print(f"\n📈 Summary:")
         print(f"   Successful conversations: {successful_conversations}/{len(conversation_topics)}")
@@ -565,7 +565,7 @@ async def concurrent_conversations_example():
         print(f"   Concurrency benefit: {total_conversation_time/total_duration:.1f}x faster")
         
     except Exception as e:
-        print(f"❌ Concurrent conversations error: {e}")
+        print(f"[FAIL] Concurrent conversations error: {e}")
         
     print()
 
@@ -574,7 +574,7 @@ async def main():
     """
     Main function demonstrating all multi-turn conversation patterns.
     """
-    print("🚀 Claude SDK Client - Multi-Turn Conversation Examples")
+    print("[START] Claude SDK Client - Multi-Turn Conversation Examples")
     print("=" * 60)
     print()
     
@@ -585,7 +585,7 @@ async def main():
     await conversation_with_state_persistence_example()
     await concurrent_conversations_example()
     
-    print("✅ All multi-turn conversation examples completed!")
+    print("[OK] All multi-turn conversation examples completed!")
     print()
     print("Conversation patterns demonstrated:")
     print("- Basic multi-turn context maintenance")

@@ -11,7 +11,7 @@ async function makeApiRequest(path) {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'localhost',
-      port: 4001,
+      port: 4005,
       path: path,
       method: 'GET',
       headers: {

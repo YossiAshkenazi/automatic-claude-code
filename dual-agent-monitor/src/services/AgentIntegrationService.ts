@@ -69,8 +69,32 @@ export class AgentIntegrationService extends EventEmitter {
   constructor() {
     super();
     this.claudeSessionsPath = path.join(process.cwd(), '.claude-sessions');
-    this.accPath = path.join(process.cwd(), 'acc');
+    // Check if we're on Windows and adjust the acc path accordingly
+    this.accPath = this.findAccExecutable();
     this.setupDirectories();
+  }
+  
+  private findAccExecutable(): string {
+    // First try to find acc in PATH
+    try {
+      const { execSync } = require('child_process');
+      if (process.platform === 'win32') {
+        const result = execSync('where acc', { encoding: 'utf8' }).trim();
+        if (result) return 'acc'; // Use global command if found
+      } else {
+        const result = execSync('which acc', { encoding: 'utf8' }).trim();
+        if (result) return 'acc'; // Use global command if found
+      }
+    } catch (error) {
+      // acc not found in PATH
+    }
+    
+    // Fall back to local installation paths
+    if (process.platform === 'win32') {
+      return path.join(process.cwd(), 'acc.cmd'); // Try Windows command file
+    } else {
+      return path.join(process.cwd(), 'acc'); // Try local executable
+    }
   }
 
   private setupDirectories() {
@@ -146,60 +170,93 @@ export class AgentIntegrationService extends EventEmitter {
   }
 
   private async startManagerAgent(task: string, options: any) {
+    console.log(`Starting manager agent with acc path: ${this.accPath}`);
+    
     const args = [
       'run',
-      task,
+      `"${task}"`, // Quote the task to handle spaces
       '--dual-agent',
       '--manager-model', options.managerModel || 'opus',
-      '--max-iterations', String(options.maxIterations || 10),
-      '--json-output'
+      '--max-iterations', String(options.maxIterations || 10)
     ];
 
     if (options.verbose) {
       args.push('-v');
     }
 
+    console.log(`Manager agent command: ${this.accPath} ${args.join(' ')}`);
+
     this.managerProcess = spawn(this.accPath, args, {
       cwd: process.cwd(),
-      shell: true
+      shell: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, FORCE_COLOR: '0' } // Disable color output for cleaner parsing
     });
 
     this.managerProcess.stdout?.on('data', (data) => {
-      this.handleAgentOutput('manager', data.toString());
+      const output = data.toString();
+      console.log(`Manager stdout: ${output}`);
+      this.handleAgentOutput('manager', output);
     });
 
     this.managerProcess.stderr?.on('data', (data) => {
-      this.handleAgentError('manager', data.toString());
+      const error = data.toString();
+      console.log(`Manager stderr: ${error}`);
+      this.handleAgentError('manager', error);
     });
 
     this.managerProcess.on('close', (code) => {
+      console.log(`Manager agent process closed with code: ${code}`);
       this.handleAgentClose('manager', code);
+    });
+
+    this.managerProcess.on('error', (error) => {
+      console.error('Manager process error:', error);
+      this.handleAgentError('manager', error.toString());
     });
   }
 
   private async startWorkerAgent(options: any) {
-    const args = [
-      '--worker-mode',
-      '--model', options.workerModel || 'sonnet',
-      '--json-output'
-    ];
+    // For now, we'll simulate the worker agent as part of the dual-agent system
+    // In a real implementation, this might be a separate Claude CLI instance 
+    // or handled within the same process
+    console.log(`Starting worker agent with model: ${options.workerModel || 'sonnet'}`);
+    
+    // Create a mock process for the worker since dual-agent mode 
+    // typically handles both agents in a single process
+    this.workerProcess = {
+      pid: process.pid + 1,
+      stdout: null,
+      stderr: null,
+      stdin: null,
+      kill: () => true,
+      killed: false
+    } as any;
 
-    this.workerProcess = spawn('claude', args, {
-      cwd: process.cwd(),
-      shell: true
-    });
-
-    this.workerProcess.stdout?.on('data', (data) => {
-      this.handleAgentOutput('worker', data.toString());
-    });
-
-    this.workerProcess.stderr?.on('data', (data) => {
-      this.handleAgentError('worker', data.toString());
-    });
-
-    this.workerProcess.on('close', (code) => {
-      this.handleAgentClose('worker', code);
-    });
+    // Update worker status to active
+    const session = this.sessions.get(this.currentSessionId!);
+    if (session) {
+      session.workerAgent.status = 'idle';
+      session.workerAgent.lastActivity = new Date();
+      
+      // Send initial worker agent message
+      const message: AgentMessage = {
+        id: this.generateMessageId(),
+        from: 'system',
+        to: 'monitor',
+        type: 'system_event',
+        timestamp: new Date(),
+        content: `Worker agent initialized with model: ${options.workerModel || 'sonnet'}`,
+        metadata: {
+          sessionId: this.currentSessionId!
+        }
+      };
+      
+      session.messages.push(message);
+      this.emit('agent:message', message);
+    }
+    
+    console.log('Worker agent initialized (managed by dual-agent system)');
   }
 
   private handleAgentOutput(agent: 'manager' | 'worker', output: string) {

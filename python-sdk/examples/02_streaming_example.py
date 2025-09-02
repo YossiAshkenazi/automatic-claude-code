@@ -28,7 +28,7 @@ async def basic_streaming_example():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
     print("🎬 Streaming Response Example")
@@ -46,8 +46,8 @@ async def basic_streaming_example():
     """
     
     try:
-        print("📝 Query: How async/await works in Python (detailed)")
-        print("\n🔄 Streaming response:\n")
+        print("[NOTE] Query: How async/await works in Python (detailed)")
+        print("\n[RETRY] Streaming response:\n")
         print("=" * 60)
         
         full_response = ""
@@ -64,22 +64,22 @@ async def basic_streaming_example():
                 full_response += message.content
                 
             elif message.type == "tool_use":
-                print(f"\n🔧 [Tool: {message.content}]", flush=True)
+                print(f"\n[TOOL] [Tool: {message.content}]", flush=True)
                 
             elif message.type == "thinking":
                 print(f"\n💭 [Thinking: {message.content[:50]}...]", flush=True)
                 
             elif message.type == "error":
-                print(f"\n❌ [Error: {message.content}]", flush=True)
+                print(f"\n[FAIL] [Error: {message.content}]", flush=True)
                 
         elapsed = time.time() - start_time
         
         print(f"\n\n{'='*60}")
-        print(f"✅ Streaming completed!")
-        print(f"📊 Stats: {message_count} messages, {len(full_response)} chars, {elapsed:.2f}s")
+        print(f"[OK] Streaming completed!")
+        print(f"[STATS] Stats: {message_count} messages, {len(full_response)} chars, {elapsed:.2f}s")
         
     except Exception as e:
-        print(f"❌ Streaming error: {e}")
+        print(f"[FAIL] Streaming error: {e}")
     finally:
         await wrapper.cleanup()
 
@@ -96,17 +96,17 @@ async def progress_streaming_example():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
-    print("\n🎯 Enhanced Streaming with Progress")
+    print("\n[RESULT] Enhanced Streaming with Progress")
     print("=" * 50)
     
     prompt = "Create a Python script that demonstrates 5 different design patterns with examples"
     
     try:
-        print("📝 Generating Python design patterns examples...")
-        print("🔄 Progress: ", end="", flush=True)
+        print("[NOTE] Generating Python design patterns examples...")
+        print("[RETRY] Progress: ", end="", flush=True)
         
         response_parts = []
         char_count = 0
@@ -121,8 +121,8 @@ async def progress_streaming_example():
                     print(".", end="", flush=True)
                     
             elif message.type == "tool_use":
-                print(f"\n🔧 Using tool: {message.content}")
-                print("🔄 Continuing: ", end="", flush=True)
+                print(f"\n[TOOL] Using tool: {message.content}")
+                print("[RETRY] Continuing: ", end="", flush=True)
         
         print("\n\n📖 Complete Response:")
         print("=" * 50)
@@ -139,10 +139,10 @@ async def progress_streaming_example():
             else:
                 print(f"│ {line}")
         
-        print(f"\n✅ Generated {len(lines)} lines, {char_count} characters")
+        print(f"\n[OK] Generated {len(lines)} lines, {char_count} characters")
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
     finally:
         await wrapper.cleanup()
 
@@ -159,7 +159,7 @@ async def multi_query_streaming():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
     queries = [
@@ -168,12 +168,12 @@ async def multi_query_streaming():
         "What's the difference between @property and @staticmethod?"
     ]
     
-    print("\n🔄 Multiple Streaming Queries")
+    print("\n[RETRY] Multiple Streaming Queries")
     print("=" * 50)
     
     try:
         for i, query in enumerate(queries, 1):
-            print(f"\n📝 Query {i}: {query}")
+            print(f"\n[NOTE] Query {i}: {query}")
             print(f"🤖 Response {i}:")
             print("-" * 40)
             
@@ -186,10 +186,10 @@ async def multi_query_streaming():
             # Small delay between queries
             await asyncio.sleep(1)
         
-        print("\n✅ All queries completed!")
+        print("\n[OK] All queries completed!")
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
     finally:
         await wrapper.cleanup()
 

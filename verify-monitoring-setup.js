@@ -148,28 +148,28 @@ class MonitoringSetupVerifier {
     // Check 3: Port availability
     this.log('Step 3: Checking service availability', 'step');
     
-    // Check API server (port 4001)
-    const apiCheck = await this.checkPort(4001, 'API Server');
+    // Check API server (port 4005)
+    const apiCheck = await this.checkPort(4005, 'API Server');
     if (apiCheck.available) {
-      this.log('API Server (port 4001): RUNNING', 'success');
+      this.log('API Server (port 4005): RUNNING', 'success');
       
       // Check WebSocket if API is running
-      const wsOk = await this.checkWebSocketConnection(4001);
+      const wsOk = await this.checkWebSocketConnection(4005);
       if (wsOk) {
-        this.log('WebSocket Server (port 4001): OK', 'success');
+        this.log('WebSocket Server (port 4005): OK', 'success');
       } else {
         this.warnings.push({
           issue: 'WebSocket server not responding',
           solution: 'API server is running but WebSocket may not be properly configured'
         });
-        this.log('WebSocket Server (port 4001): WARNING', 'warning');
+        this.log('WebSocket Server (port 4005): WARNING', 'warning');
       }
     } else {
       this.errors.push({
-        issue: 'API server not running on port 4001',
+        issue: 'API server not running on port 4005',
         solution: 'Run: cd dual-agent-monitor && pnpm run server:dev'
       });
-      this.log('API Server (port 4001): NOT RUNNING', 'error');
+      this.log('API Server (port 4005): NOT RUNNING', 'error');
     }
 
     // Check frontend server (port 6011)
@@ -215,7 +215,7 @@ class MonitoringSetupVerifier {
       console.log('');
       this.log('🌐 Dashboard URLs:', 'info');
       this.log('   Frontend: http://localhost:6011', 'info');
-      this.log('   API:      http://localhost:4001', 'info');
+      this.log('   API:      http://localhost:4005', 'info');
       return;
     }
 

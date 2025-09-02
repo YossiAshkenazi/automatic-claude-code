@@ -13,7 +13,7 @@ async function makeApiRequest(path) {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'localhost',
-      port: 4001,
+      port: 4005,
       path: path,
       method: 'GET',
       headers: {
@@ -123,7 +123,7 @@ async function checkDashboardData() {
     console.log('');
     console.log('🎯 Dashboard Access:');
     console.log('   Frontend: http://localhost:6011');
-    console.log('   API Base: http://localhost:4001/api');
+    console.log('   API Base: http://localhost:4005/api');
     console.log('');
     console.log('📋 What to Look For in Dashboard:');
     console.log('   - Session list with test-session-* entries');

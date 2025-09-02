@@ -83,9 +83,9 @@ services:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://acc_user:acc_password@postgres:5432/dual_agent_monitor
       - REDIS_URL=redis://redis:6379
-      - PORT=4001
+      - PORT=4005
     ports:
-      - "4001:4001"
+      - "4005:4005"
     networks:
       - acc-network
     depends_on:
@@ -108,8 +108,8 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - VITE_API_URL=http://localhost:4001
-      - VITE_WS_URL=ws://localhost:4001
+      - VITE_API_URL=http://localhost:4005
+      - VITE_WS_URL=ws://localhost:4005
     ports:
       - "6011:6011"
     networks:

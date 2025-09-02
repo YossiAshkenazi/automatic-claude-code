@@ -19,7 +19,7 @@ from claude_cli_wrapper import ClaudeCliWrapper, ClaudeCliOptions
 async def file_operations_example():
     """Demonstrate Claude using Read/Write/Edit tools"""
     
-    print("📁 Tool Usage Example - File Operations")
+    print("[FILE] Tool Usage Example - File Operations")
     print("=" * 50)
     
     # Create temporary directory for testing
@@ -38,12 +38,12 @@ async def file_operations_example():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
     try:
         # Task 1: Create and modify files
-        print("\n🎯 Task 1: Create a Python script with functions")
+        print("\n[RESULT] Task 1: Create a Python script with functions")
         prompt1 = f"""
         Create a Python file called 'calculator.py' in the directory {temp_dir} with the following:
         1. A function to add two numbers
@@ -60,10 +60,10 @@ async def file_operations_example():
             if message.type == "content":
                 print(message.content, end="", flush=True)
             elif message.type == "tool_use":
-                print(f"\n🔧 [Using tool: {message.content}]")
+                print(f"\n[TOOL] [Using tool: {message.content}]")
         
         # Task 2: Modify the existing file
-        print("\n\n🎯 Task 2: Add division and error handling")
+        print("\n\n[RESULT] Task 2: Add division and error handling")
         prompt2 = """
         Now modify the calculator.py file to:
         1. Add a divide function with error handling for division by zero
@@ -78,18 +78,18 @@ async def file_operations_example():
             if message.type == "content":
                 print(message.content, end="", flush=True)
             elif message.type == "tool_use":
-                print(f"\n🔧 [Using tool: {message.content}]")
+                print(f"\n[TOOL] [Using tool: {message.content}]")
         
         # Verify files were created
         calculator_file = temp_dir / "calculator.py"
         if calculator_file.exists():
-            print(f"\n✅ File created successfully: {calculator_file}")
+            print(f"\n[OK] File created successfully: {calculator_file}")
             print(f"📏 File size: {calculator_file.stat().st_size} bytes")
         else:
-            print(f"\n⚠️  File not found: {calculator_file}")
+            print(f"\n[WARN]  File not found: {calculator_file}")
     
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
     
     finally:
         await wrapper.cleanup()
@@ -117,11 +117,11 @@ async def bash_execution_example():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
     try:
-        print("\n🎯 Task: System information gathering")
+        print("\n[RESULT] Task: System information gathering")
         prompt = """
         Help me gather some basic system information. Please:
         1. Show the current directory
@@ -143,12 +143,12 @@ async def bash_execution_example():
                 print(message.content, end="", flush=True)
             elif message.type == "tool_use":
                 tool_count += 1
-                print(f"\n🔧 [Tool {tool_count}: {message.content}]")
+                print(f"\n[TOOL] [Tool {tool_count}: {message.content}]")
         
-        print(f"\n\n📊 Total tools used: {tool_count}")
+        print(f"\n\n[STATS] Total tools used: {tool_count}")
     
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
     
     finally:
         await wrapper.cleanup()
@@ -157,7 +157,7 @@ async def bash_execution_example():
 async def code_analysis_example():
     """Demonstrate Claude analyzing and improving code"""
     
-    print("\n🔍 Tool Usage Example - Code Analysis")
+    print("\n[SEARCH] Tool Usage Example - Code Analysis")
     print("=" * 50)
     
     # Create a sample Python file to analyze
@@ -185,7 +185,7 @@ print("Results:", process_data(data))
 '''
     
     sample_file.write_text(sample_code)
-    print(f"📝 Created sample file: {sample_file}")
+    print(f"[NOTE] Created sample file: {sample_file}")
     
     options = ClaudeCliOptions(
         model="sonnet",
@@ -198,7 +198,7 @@ print("Results:", process_data(data))
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
     try:
@@ -217,17 +217,17 @@ print("Results:", process_data(data))
             if message.type == "content":
                 print(message.content, end="", flush=True)
             elif message.type == "tool_use":
-                print(f"\n🔧 [Using tool: {message.content}]")
+                print(f"\n[TOOL] [Using tool: {message.content}]")
         
         # Check if improved file was created
         improved_file = temp_dir / "improved_code.py"
         if improved_file.exists():
-            print(f"\n✅ Improved file created: {improved_file}")
+            print(f"\n[OK] Improved file created: {improved_file}")
             print(f"📏 Original: {sample_file.stat().st_size} bytes")
             print(f"📏 Improved: {improved_file.stat().st_size} bytes")
     
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
     
     finally:
         await wrapper.cleanup()
@@ -258,10 +258,10 @@ async def mcp_tools_example():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
-    print(f"🔍 MCP Config: {options.mcp_config or 'Not found'}")
+    print(f"[SEARCH] MCP Config: {options.mcp_config or 'Not found'}")
     
     try:
         if options.mcp_config:
@@ -283,10 +283,10 @@ async def mcp_tools_example():
             if message.type == "content":
                 print(message.content, end="", flush=True)
             elif message.type == "tool_use":
-                print(f"\n🔧 [MCP Tool: {message.content}]")
+                print(f"\n[TOOL] [MCP Tool: {message.content}]")
     
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
     
     finally:
         await wrapper.cleanup()

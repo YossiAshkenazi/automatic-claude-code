@@ -29,28 +29,28 @@ async def simple_query_example():
     
     # Check if Claude CLI is available
     if not wrapper.is_available():
-        print("❌ Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code")
+        print("[FAIL] Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code")
         return
     
-    print("🤖 Simple Claude Query Example")
+    print("[CLAUDE] Simple Claude Query Example")
     print("=" * 50)
     
     # Simple query
     prompt = "Explain what Python list comprehensions are in simple terms with one example"
     
     try:
-        print(f"📝 Query: {prompt}")
-        print("\n🔄 Response:")
+        print(f"[NOTE] Query: {prompt}")
+        print("\n[RETRY] Response:")
         print("-" * 30)
         
         # Get synchronous response
         response = await wrapper.execute_sync(prompt)
         print(response)
         
-        print("\n✅ Query completed successfully!")
+        print("\n[OK] Query completed successfully!")
         
     except Exception as e:
-        print(f"❌ Error executing query: {e}")
+        print(f"[FAIL] Error executing query: {e}")
         return
     
     finally:
@@ -70,17 +70,17 @@ async def interactive_query_example():
     wrapper = ClaudeCliWrapper(options)
     
     if not wrapper.is_available():
-        print("❌ Claude CLI not available")
+        print("[FAIL] Claude CLI not available")
         return
     
-    print("\n🎯 Interactive Query Mode")
+    print("\n[RESULT] Interactive Query Mode")
     print("Type 'quit' to exit")
     print("=" * 40)
     
     try:
         while True:
             # Get user input
-            user_input = input("\n💭 Your question: ").strip()
+            user_input = input("\n[Q] Your question: ").strip()
             
             if user_input.lower() in ['quit', 'exit', 'q']:
                 break
@@ -88,28 +88,28 @@ async def interactive_query_example():
             if not user_input:
                 continue
             
-            print("🤖 Claude:")
+            print("[CLAUDE]:")
             try:
                 response = await wrapper.execute_sync(user_input)
                 print(response)
             except Exception as e:
-                print(f"❌ Error: {e}")
+                print(f"[FAIL] Error: {e}")
                 
     except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+        print("\n[BYE] Goodbye!")
     finally:
         await wrapper.cleanup()
 
 
 if __name__ == "__main__":
-    print("🚀 Claude CLI Wrapper - Simple Query Examples")
+    print("[START] Claude CLI Wrapper - Simple Query Examples")
     
     # Run simple query
     asyncio.run(simple_query_example())
     
     # Ask if user wants interactive mode
     try:
-        choice = input("\n🎮 Try interactive mode? (y/N): ").strip().lower()
+        choice = input("\n[INPUT] Try interactive mode? (y/N): ").strip().lower()
         if choice in ['y', 'yes']:
             asyncio.run(interactive_query_example())
     except KeyboardInterrupt:

@@ -14,10 +14,10 @@ async def example_1_simple_query():
     try:
         async for message in query("Create a Python function that calculates the factorial of a number"):
             if isinstance(message, ResultMessage):
-                print(f"✅ Result: {message.result[:200]}...")
+                print(f"[OK] Result: {message.result[:200]}...")
                 return message.result
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         return None
 
 async def example_2_client_usage():
@@ -36,10 +36,10 @@ async def example_2_client_usage():
             
             async for message in client.query("Write a simple Hello World program in Python"):
                 if isinstance(message, ResultMessage):
-                    print(f"✅ Generated code: {message.result[:100]}...")
+                    print(f"[OK] Generated code: {message.result[:100]}...")
                     return message.result
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
         return None
 
 async def example_3_streaming():
@@ -58,13 +58,13 @@ async def example_3_streaming():
                 result_parts.append(message.result)
                 break
         
-        print("\n✅ Streaming complete!")
+        print("\n[OK] Streaming complete!")
         full_result = "".join(result_parts)
-        print(f"📝 Total content: {len(full_result)} characters")
+        print(f"[NOTE] Total content: {len(full_result)} characters")
         return full_result
         
     except Exception as e:
-        print(f"❌ Streaming error: {e}")
+        print(f"[FAIL] Streaming error: {e}")
         return None
 
 async def example_4_error_handling():
@@ -81,16 +81,16 @@ async def example_4_error_handling():
         async with ClaudeSDKClient(options) as client:
             async for message in client.query("Write a comprehensive web application"):
                 if isinstance(message, ResultMessage):
-                    print(f"✅ Unexpected success: {message.result[:50]}...")
+                    print(f"[OK] Unexpected success: {message.result[:50]}...")
                     
     except ClaudeTimeoutError:
         print("⏰ Query timed out - this is expected with 5s timeout")
     except ClaudeAuthError:
         print("🔐 Authentication required - run 'claude auth'")
     except ClaudeNotFoundError:
-        print("🔍 Claude CLI not found - install with 'npm install -g @anthropic-ai/claude-code'")
+        print("[SEARCH] Claude CLI not found - install with 'npm install -g @anthropic-ai/claude-code'")
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[FAIL] Unexpected error: {e}")
 
 async def example_5_configuration():
     """Example 5: Different configuration patterns"""
@@ -141,32 +141,32 @@ async def main():
     
     for name, example_func in examples:
         try:
-            print(f"\n🚀 Running: {name}")
+            print(f"\n[START] Running: {name}")
             result = await example_func()
             results[name] = result
-            print(f"✅ Completed: {name}")
+            print(f"[OK] Completed: {name}")
         except Exception as e:
-            print(f"❌ Failed: {name} - {e}")
+            print(f"[FAIL] Failed: {name} - {e}")
             results[name] = None
     
     # Summary
     print("\n" + "=" * 50)
-    print("📊 Examples Summary")
+    print("[STATS] Examples Summary")
     print("=" * 50)
     
     successful = sum(1 for result in results.values() if result is not None)
     total = len(results)
     
     for name, result in results.items():
-        status = "✅" if result is not None else "❌"
+        status = "[OK]" if result is not None else "[FAIL]"
         print(f"{status} {name}")
     
-    print(f"\n🎯 Success rate: {successful}/{total} examples")
+    print(f"\n[RESULT] Success rate: {successful}/{total} examples")
     
     if successful == total:
         print("🎉 All examples completed successfully!")
     elif successful > 0:
-        print("⚠️ Some examples completed. Check authentication and CLI installation.")
+        print("[WARN] Some examples completed. Check authentication and CLI installation.")
     else:
         print("🚨 No examples completed. Please check setup and try again.")
 

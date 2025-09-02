@@ -295,6 +295,13 @@ class GeminiCliWrapper:
         
         return "\n".join(output)
     
+    def is_available(self) -> bool:
+        """Check if Gemini CLI is available"""
+        try:
+            return shutil.which("gemini") is not None or os.path.exists(self.cli_path)
+        except (AttributeError, FileNotFoundError):
+            return False
+    
     def kill(self):
         """Kill the running process if it exists"""
         if self.process and self.process.returncode is None:

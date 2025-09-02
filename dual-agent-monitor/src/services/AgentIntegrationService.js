@@ -1,44 +1,8 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AgentIntegrationService = void 0;
-const events_1 = require("events");
-const child_process_1 = require("child_process");
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-class AgentIntegrationService extends events_1.EventEmitter {
+import { EventEmitter } from 'events';
+import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+export class AgentIntegrationService extends EventEmitter {
     constructor() {
         super();
         this.managerProcess = null;
@@ -48,8 +12,35 @@ class AgentIntegrationService extends events_1.EventEmitter {
         this.isRunning = false;
         this.messageBuffer = [];
         this.claudeSessionsPath = path.join(process.cwd(), '.claude-sessions');
-        this.accPath = path.join(process.cwd(), 'acc');
+        // Check if we're on Windows and adjust the acc path accordingly
+        this.accPath = this.findAccExecutable();
         this.setupDirectories();
+    }
+    findAccExecutable() {
+        // First try to find acc in PATH
+        try {
+            const { execSync } = require('child_process');
+            if (process.platform === 'win32') {
+                const result = execSync('where acc', { encoding: 'utf8' }).trim();
+                if (result)
+                    return 'acc'; // Use global command if found
+            }
+            else {
+                const result = execSync('which acc', { encoding: 'utf8' }).trim();
+                if (result)
+                    return 'acc'; // Use global command if found
+            }
+        }
+        catch (error) {
+            // acc not found in PATH
+        }
+        // Fall back to local installation paths
+        if (process.platform === 'win32') {
+            return path.join(process.cwd(), 'acc.cmd'); // Try Windows command file
+        }
+        else {
+            return path.join(process.cwd(), 'acc'); // Try local executable
+        }
     }
     setupDirectories() {
         if (!fs.existsSync(this.claudeSessionsPath)) {
@@ -110,50 +101,79 @@ class AgentIntegrationService extends events_1.EventEmitter {
         }
     }
     async startManagerAgent(task, options) {
+        console.log(`Starting manager agent with acc path: ${this.accPath}`);
         const args = [
             'run',
-            task,
+            `"${task}"`, // Quote the task to handle spaces
             '--dual-agent',
             '--manager-model', options.managerModel || 'opus',
-            '--max-iterations', String(options.maxIterations || 10),
-            '--json-output'
+            '--max-iterations', String(options.maxIterations || 10)
         ];
         if (options.verbose) {
             args.push('-v');
         }
-        this.managerProcess = (0, child_process_1.spawn)(this.accPath, args, {
+        console.log(`Manager agent command: ${this.accPath} ${args.join(' ')}`);
+        this.managerProcess = spawn(this.accPath, args, {
             cwd: process.cwd(),
-            shell: true
+            shell: true,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env, FORCE_COLOR: '0' } // Disable color output for cleaner parsing
         });
         this.managerProcess.stdout?.on('data', (data) => {
-            this.handleAgentOutput('manager', data.toString());
+            const output = data.toString();
+            console.log(`Manager stdout: ${output}`);
+            this.handleAgentOutput('manager', output);
         });
         this.managerProcess.stderr?.on('data', (data) => {
-            this.handleAgentError('manager', data.toString());
+            const error = data.toString();
+            console.log(`Manager stderr: ${error}`);
+            this.handleAgentError('manager', error);
         });
         this.managerProcess.on('close', (code) => {
+            console.log(`Manager agent process closed with code: ${code}`);
             this.handleAgentClose('manager', code);
+        });
+        this.managerProcess.on('error', (error) => {
+            console.error('Manager process error:', error);
+            this.handleAgentError('manager', error.toString());
         });
     }
     async startWorkerAgent(options) {
-        const args = [
-            '--worker-mode',
-            '--model', options.workerModel || 'sonnet',
-            '--json-output'
-        ];
-        this.workerProcess = (0, child_process_1.spawn)('claude', args, {
-            cwd: process.cwd(),
-            shell: true
-        });
-        this.workerProcess.stdout?.on('data', (data) => {
-            this.handleAgentOutput('worker', data.toString());
-        });
-        this.workerProcess.stderr?.on('data', (data) => {
-            this.handleAgentError('worker', data.toString());
-        });
-        this.workerProcess.on('close', (code) => {
-            this.handleAgentClose('worker', code);
-        });
+        // For now, we'll simulate the worker agent as part of the dual-agent system
+        // In a real implementation, this might be a separate Claude CLI instance 
+        // or handled within the same process
+        console.log(`Starting worker agent with model: ${options.workerModel || 'sonnet'}`);
+        // Create a mock process for the worker since dual-agent mode 
+        // typically handles both agents in a single process
+        this.workerProcess = {
+            pid: process.pid + 1,
+            stdout: null,
+            stderr: null,
+            stdin: null,
+            kill: () => true,
+            killed: false
+        };
+        // Update worker status to active
+        const session = this.sessions.get(this.currentSessionId);
+        if (session) {
+            session.workerAgent.status = 'idle';
+            session.workerAgent.lastActivity = new Date();
+            // Send initial worker agent message
+            const message = {
+                id: this.generateMessageId(),
+                from: 'system',
+                to: 'monitor',
+                type: 'system_event',
+                timestamp: new Date(),
+                content: `Worker agent initialized with model: ${options.workerModel || 'sonnet'}`,
+                metadata: {
+                    sessionId: this.currentSessionId
+                }
+            };
+            session.messages.push(message);
+            this.emit('agent:message', message);
+        }
+        console.log('Worker agent initialized (managed by dual-agent system)');
     }
     handleAgentOutput(agent, output) {
         try {
@@ -546,5 +566,4 @@ class AgentIntegrationService extends events_1.EventEmitter {
         };
     }
 }
-exports.AgentIntegrationService = AgentIntegrationService;
 //# sourceMappingURL=AgentIntegrationService.js.map

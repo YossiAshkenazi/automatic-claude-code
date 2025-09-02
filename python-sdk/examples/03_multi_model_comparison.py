@@ -32,14 +32,14 @@ async def model_comparison_example():
         ("gemini:gemini-2.0-flash", "Gemini 2.0 Flash")
     ]
     
-    print(f"📝 Test Query: {test_prompt}")
-    print("\n🔍 Testing available models...")
+    print(f"[NOTE] Test Query: {test_prompt}")
+    print("\n[SEARCH] Testing available models...")
     
     results = []
     
     for model_id, model_name in models_to_test:
         print(f"\n{'='*60}")
-        print(f"🎯 Testing {model_name} ({model_id})")
+        print(f"[RESULT] Testing {model_name} ({model_id})")
         print("="*60)
         
         options = UnifiedCliOptions(
@@ -53,7 +53,7 @@ async def model_comparison_example():
         
         try:
             if not wrapper.is_available():
-                print(f"⚠️  {model_name} not available (CLI not installed)")
+                print(f"[WARN]  {model_name} not available (CLI not installed)")
                 continue
             
             start_time = time.time()
@@ -71,12 +71,12 @@ async def model_comparison_example():
                 'length': len(response)
             })
             
-            print(f"⏱️  Response time: {elapsed:.2f}s")
+            print(f"[TIME]  Response time: {elapsed:.2f}s")
             print(f"📏 Response length: {len(response)} characters")
             print(f"🤖 Response:\n{response}\n")
             
         except Exception as e:
-            print(f"❌ Error with {model_name}: {e}")
+            print(f"[FAIL] Error with {model_name}: {e}")
         
         finally:
             await wrapper.cleanup()
@@ -86,14 +86,14 @@ async def model_comparison_example():
     
     # Summary comparison
     if results:
-        print("\n📊 COMPARISON SUMMARY")
+        print("\n[STATS] COMPARISON SUMMARY")
         print("=" * 60)
         
         for result in results:
             print(f"🤖 {result['model']}:")
-            print(f"   ⏱️  Time: {result['time']:.2f}s")
+            print(f"   [TIME]  Time: {result['time']:.2f}s")
             print(f"   📏 Length: {result['length']} chars")
-            print(f"   🎯 Preview: {result['response'][:100]}...")
+            print(f"   [RESULT] Preview: {result['response'][:100]}...")
             print()
         
         # Find fastest and longest
@@ -101,15 +101,15 @@ async def model_comparison_example():
         longest = max(results, key=lambda x: x['length'])
         
         print(f"🏆 Fastest: {fastest['model']} ({fastest['time']:.2f}s)")
-        print(f"📝 Most detailed: {longest['model']} ({longest['length']} chars)")
+        print(f"[NOTE] Most detailed: {longest['model']} ({longest['length']} chars)")
     else:
-        print("\n⚠️  No models were available for testing")
+        print("\n[WARN]  No models were available for testing")
 
 
 async def side_by_side_comparison():
     """Run same query on multiple models simultaneously"""
     
-    print("\n🔄 Side-by-Side Comparison (Async)")
+    print("\n[RETRY] Side-by-Side Comparison (Async)")
     print("=" * 50)
     
     prompt = "What are the top 3 benefits of using Python for data science?"
@@ -120,8 +120,8 @@ async def side_by_side_comparison():
         ("gemini:gemini-2.0-flash", "Gemini Flash")
     ]
     
-    print(f"📝 Query: {prompt}")
-    print("\n🚀 Running queries simultaneously...")
+    print(f"[NOTE] Query: {prompt}")
+    print("\n[START] Running queries simultaneously...")
     
     async def query_model(model_id: str, model_name: str):
         """Query a single model"""
@@ -159,12 +159,12 @@ async def side_by_side_comparison():
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     # Display results
-    print(f"\n📊 SIDE-BY-SIDE RESULTS")
+    print(f"\n[STATS] SIDE-BY-SIDE RESULTS")
     print("=" * 60)
     
     for result in results:
         if isinstance(result, Exception):
-            print(f"❌ Exception: {result}")
+            print(f"[FAIL] Exception: {result}")
             continue
             
         if result.get("success"):
@@ -172,7 +172,7 @@ async def side_by_side_comparison():
             print(f"   {result['response']}")
             print()
         else:
-            print(f"❌ {result['model']}: {result.get('error', 'Unknown error')}")
+            print(f"[FAIL] {result['model']}: {result.get('error', 'Unknown error')}")
             print()
 
 
@@ -196,15 +196,15 @@ async def interactive_model_selection():
     try:
         choice = input("\nSelect model (1-4): ").strip()
         if not choice.isdigit() or not (1 <= int(choice) <= len(available_models)):
-            print("❌ Invalid choice")
+            print("[FAIL] Invalid choice")
             return
         
         selected_model, description = available_models[int(choice) - 1]
-        print(f"\n🎯 Selected: {description}")
+        print(f"\n[RESULT] Selected: {description}")
         
         query = input("Enter your question: ").strip()
         if not query:
-            print("❌ No query provided")
+            print("[FAIL] No query provided")
             return
         
         options = UnifiedCliOptions(
@@ -216,7 +216,7 @@ async def interactive_model_selection():
         wrapper = UnifiedCliWrapper(options)
         
         if not wrapper.is_available():
-            print(f"❌ {description} not available")
+            print(f"[FAIL] {description} not available")
             return
         
         print(f"\n🤖 {description} response:")
@@ -230,7 +230,7 @@ async def interactive_model_selection():
     except KeyboardInterrupt:
         print("\n👋 Cancelled")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[FAIL] Error: {e}")
 
 
 if __name__ == "__main__":

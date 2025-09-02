@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const app: Express = express();
 app.use(cors({
-  origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:6012', 'http://localhost:6013', 'http://localhost:6014', 'http://localhost:6015', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4001'],
+  origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:6012', 'http://localhost:6013', 'http://localhost:6014', 'http://localhost:6015', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4005'],
   credentials: true
 }));
 app.use(express.json());

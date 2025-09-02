@@ -29,7 +29,7 @@ setup(
     ],
     python_requires=">=3.10",
     install_requires=[
-        # No external dependencies - uses only stdlib
+        'aiohttp>=3.8.0',  # Required for WebSocket and HTTP communication
     ],
     extras_require={
         "dev": [

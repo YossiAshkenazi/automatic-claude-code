@@ -1,0 +1,40 @@
+# Development Dependencies for Claude Code SDK
+# Install with: pip install -r requirements-dev.txt
+
+# Testing framework
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+pytest-cov>=4.0.0
+coverage[toml]>=7.0.0
+
+# Code formatting and linting
+black>=22.0.0
+isort>=5.0.0
+flake8>=6.0.0
+mypy>=1.0.0
+
+# Pre-commit hooks for code quality
+pre-commit>=3.0.0
+
+# Documentation
+sphinx>=5.0.0
+sphinx-rtd-theme>=1.0.0
+sphinx-autodoc-typehints>=1.19.0
+myst-parser>=0.18.0
+
+# Build tools
+build>=0.10.0
+wheel>=0.40.0
+twine>=4.0.0
+
+# Development utilities
+ipython>=8.0.0
+ipdb>=0.13.0
+
+# Performance profiling
+py-spy>=0.3.0
+
+# Security scanning
+bandit>=1.7.0
+safety>=2.0.0

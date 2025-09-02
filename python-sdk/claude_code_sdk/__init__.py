@@ -14,14 +14,14 @@ Features:
 - Type hints for full IDE support
 
 Basic Usage:
-    from claude_code_sdk import query, ClaudeCodeClient
+    from claude_code_sdk import query, ClaudeSDKClient
     
     # Simple query
     async for message in query("Create a Python function"):
         print(message.result)
     
-    # Advanced client usage
-    async with ClaudeCodeClient(options) as client:
+    # Advanced client usage (official SDK naming)
+    async with ClaudeSDKClient(options) as client:
         async for message in client.query("Complex task"):
             # Handle streaming messages
             pass
@@ -118,6 +118,7 @@ __all__ = [
     
     # Core classes
     'ClaudeCodeClient',
+    'ClaudeSDKClient',  # Official SDK naming
     'ClaudeCodeOptions',
     
     # Option factories
@@ -185,9 +186,10 @@ __all__ = [
     'CLIDetector'
 ]
 
-# Compatibility aliases for official SDK migration
-ClaudeClient = ClaudeCodeClient  # Alias for easier migration
-claude_query = query  # Direct alias
+# Official SDK naming compatibility
+ClaudeSDKClient = ClaudeCodeClient  # Official SDK naming
+ClaudeClient = ClaudeCodeClient     # Alias for easier migration
+claude_query = query                # Direct alias
 
 # SDK information
 SDK_INFO = {
@@ -204,9 +206,9 @@ SDK_INFO = {
         'Type safety with hints'
     ],
     'compatible_with': [
-        'automatic-claude-code v1.2.0+',
+        'automatic-claude-code v2.0.0+',
         'Claude Code CLI v1.0+',
-        'Python 3.8+'
+        'Python 3.10+'
     ]
 }
 

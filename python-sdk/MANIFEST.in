@@ -1,0 +1,61 @@
+# Include the README and other important files
+include README.md
+include LICENSE
+include CHANGELOG.md
+include pyproject.toml
+include requirements.txt
+include requirements-dev.txt
+
+# Include package data
+include claude_code_sdk/py.typed
+recursive-include claude_code_sdk *.py
+recursive-include claude_code_sdk *.pyi
+
+# Include documentation
+recursive-include docs *.md
+recursive-include docs *.rst
+recursive-include docs *.txt
+recursive-include docs *.png
+recursive-include docs *.jpg
+recursive-include docs *.svg
+recursive-include docs Makefile
+recursive-include docs make.bat
+
+# Include examples
+recursive-include examples *.py
+recursive-include examples *.md
+recursive-include examples *.json
+recursive-include examples *.yaml
+recursive-include examples *.yml
+
+# Include tests (for source distribution)
+recursive-include tests *.py
+recursive-include tests *.json
+recursive-include tests *.yaml
+recursive-include tests *.yml
+recursive-include tests *.txt
+
+# Include configuration files
+include *.cfg
+include *.ini
+include tox.ini
+include .pre-commit-config.yaml
+
+# Exclude build artifacts and cache
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude *.so
+global-exclude .git*
+global-exclude .DS_Store
+global-exclude *.egg-info
+global-exclude build
+global-exclude dist
+global-exclude .tox
+global-exclude .pytest_cache
+global-exclude .mypy_cache
+global-exclude .coverage
+global-exclude htmlcov
+global-exclude .venv
+global-exclude venv

@@ -1,0 +1,12 @@
+# Claude Code SDK Runtime Dependencies
+# 
+# This SDK is designed to be lightweight and uses only Python standard library
+# for maximum compatibility and minimal installation footprint.
+#
+# No external runtime dependencies required!
+#
+# Note: Claude Code CLI must be installed separately via:
+#   npm install -g @anthropic-ai/claude-code
+#
+# Verify Claude CLI installation:
+#   claude --version

@@ -296,8 +296,8 @@ describe('SDKAutopilotEngine', () => {
   });
 
   describe('Health Metrics', () => {
-    test('should provide health metrics', () => {
-      const metrics = engine.getHealthMetrics();
+    test('should provide health metrics', async () => {
+      const metrics = await engine.getHealthMetrics();
       
       expect(metrics).toHaveProperty('isRunning');
       expect(metrics).toHaveProperty('sessionId');
@@ -321,15 +321,15 @@ describe('SDKAutopilotEngine', () => {
         coordinationType: 'SDK_BASED',
         handoffsTriggered: true,
         workerExecutions: true,
+        managerReviews: true,
         communicationFlow: true,
         issues: []
       });
       
       mockDualAgentCoordinator.getHandoffMetrics.mockReturnValue({
         totalHandoffs: 5,
-        averageHandoffTime: 1500,
-        handoffSuccessRate: 95,
-        lastHandoffTime: new Date()
+        lastHandoffTime: new Date(),
+        handoffRate: 2.5
       });
       
       mockDualAgentCoordinator.getWorkflowState.mockReturnValue({
@@ -340,8 +340,9 @@ describe('SDKAutopilotEngine', () => {
         totalWorkItems: 3,
         qualityMetrics: {
           averageScore: 0.88,
-          lastScore: 0.92,
-          scoreTrend: 'improving'
+          gatesPassed: 15,
+          gatesFailed: 2,
+          criticalIssues: 0
         },
         coordinationHealth: {
           communicationLatency: 300,

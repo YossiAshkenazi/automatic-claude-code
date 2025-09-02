@@ -1,41 +1,47 @@
-# PTY Technical Guide - Advanced Claude Code Control
+# SDK Technical Guide - Streamlined Claude Code Integration
 
 ## Overview
 
-Version 1.2.0 introduces a revolutionary PTY-based Claude Code control system that replaces API key dependencies with subscription-compatible OAuth authentication. This technical guide provides in-depth information about the PTY implementation, architecture, and advanced usage patterns.
+**DEPRECATED**: This document describes the legacy PTY-based architecture that has been replaced in v2.0.0.
 
-## PTY Architecture
+Version 2.0.0 introduces a streamlined SDK-based Claude Code integration that eliminates complex PTY and browser authentication systems. This technical guide provides information about the new SDK architecture and migration from legacy systems.
+
+## Migration Notice
+
+The PTY-based system described in this document has been **completely removed** in v2.0.0 in favor of direct SDK integration with Claude CLI. Please refer to the main documentation for current SDK-based architecture.
+
+## SDK Architecture (v2.0.0)
 
 ### Core Components
 
-#### 1. PTY Controller (`src/services/ptyController.ts`)
+#### 1. SDK Claude Executor (`src/services/sdkClaudeExecutor.ts`)
 
-The PTY Controller manages interactive Claude Code sessions using pseudo-terminals:
+The SDK Claude Executor manages Claude Code CLI integration:
 
 ```typescript
-interface PTYControllerOptions {
-  sessionId?: string;
-  logger?: Logger;
-  oauthToken?: string;
+interface SDKClaudeOptions {
+  model?: 'sonnet' | 'opus';
   workDir?: string;
-  maxSessions?: number;
-  sessionTimeout?: number;
+  sessionId?: string;
+  verbose?: boolean;
+  timeout?: number;
+  allowedTools?: string;
 }
 
-class ClaudeCodePTYController extends EventEmitter {
+class SDKClaudeExecutor {
   // Key methods:
-  initialize(workDir?: string): Promise<void>
-  sendPrompt(prompt: string): Promise<string>
-  cleanup(): Promise<void>
+  execute(prompt: string, options?: SDKClaudeOptions): Promise<SDKExecutionResult>
+  isAvailable(): Promise<boolean>
+  initialize(): Promise<void>
 }
 ```
 
 **Key Features**:
-- Cross-platform PTY support (Windows ConPTY, Unix PTY)
-- Automatic OAuth token extraction
-- Session lifecycle management
-- Real-time stream processing
-- ANSI code handling and JSON detection
+- Direct Claude CLI integration
+- Cross-platform compatibility
+- Simplified authentication (leverages Claude CLI)
+- Robust error handling and recovery
+- No complex session management overhead
 
 #### 2. Enhanced Claude Executor (`src/services/claudeExecutor.ts`)
 

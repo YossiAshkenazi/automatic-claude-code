@@ -1,51 +1,51 @@
-# Usage Guide - PTY-Enhanced Dual-Agent Development (v1.2.0)
+# Usage Guide - SDK-Based Dual-Agent Development (v2.0.0)
 
-## Getting Started with PTY Dual-Agent Mode
+## Getting Started with SDK Dual-Agent Mode
 
-### Quick Start with PTY Authentication
+### Quick Start with SDK Integration
 
-The dual-agent system now features PTY-based Claude Code control with automatic OAuth authentication, eliminating API key requirements for most users:
+The dual-agent system now features streamlined SDK-based Claude CLI integration, providing the most reliable and efficient execution:
 
 ```bash
-# Enable PTY dual-agent mode (default, no API key needed)
+# Enable SDK dual-agent mode (default, uses your Claude CLI setup)
 acc run "implement user authentication system" --dual-agent -v
-# ACC automatically extracts OAuth tokens from your system
+# ACC automatically uses your existing Claude CLI authentication
 
-# Use specific models with PTY sessions
+# Use specific models with SDK integration
 acc run "migrate to microservices" --manager-model opus --worker-model sonnet --dual-agent
 
-# Monitor PTY-enhanced agent coordination
-acc agents --status  # Shows PTY session information
-acc logs --pty-sessions --tail  # PTY-specific logs
+# Monitor SDK-enhanced agent coordination
+acc agents --status  # Shows agent coordination status
+acc logs --coordination --tail  # Agent communication logs
 
-# Force headless mode if API key is preferred
-acc run "simple task" --no-pty --dual-agent -i 3
+# Debug SDK integration if needed
+DEBUG=sdk:* acc run "task" --dual-agent -i 3 -v
 ```
 
-### PTY Mode Benefits
+### SDK Integration Benefits
 
-**Enhanced Context & Coordination**:
-- ✅ Interactive Claude sessions maintain better context between iterations
-- ✅ Real-time JSON stream parsing with ANSI handling
-- ✅ Improved error recovery through PTY session management
-- ✅ Up to 28 concurrent sessions for complex workflows
+**Enhanced Reliability & Performance**:
+- ✅ Direct Claude CLI execution ensures maximum compatibility
+- ✅ Simplified architecture eliminates complex session management
+- ✅ Improved error recovery through robust SDK error handling
+- ✅ Efficient resource usage without PTY overhead
 
-**Subscription Authentication**:
-- ✅ Works seamlessly with Claude Pro/Team subscriptions
-- ✅ Automatic OAuth token extraction (Windows/macOS/Linux)
-- ✅ No API key configuration required
-- ✅ Fallback to API key mode when needed
+**Simplified Authentication**:
+- ✅ Leverages your existing Claude CLI setup
+- ✅ Works with any Claude CLI authentication method
+- ✅ No complex browser or PTY session management
+- ✅ Cross-platform compatibility through Claude CLI
 
 ## When to Use Each Mode
 
 ### 🤖 Choose Dual-Agent Mode For:
 
-**Large-Scale Architecture (Enhanced with PTY)**
+**Large-Scale Architecture (Enhanced with SDK)**
 ```bash
-# Microservices implementation with PTY context preservation
+# Microservices implementation with reliable SDK execution
 acc run "convert monolith to microservices architecture" --dual-agent -i 8 -v
 
-# Clean architecture setup with interactive sessions
+# Clean architecture setup with SDK integration
 acc run "implement clean architecture with DDD patterns" --dual-agent -i 6 -v
 
 # Complex refactoring with enhanced error recovery

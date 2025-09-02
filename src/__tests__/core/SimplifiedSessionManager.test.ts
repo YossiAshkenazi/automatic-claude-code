@@ -116,7 +116,7 @@ describe('SimplifiedSessionManager', () => {
       expect(sessionId).toBe('test-uuid-123');
       // Check that the written session has SDK mode as default
       const writeCall = mockFs.writeFile.mock.calls.find(call => 
-        call[0].includes('test-uuid-123.json')
+        (call[0] as string).includes('test-uuid-123.json')
       );
       expect(writeCall![1]).toContain('"executionMode":"sdk"');
     });
@@ -149,7 +149,7 @@ describe('SimplifiedSessionManager', () => {
     test('should add iteration with SDK execution mode', async () => {
       const mockOutput: ParsedOutput = {
         result: 'Iteration completed successfully',
-        error: null,
+        error: undefined,
         files: ['src/test.ts'],
         commands: ['npm test'],
         totalCost: 0.005
@@ -179,7 +179,7 @@ describe('SimplifiedSessionManager', () => {
 
       const mockOutput: ParsedOutput = {
         result: 'Test result',
-        error: null,
+        error: undefined,
         files: [],
         commands: []
       };
@@ -215,7 +215,7 @@ describe('SimplifiedSessionManager', () => {
 
       const mockOutput: ParsedOutput = {
         result: 'Authenticated successfully',
-        error: null,
+        error: undefined,
         files: [],
         commands: []
       };
@@ -230,7 +230,7 @@ describe('SimplifiedSessionManager', () => {
 
       // Should update authentication state to authenticated
       const writeCall = mockFs.writeFile.mock.calls.find(call => 
-        call[0].includes(`${pendingSessionId}.json`)
+        (call[0] as string).includes(`${pendingSessionId}.json`)
       );
       expect(writeCall![1]).toContain('"authenticationState":"authenticated"');
     });
@@ -252,7 +252,7 @@ describe('SimplifiedSessionManager', () => {
       });
 
       const writeCall = mockFs.writeFile.mock.calls.find(call => 
-        call[0].includes(`${sessionId}.json`)
+        (call[0] as string).includes(`${sessionId}.json`)
       );
       expect(writeCall![1]).toContain('"authenticationState":"failed"');
     });
@@ -268,7 +268,7 @@ describe('SimplifiedSessionManager', () => {
       await sessionManager.addIteration({
         iteration: 1,
         prompt: 'Step 1',
-        output: { result: 'Step 1 done', error: null, files: ['file1.ts'], commands: ['echo 1'] },
+        output: { result: 'Step 1 done', error: undefined, files: ['file1.ts'], commands: ['echo 1'] },
         exitCode: 0,
         duration: 2000
       });
@@ -276,7 +276,7 @@ describe('SimplifiedSessionManager', () => {
       await sessionManager.addIteration({
         iteration: 2,
         prompt: 'Step 2',
-        output: { result: 'Step 2 done', error: null, files: ['file2.ts'], commands: ['echo 2'] },
+        output: { result: 'Step 2 done', error: undefined, files: ['file2.ts'], commands: ['echo 2'] },
         exitCode: 0,
         duration: 3000
       });
@@ -286,7 +286,7 @@ describe('SimplifiedSessionManager', () => {
       await sessionManager.completeSession('completed');
 
       const writeCall = mockFs.writeFile.mock.calls.find(call => 
-        call[0].includes(`${sessionId}.json`)
+        (call[0] as string).includes(`${sessionId}.json`)
       );
       expect(writeCall![1]).toContain('"status":"completed"');
       expect(writeCall![1]).toContain('"endTime"');
@@ -335,7 +335,7 @@ describe('SimplifiedSessionManager', () => {
         prompt: 'Success step',
         output: {
           result: 'Success',
-          error: null,
+          error: undefined,
           files: ['src/component.tsx', 'src/utils.ts'],
           commands: ['npm install', 'npm test'],
           totalCost: 0.002
@@ -363,7 +363,7 @@ describe('SimplifiedSessionManager', () => {
         prompt: 'Recovery step',
         output: {
           result: 'Recovered',
-          error: null,
+          error: undefined,
           files: ['src/fix.ts'],
           commands: ['npm run build'],
           totalCost: 0.003
@@ -420,7 +420,7 @@ describe('SimplifiedSessionManager', () => {
 
   describe('listSessions', () => {
     test('should list all sessions', async () => {
-      mockFs.readdir.mockResolvedValue(['session1.json', 'session2.json', 'not-json.txt']);
+      mockFs.readdir.mockResolvedValue(['session1.json', 'session2.json', 'not-json.txt'] as any);
       
       const sessionData1 = {
         id: 'session1',
@@ -449,7 +449,7 @@ describe('SimplifiedSessionManager', () => {
     });
 
     test('should handle corrupted session files gracefully', async () => {
-      mockFs.readdir.mockResolvedValue(['good.json', 'corrupted.json']);
+      mockFs.readdir.mockResolvedValue(['good.json', 'corrupted.json'] as any);
       
       mockFs.readFile
         .mockResolvedValueOnce(JSON.stringify({ id: 'good', startTime: new Date().toISOString(), initialPrompt: 'Good task', status: 'completed' }))
@@ -483,7 +483,7 @@ describe('SimplifiedSessionManager', () => {
             prompt: 'Create component structure',
             output: {
               result: 'Component created',
-              error: null,
+              error: undefined,
               files: ['src/Component.tsx'],
               commands: ['mkdir src'],
               totalCost: 0.002
@@ -498,7 +498,7 @@ describe('SimplifiedSessionManager', () => {
             prompt: 'Add styling',
             output: {
               result: 'Styles added',
-              error: null,
+              error: undefined,
               files: ['src/Component.module.css'],
               commands: ['touch src/Component.module.css'],
               totalCost: 0.001
@@ -599,7 +599,7 @@ describe('SimplifiedSessionManager', () => {
     test('should display session history to console', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
       
-      mockFs.readdir.mockResolvedValue(['session1.json']);
+      mockFs.readdir.mockResolvedValue(['session1.json'] as any);
       mockFs.readFile.mockResolvedValue(JSON.stringify({
         id: 'session1',
         startTime: new Date('2024-01-01').toISOString(),

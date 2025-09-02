@@ -1,37 +1,69 @@
 // Mock for chalk module with chainable methods
-const createChainableMethod = (baseFunc) => {
-  const func = baseFunc;
+const createColorMethod = (colorName) => {
+  const colorFunc = (str) => str; // Just return the string unchanged for tests
   
-  // Add chainable methods
-  func.red = (str) => str;
-  func.green = (str) => str;
-  func.blue = (str) => str;
-  func.yellow = (str) => str;
-  func.magenta = (str) => str;
-  func.cyan = (str) => str;
-  func.white = (str) => str;
-  func.gray = (str) => str;
-  func.bold = createChainableMethod((str) => str);
-  func.dim = createChainableMethod((str) => str);
-  func.italic = createChainableMethod((str) => str);
-  func.underline = createChainableMethod((str) => str);
+  // Add chainable color methods
+  colorFunc.red = (str) => str;
+  colorFunc.green = (str) => str;
+  colorFunc.blue = (str) => str;
+  colorFunc.yellow = (str) => str;
+  colorFunc.magenta = (str) => str;
+  colorFunc.cyan = (str) => str;
+  colorFunc.white = (str) => str;
+  colorFunc.gray = (str) => str;
+  colorFunc.grey = (str) => str;
   
-  return func;
+  // Add chainable style methods
+  colorFunc.bold = (str) => str;
+  colorFunc.dim = (str) => str;
+  colorFunc.italic = (str) => str;
+  colorFunc.underline = (str) => str;
+  colorFunc.strikethrough = (str) => str;
+  colorFunc.inverse = (str) => str;
+  
+  return colorFunc;
 };
 
 const chalk = {
-  red: createChainableMethod((str) => str),
-  green: createChainableMethod((str) => str),
-  blue: createChainableMethod((str) => str),
-  yellow: createChainableMethod((str) => str),
-  magenta: createChainableMethod((str) => str),
-  cyan: createChainableMethod((str) => str),
-  white: createChainableMethod((str) => str),
-  gray: createChainableMethod((str) => str),
-  bold: createChainableMethod((str) => str),
-  dim: createChainableMethod((str) => str),
-  italic: createChainableMethod((str) => str),
-  underline: createChainableMethod((str) => str)
+  // Color methods
+  red: createColorMethod('red'),
+  green: createColorMethod('green'),
+  blue: createColorMethod('blue'),
+  yellow: createColorMethod('yellow'),
+  magenta: createColorMethod('magenta'),
+  cyan: createColorMethod('cyan'),
+  white: createColorMethod('white'),
+  gray: createColorMethod('gray'),
+  grey: createColorMethod('grey'),
+  black: createColorMethod('black'),
+  
+  // Style methods  
+  bold: createColorMethod('bold'),
+  dim: createColorMethod('dim'),
+  italic: createColorMethod('italic'),
+  underline: createColorMethod('underline'),
+  strikethrough: createColorMethod('strikethrough'),
+  inverse: createColorMethod('inverse'),
+  
+  // Background colors
+  bgRed: createColorMethod('bgRed'),
+  bgGreen: createColorMethod('bgGreen'),
+  bgBlue: createColorMethod('bgBlue'),
+  bgYellow: createColorMethod('bgYellow'),
+  bgMagenta: createColorMethod('bgMagenta'),
+  bgCyan: createColorMethod('bgCyan'),
+  bgWhite: createColorMethod('bgWhite'),
+  bgBlack: createColorMethod('bgBlack'),
+  
+  // Bright colors
+  redBright: createColorMethod('redBright'),
+  greenBright: createColorMethod('greenBright'),
+  blueBright: createColorMethod('blueBright'),
+  yellowBright: createColorMethod('yellowBright'),
+  magentaBright: createColorMethod('magentaBright'),
+  cyanBright: createColorMethod('cyanBright'),
+  whiteBright: createColorMethod('whiteBright'),
+  grayBright: createColorMethod('grayBright')
 };
 
 module.exports = chalk;

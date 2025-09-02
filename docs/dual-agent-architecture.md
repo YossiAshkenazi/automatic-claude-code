@@ -1,50 +1,50 @@
-# PTY-Enhanced Dual-Agent Architecture Guide (v1.2.0)
+# SDK-Based Dual-Agent Architecture Guide (v2.0.0)
 
 ## Overview
 
-The Automatic Claude Code dual-agent system represents a revolutionary approach to AI-assisted development, now enhanced with PTY-based Claude Code control. By employing specialized Manager and Worker agents operating through interactive PTY sessions, complex development tasks are handled with unprecedented sophistication, reliability, and context preservation.
+The Automatic Claude Code dual-agent system represents a revolutionary approach to AI-assisted development, now streamlined with SDK-based Claude Code integration. By employing specialized Manager and Worker agents operating through direct Claude CLI execution, complex development tasks are handled with unprecedented sophistication, reliability, and simplified architecture.
 
-## PTY Architecture Integration (v1.2.0)
+## SDK Architecture Integration (v2.0.0)
 
-### PTY-Enhanced Agent Communication
+### SDK-Based Agent Communication
 
-**Interactive Session Management**:
-- Both Manager and Worker agents use dedicated PTY sessions
-- Real-time context preservation across interactions
-- Enhanced error recovery through session persistence
-- Cross-platform OAuth authentication (Windows/macOS/Linux)
+**Direct CLI Integration**:
+- Both Manager and Worker agents use Claude CLI through SDK
+- Context preservation through session management
+- Enhanced error recovery through SDK error handling
+- Cross-platform compatibility through Claude CLI
 
-**Stream Processing**:
-- Advanced JSON detection in real-time streams
-- ANSI code handling for proper output formatting
+**Response Processing**:
+- JSON response parsing from Claude CLI
 - Tool usage extraction and categorization
 - Enhanced error message parsing and context preservation
+- Simplified output processing without ANSI complexities
 
 ```
-[PTY Manager Session] - Strategic Planning & Oversight
-├── OAuth Token: Automatically extracted from system
-├── Session Type: Interactive PTY (no -p flag)
-├── Context: Maintained across planning iterations
-└── Output: Real-time JSON stream processing
+[SDK Manager Session] - Strategic Planning & Oversight
+├── Authentication: Via Claude CLI setup
+├── Execution: Direct Claude CLI commands
+├── Context: Maintained through session tracking
+└── Output: Parsed Claude CLI responses
 
-[PTY Worker Session] - Task Execution & Implementation  
-├── OAuth Token: Shared from Manager or independently extracted
-├── Session Type: Interactive PTY with tool execution
+[SDK Worker Session] - Task Execution & Implementation  
+├── Authentication: Shared Claude CLI setup
+├── Execution: Direct Claude CLI with tool execution
 ├── Context: Task-specific with Manager coordination
-└── Output: Advanced stream parsing with ANSI handling
+└── Output: Structured response processing
 ```
 
 ## Agent Roles & Responsibilities
 
-### PTY Manager Agent (Strategic Coordinator)
+### SDK Manager Agent (Strategic Coordinator)
 
-**Primary Role**: Strategic planning, oversight, and quality assurance through interactive sessions
+**Primary Role**: Strategic planning, oversight, and quality assurance through SDK integration
 
-**Enhanced PTY Capabilities**:
-- **Interactive Strategic Planning**: Uses PTY sessions for deeper context analysis
-- **Real-time Coordination**: Stream-based communication with Worker agent
-- **Context Preservation**: PTY sessions maintain strategic context across iterations
-- **OAuth Integration**: Seamless subscription authentication without API keys
+**Enhanced SDK Capabilities**:
+- **Direct CLI Strategic Planning**: Uses Claude CLI for strategic analysis
+- **Streamlined Coordination**: Response-based communication with Worker agent
+- **Context Preservation**: Session tracking maintains strategic context across iterations
+- **Simplified Authentication**: Leverages existing Claude CLI authentication setup
 
 **Key Responsibilities**:
 - **Task Decomposition**: Breaks complex user requests into manageable work items

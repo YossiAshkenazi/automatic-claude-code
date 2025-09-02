@@ -1,4 +1,79 @@
-# Troubleshooting Guide - Dual-Agent System
+# Troubleshooting Guide - SDK-Based Dual-Agent System
+
+## SDK Integration Issues (v2.0.0)
+
+### Claude CLI Not Found
+
+#### Symptom: "Claude CLI not detected" or "Command 'claude' not found"
+```
+Error: Claude CLI not found in PATH
+SDK initialization failed
+Cannot locate @anthropic-ai/claude-code
+```
+
+**Root Cause:**
+Claude CLI is not installed or not in system PATH.
+
+**Solution:**
+1. **Install Claude CLI globally:**
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   ```
+
+2. **Verify installation:**
+   ```bash
+   claude --version
+   which claude  # Unix/Linux/macOS
+   where claude  # Windows
+   ```
+
+3. **Check PATH if needed:**
+   ```bash
+   echo $PATH | grep npm  # Should show npm global bin directory
+   ```
+
+4. **Test ACC integration:**
+   ```bash
+   acc --verify-claude-cli
+   ```
+
+### SDK Communication Errors
+
+#### Symptom: "SDK execution failed" or "Process spawn failed"
+```
+Error: spawn claude ENOENT
+SDK communication timeout
+Process exited with code 1
+```
+
+**Root Cause:**
+SDK cannot communicate with Claude CLI process.
+
+**Solution:**
+1. **Debug SDK communication:**
+   ```bash
+   DEBUG=sdk:* acc run "test" -i 1 -v
+   ```
+
+2. **Test Claude CLI directly:**
+   ```bash
+   claude run "create a test file" -i 1
+   ```
+
+3. **Check system resources:**
+   ```bash
+   # Monitor resource usage during execution
+   top | grep -E "(node|claude)"
+   ```
+
+4. **Increase timeout if needed:**
+   ```bash
+   acc run "task" --sdk-timeout 600000 -i 3
+   ```
+
+## Legacy Issues (Pre-v2.0.0)
+
+**Note**: The following issues apply to legacy PTY and browser authentication systems that have been removed in v2.0.0.
 
 ## Common Issues and Solutions
 

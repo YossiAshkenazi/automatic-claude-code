@@ -76,7 +76,7 @@ describe('SessionManager', () => {
       await sessionManager.addIteration({
         iteration: 1,
         prompt: 'test prompt',
-        output: { content: 'test output', files: [], commands: [] },
+        output: { result: 'test output', files: [], commands: [] },
         exitCode: 0,
         duration: 1500
       });
@@ -155,7 +155,7 @@ describe('SessionManager', () => {
         iteration: 1,
         prompt: 'do something',
         output: { 
-          content: 'done',
+          result: 'done',
           files: ['/test/file.js'],
           commands: ['npm install'],
           totalCost: 0.05

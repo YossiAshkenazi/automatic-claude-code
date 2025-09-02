@@ -42,31 +42,34 @@ docker run --rm automatic-claude-code --version
 # Create alias for easy usage
 echo 'alias acc-docker="docker run -it --rm -v \"$(pwd):/workspace:ro\" -v \"$HOME/.claude:/home/nodejs/.claude:ro\" automatic-claude-code"' >> ~/.bashrc
 source ~/.bashrc
+
+# Note: Claude CLI must be available in Docker container
+# See Docker documentation for Claude CLI integration
 ```
 
-### 2. Your First PTY-Enhanced Dual-Agent Session
+### 2. Your First SDK-Based Dual-Agent Session
 
-#### Test Basic PTY Functionality First
+#### Test Basic SDK Integration First
 ```bash
-# Verify Claude CLI is working with subscription
+# Verify Claude CLI is working
 claude --version
-claude "hello world"  # Should work without API key
+claude run "create a test file" -i 1  # Test basic Claude CLI functionality
 
-# Test PTY mode with simple task
-acc run "create a hello.txt file" --use-pty -i 1 -v
+# Test ACC SDK integration with simple task
+acc run "create a hello.txt file" -i 1 -v
 ```
 
-#### Start with PTY Dual-Agent Mode
+#### Start with SDK Dual-Agent Mode
 ```bash
-# Enable PTY dual-agent mode (default behavior)
+# Enable dual-agent mode with SDK integration (default behavior)
 acc run "create a user authentication system with password hashing and JWT tokens" --dual-agent -i 5 -v
 ```
 
-**What you'll see with PTY enhancement:**
-- **OAuth Token Extraction**: Automatic credential detection from your system
-- **Interactive Sessions**: Manager Agent uses PTY for deeper strategic analysis
-- **Real-time Streams**: Live JSON parsing and ANSI handling
-- **Enhanced Coordination**: Worker Agent leverages interactive Claude sessions
+**What you'll see with SDK integration:**
+- **Direct Claude CLI Integration**: Seamless execution through Claude CLI
+- **Simplified Authentication**: Uses your existing Claude CLI setup
+- **Clean Architecture**: No complex PTY or browser session management
+- **Enhanced Reliability**: Direct process execution with robust error handling
 - **Better Context**: PTY sessions maintain context better than headless mode
 - **Subscription Integration**: No API key required with Claude Pro/Team
 

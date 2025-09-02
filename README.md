@@ -1,8 +1,8 @@
-# Automatic Claude Code (v1.2.0)
+# Automatic Claude Code (v2.0.0)
 
 A powerful dual-agent system that revolutionizes AI-assisted development through coordinated Claude Code automation. Features a Manager-Worker architecture where specialized agents collaborate to tackle complex development tasks with unprecedented sophistication and reliability.
 
-> 🎉 **Major Update v1.2.0**: ACC now uses Claude's Browser-based authentication SDK! No API keys required - works directly with your browser's Claude Pro/Team session. Interactive session control with real-time stream processing.
+> 🎉 **Major Update v2.0.0**: ACC now uses pure SDK integration! Simplified architecture eliminates complex browser authentication and PTY systems. Direct integration with Claude Code CLI for maximum reliability and performance.
 
 ## ✅ Build Status (Verified September 1, 2025)
 
@@ -10,12 +10,12 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 |-----------|--------|---------|
 | **TypeScript Compilation** | ✅ PASSED | Zero errors, clean build |
 | **CLI Functionality** | ✅ OPERATIONAL | All commands working (run, dual, examples, monitor) |
-| **SDK Integration** | ✅ ACTIVE | Browser authentication + CLI fallback |
+| **SDK Integration** | ✅ ACTIVE | Direct Claude CLI integration |
 | **Dual-Agent System** | ✅ FUNCTIONAL | Manager-Worker coordination operational |
 | **Monitoring Dashboard** | ✅ HEALTHY | WebSocket active, real-time data flow |
 | **Error Handling** | ✅ ROBUST | Comprehensive fallbacks and user guidance |
 
-**Last Tested**: 2025-09-01 | **Version**: 1.2.0 | **Branch**: dashboard-ui-enhancement
+**Last Tested**: 2025-09-02 | **Version**: 2.0.0 | **Branch**: dashboard-ui-enhancement
 
 ## Features
 
@@ -28,15 +28,15 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 - 🔄 **Adaptive Workflows**: Dynamic strategy adjustment based on progress
 
 ### 🚀 Core Capabilities
-- 🌐 **Browser-Based Authentication**: Direct integration with Claude Pro/Team via browser session
-- 🔄 **Interactive Session Control**: Real-time communication with Claude Code through browser SDK
-- 🎛️ **Dual Execution Modes**: Browser mode (default, subscription-compatible) and API fallback
-- 📊 **Advanced Session Management**: Persistent browser sessions with automatic token refresh
+- 🔧 **SDK Integration**: Direct integration with Claude Code CLI through Anthropic SDK
+- 🔄 **Streamlined Authentication**: Leverages Claude CLI's authentication seamlessly
+- 🎛️ **Simplified Architecture**: No complex browser management or PTY systems
+- 📊 **Advanced Session Management**: Persistent sessions with Claude CLI integration
 - 🎯 **Smart Prompt Building**: Context-aware prompts generated from session state
-- 🛠️ **Enhanced Error Recovery**: Stream parsing with browser disconnect handling
+- 🛠️ **Enhanced Error Recovery**: Robust error handling with SDK fallbacks
 - 📈 **Progress Tracking**: Real-time monitoring of development progress
-- 💾 **Session History**: Complete session persistence with browser authentication
-- ⚙️ **Configurable**: Customizable settings with browser-first authentication
+- 💾 **Session History**: Complete session persistence with SDK integration
+- ⚙️ **Configurable**: Customizable settings optimized for SDK architecture
 
 ### 🖥️ Enhanced Monitoring Dashboard (Updated Sep 1, 2025)
 - ✅ **Data Consistency**: Real-time dynamic session counts (fixed hardcoded values)
@@ -121,76 +121,70 @@ npm install -g automatic-claude-code
 
 ## Authentication Requirements
 
-### 🎉 New Browser-Based Authentication (v1.2.0)
+### 🎉 Simplified SDK Authentication (v2.0.0)
 
-ACC now supports **browser-based authentication** through Claude's SDK, eliminating API key requirements entirely!
+ACC now uses **direct SDK integration** with Claude Code CLI, providing the simplest and most reliable authentication approach!
 
-#### Execution Modes Available
+#### Authentication Approach
 
-**1. Browser Mode (Default & Recommended)**:
-- ✅ Works with Claude Pro/Team subscriptions
-- ✅ No API key required
-- ✅ Direct browser session integration
-- ✅ Interactive Claude Code sessions
-- ✅ Automatic session management and token refresh
-- ✅ Real-time stream processing
-- ✅ Cross-platform browser support
+**SDK Integration (Default & Only)**:
+- ✅ Works with any Claude Code CLI authentication method
+- ✅ Leverages your existing Claude CLI setup
+- ✅ No complex browser session management
+- ✅ No PTY process management overhead
+- ✅ Direct Claude Code execution
+- ✅ Automatic authentication handling
+- ✅ Cross-platform compatibility
 
-**2. API Mode (Fallback)**:
-- ⚠️ Requires API credits from console.anthropic.com
-- ⚠️ API key authentication only
-- ⚠️ Fallback for headless environments
+#### Quick Setup (All Users)
 
-#### Quick Setup (Most Users)
-
-**For Claude Subscribers** (Recommended):
+**Standard Setup** (Recommended):
 ```bash
-# 1. Ensure you're logged into Claude via browser
-# Visit https://claude.ai and sign in with Pro/Team account
+# 1. Install Claude CLI if not already installed
+npm install -g @anthropic-ai/claude-code
 
 # 2. Verify Claude CLI is working
 claude --version
 
-# 3. Use ACC with browser mode (default)
+# 3. Use ACC with SDK integration (default and only mode)
 acc run "create a test file" --dual-agent -i 2 -v
-# ACC will automatically use your browser's Claude session
+# ACC automatically uses your Claude CLI setup
 ```
 
-**Advanced Setup Options**:
+**Verification Options**:
 ```bash
-# Force browser mode (default behavior)
-acc run "task" --browser-auth --dual-agent
+# Verify Claude CLI installation
+acc --verify-claude-cli
 
-# Force API mode (requires API key)
-acc run "task" --api-auth -i 3
+# Check SDK integration status
+acc --sdk-status
 
-# Browser session timeout control
-acc run "task" --dual-agent --session-timeout 600
+# Debug SDK communication
+DEBUG=sdk:* acc run "task" --dual-agent -v
 ```
 
-#### Browser Session Integration
+#### SDK Integration Details
 
-ACC automatically connects to your browser's Claude session:
-- **Chrome/Edge**: Browser extension integration
-- **Firefox**: WebDriver connection
-- **Safari**: AppleScript automation (macOS)
-- **Fallback**: Manual session token extraction
+ACC seamlessly integrates with Claude Code CLI:
+- **Direct Execution**: Runs Claude Code CLI commands directly
+- **Authentication Passthrough**: Uses your existing Claude CLI authentication
+- **Session Management**: Maintains session state through SDK
+- **Error Handling**: Comprehensive error handling and recovery
 
-No manual configuration required for most users!
+No complex configuration required - works with any Claude CLI setup!
 
-#### API Key Setup (Only if needed)
+#### Prerequisites
 
-If you need API mode for headless environments:
+Ensure you have Claude CLI properly set up:
 ```bash
-# Get API key from console.anthropic.com
-# Set environment variable:
-export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+# Install Claude CLI globally
+npm install -g @anthropic-ai/claude-code
 
-# Or Windows PowerShell:
-$env:ANTHROPIC_API_KEY = "sk-ant-your-key-here"
+# Verify it's working (should show version)
+claude --version
 
-# Use with API mode
-acc run "task" --api-auth -i 3
+# If Claude CLI needs authentication, follow its setup instructions
+# ACC will use whatever authentication Claude CLI is configured with
 ```
 
 ## Monitoring Setup
@@ -278,11 +272,10 @@ Core Options:
   -c, --continue-on-error     Continue loop even if errors occur
   -v, --verbose              Show detailed output
 
-PTY Mode Options (NEW):
-  --use-pty                  Force PTY mode (default for dual-agent)
-  --no-pty                   Force headless mode (requires API key)
-  --max-pty-sessions <n>     Maximum concurrent PTY sessions (default: 28)
-  --pty-timeout <ms>         PTY session timeout (default: 300000)
+SDK Integration Options:
+  --sdk-timeout <ms>         SDK operation timeout (default: 300000)
+  --sdk-retries <n>          Maximum SDK retry attempts (default: 3)
+  --verify-claude-cli        Verify Claude CLI installation
 
 Dual-Agent Options:
   --dual-agent               Enable dual-agent mode with Manager-Worker architecture
@@ -302,16 +295,16 @@ acc examples
 # Start monitoring server (optional, in separate terminal)
 cd dual-agent-monitor && pnpm run dev
 
-# Try dual-agent mode with PTY (subscription users)
+# Try dual-agent mode with SDK integration
 acc run "implement user authentication system" --dual-agent -i 5 -v
-# ACC automatically uses PTY mode with your subscription credentials
+# ACC automatically uses your Claude CLI setup
 # Open http://localhost:6011 to watch agent coordination in real-time
 
-# Use single-agent PTY mode for simple tasks
+# Use single-agent mode for simple tasks
 acc run "add unit tests for all functions in src/utils.ts" -i 3 -v
 
-# Force headless mode if you have API key setup
-acc run "simple task" --no-pty -i 2 -v
+# Verify SDK integration status
+acc --verify-claude-cli
 
 # Check what happened in your last session
 acc session
@@ -422,42 +415,35 @@ acc logs --tail                # Watch logs in real-time
 
 ## How It Works
 
-### 🎆 PTY-Based Execution (New Architecture)
+### 🔧 SDK-Based Execution (Streamlined Architecture)
 
-**PTY Session Management**:
-1. **OAuth Token Extraction**: Automatically extracts credentials from system stores
-2. **PTY Session Creation**: Creates interactive Claude sessions using node-pty
-3. **Real-time Stream Processing**: Advanced JSON stream parsing with ANSI handling
-4. **Session Pool Management**: Manages up to 28 concurrent sessions with automatic cleanup
-5. **Cross-platform Compatibility**: Windows ConPTY, macOS/Linux PTY support
+**SDK Integration Process**:
+1. **Claude CLI Detection**: Automatically detects and validates Claude CLI installation
+2. **Direct Command Execution**: Executes Claude Code commands through SDK interface
+3. **Response Processing**: Processes Claude Code output with robust parsing
+4. **Session Management**: Maintains session state through simplified session tracking
+5. **Cross-platform Compatibility**: Works wherever Claude CLI works
 
-### 🤖 Dual-Agent Mode (Enhanced with PTY)
+### 🤖 Dual-Agent Mode (SDK-Powered)
 
-1. **PTY-Based Task Analysis**: Manager Agent uses interactive sessions for deeper analysis
+1. **SDK-Based Task Analysis**: Manager Agent uses Claude CLI for strategic analysis
 2. **Task Decomposition**: Breaks complex goals into manageable work items with clear acceptance criteria
 3. **Work Assignment**: Manager assigns specific tasks to Worker Agent with detailed context
-4. **PTY Coordinated Execution**: 
-   - Worker performs focused implementation using interactive Claude sessions
-   - Manager monitors progress through real-time stream processing
-   - Quality gates ensure deliverables meet standards with enhanced feedback
-   - Both agents leverage subscription authentication seamlessly
+4. **SDK Coordinated Execution**: 
+   - Worker performs focused implementation through Claude CLI
+   - Manager monitors progress through SDK responses
+   - Quality gates ensure deliverables meet standards
+   - Both agents use the same reliable Claude CLI integration
 5. **Integration & Validation**: Manager validates all work items integrate properly
 6. **Adaptive Planning**: Strategy adjusts based on progress and discoveries
 
-### ⚡ Single-Agent Mode (PTY + Headless Support)
+### ⚡ Single-Agent Mode (SDK Integration)
 
-**PTY Mode (Default)**:
 1. **Initial Prompt**: You provide an initial task or goal
-2. **PTY Session Creation**: Creates interactive Claude session with subscription auth
-3. **Real-time Output Analysis**: Parses streaming output with advanced JSON detection
-4. **Prompt Generation**: Automatically creates contextual prompts based on stream data
+2. **SDK Execution**: Executes prompt through Claude CLI via SDK
+3. **Response Analysis**: Parses Claude Code output for completion status
+4. **Prompt Generation**: Creates contextual follow-up prompts based on results
 5. **Loop Continuation**: Repeats with session persistence until task completion
-
-**Headless Mode (Fallback)**:
-1. **API Key Validation**: Verifies API key availability for headless operation
-2. **Claude Code Execution**: Runs Claude Code with `-p` flag and API authentication
-3. **Output Analysis**: Traditional output parsing for compatibility
-4. **Loop Continuation**: Repeats until task complete or max iterations reached
 
 ## Configuration
 
@@ -466,17 +452,13 @@ Configuration file is stored at `~/.automatic-claude-code/config.json`:
 ```json
 {
   "defaultModel": "sonnet",
-  "ptyMode": {
+  "sdkIntegration": {
     "enabled": true,
-    "maxSessions": 28,
-    "sessionTimeout": 300000,
+    "timeout": 300000,
+    "retryAttempts": 3,
     "autoCleanup": true,
-    "oauthTokenExtraction": true,
-    "fallbackToHeadless": true,
-    "bufferSize": 8192,
-    "streamProcessing": {
+    "outputParsing": {
       "enableJsonDetection": true,
-      "stripAnsiCodes": true,
       "parseToolUsage": true,
       "extractErrorMessages": true
     }
@@ -489,8 +471,7 @@ Configuration file is stored at `~/.automatic-claude-code/config.json`:
     "qualityGateThreshold": 0.8,
     "maxConcurrentTasks": 2,
     "enableCrossValidation": true,
-    "communicationTimeout": 30000,
-    "usePTY": true
+    "communicationTimeout": 30000
   },
   "maxIterations": 10,
   "continueOnError": false,
@@ -610,22 +591,22 @@ Sessions are saved in `.claude-sessions/` directory with comprehensive dual-agen
 
 ```
 src/
-├── index.ts           # Main application entry point with PTY support
-├── config.ts          # Configuration management with PTY settings
-├── services/          # Core services (NEW)
-│   ├── claudeExecutor.ts     # Centralized execution service with PTY support
-│   └── ptyController.ts      # PTY session management and OAuth integration
+├── index.ts           # Main application entry point with SDK support
+├── config.ts          # Configuration management
+├── services/          # Core services
+│   ├── claudeExecutor.ts     # Legacy execution service
+│   └── sdkClaudeExecutor.ts  # Primary SDK integration service
 ├── agents/            # Dual-agent system
-│   ├── agentCoordinator.ts   # PTY-enhanced agent communication
-│   ├── managerAgent.ts       # Strategic planning with interactive sessions
-│   ├── workerAgent.ts        # Task execution using PTY
+│   ├── agentCoordinator.ts   # SDK-enhanced agent communication
+│   ├── managerAgent.ts       # Strategic planning with SDK integration
+│   ├── workerAgent.ts        # Task execution using SDK
 │   └── agentTypes.ts         # Type definitions for agent communication
-├── sessionManager.ts  # Enhanced session tracking with OAuth support
-├── outputParser.ts    # Advanced stream processing with JSON detection
+├── sessionManager.ts  # Session tracking with SDK support
+├── outputParser.ts    # Output processing with JSON detection
 ├── promptBuilder.ts   # Agent-aware prompt generation
-├── claudeUtils.ts     # Claude Code utilities and OAuth handling
-├── logger.ts          # Structured logging with PTY session tracking
-└── tuiBrowser.ts     # Enhanced UI with PTY session insights
+├── claudeUtils.ts     # Claude Code utilities
+├── logger.ts          # Structured logging
+└── tuiBrowser.ts     # Enhanced UI
 ```
 
 ## Development
@@ -705,16 +686,16 @@ pnpm run monitor:status
 - **Coordination Timeouts**: Prevents agents from waiting indefinitely
 - **Task Isolation**: Failed work items don't affect other concurrent tasks
 
-### 🔒 Enhanced Safety (PTY Mode)
-- **PTY Session Isolation**: Each session runs in isolated PTY environment
-- **Automatic Session Cleanup**: Prevents resource leaks with up to 28 concurrent sessions
-- **OAuth Token Security**: Secure credential extraction without exposing API keys
-- **Stream Buffer Management**: Controlled memory usage with advanced stream processing
+### 🔒 Enhanced Safety (SDK Integration)
+- **SDK Process Isolation**: Each Claude CLI execution runs in isolated process
+- **Automatic Resource Cleanup**: Prevents resource leaks with proper cleanup
+- **Secure Authentication**: Uses Claude CLI's secure authentication without exposing credentials
+- **Controlled Memory Usage**: Efficient memory management through SDK
 - **Maximum iteration limits** to prevent infinite loops
-- **Session tracking** for audit and rollback with OAuth integration
+- **Session tracking** for audit and rollback
 - **Tool permission controls** with granular access
-- **Enhanced error detection and recovery** with JSON stream parsing
-- **Verbose logging** for debugging and transparency with PTY session details
+- **Enhanced error detection and recovery** with comprehensive error handling
+- **Verbose logging** for debugging and transparency
 - **Progress checkpoints** for safe interruption and resumption
 
 ### 🐳 Container Safety
@@ -764,71 +745,68 @@ docker-compose --env-file .env -f docker-compose.prod.yml up -d
 
 ## Troubleshooting Guide
 
-### Browser Authentication Issues
+### Claude CLI Integration Issues
 
-#### Browser Session Not Found
+#### Claude CLI Not Found
 ```bash
-# Check if you're logged into Claude
-# 1. Open https://claude.ai in your browser
-# 2. Ensure you're signed in with Pro/Team account
-# 3. Try refreshing the page
+# Install Claude CLI globally
+npm install -g @anthropic-ai/claude-code
 
-# Force browser session refresh
-acc run "test task" --refresh-session -i 1
+# Verify installation
+claude --version
 
-# Check browser compatibility
-acc --check-browser-support
+# Check ACC can find Claude CLI
+acc --verify-claude-cli
 ```
 
-#### Browser Popup Blocked
+#### Claude CLI Authentication Issues
 ```bash
-# Enable popups for claude.ai in your browser
-# Chrome: Settings > Privacy and security > Site Settings > Pop-ups
-# Firefox: Preferences > Privacy & Security > Permissions > Block pop-up windows
-# Edge: Settings > Cookies and site permissions > Pop-ups and redirects
+# Follow Claude CLI's authentication setup
+# This varies depending on your setup (API key, browser auth, etc.)
 
-# Alternative: Use manual token mode
-acc run "task" --manual-auth -i 3
+# Test Claude CLI directly
+claude --help
+
+# If Claude CLI works, ACC should work too
+acc run "test task" -i 1
 ```
 
-#### Session Expired/Invalid
+#### SDK Communication Errors
 ```bash
-# Clear stored session tokens
-acc --clear-session-cache
+# Debug SDK communication
+DEBUG=sdk:* acc run "test task" -i 1
 
-# Re-authenticate with browser
-acc run "test task" --force-reauth -i 1
+# Check SDK integration status
+acc --sdk-status
 
-# Check session status
-acc --session-status
+# Reinitialize SDK connection
+acc --reinit-sdk
 ```
 
-### Common SDK Authentication Problems
+### Common SDK Integration Problems
 
-#### Browser Not Launching
+#### Claude CLI Path Issues
 ```bash
-# Check default browser setting
-which google-chrome || which firefox || which safari
+# Check if Claude CLI is in PATH
+which claude
 
-# Specify browser explicitly
-acc run "task" --browser chrome --dual-agent -i 3
-acc run "task" --browser firefox --dual-agent -i 3
+# Add to PATH if needed (example for npm global installs)
+export PATH="$PATH:$(npm config get prefix)/bin"
 
-# Use headless browser mode
-acc run "task" --headless-browser --dual-agent -i 3
+# Verify ACC can find Claude CLI
+acc --verify-claude-cli
 ```
 
-#### WebDriver Connection Failed
+#### SDK Timeout Issues
 ```bash
-# Install/update browser drivers
-npm install -g chromedriver geckodriver
+# Increase SDK timeout for complex tasks
+acc run "complex task" --sdk-timeout 600000 --dual-agent -i 5
 
-# Check WebDriver path
-which chromedriver
-which geckodriver
+# Check system resources
+top | grep node
 
-# Use system WebDriver
-acc run "task" --system-webdriver --dual-agent -i 3
+# Reduce concurrent operations if needed
+acc run "task" --max-concurrent 1 --dual-agent -i 3
 ```
 
 #### Cross-Platform Issues
@@ -917,14 +895,14 @@ acc run "task" --proxy http://proxy:8080 --dual-agent -i 3
 acc run "task" --ignore-ssl-errors --dual-agent -i 3
 ```
 
-#### Fallback to API Mode
+#### Direct Claude CLI Usage Test
 ```bash
-# If browser mode fails, use API mode
-export ANTHROPIC_API_KEY="sk-ant-your-key-here"
-acc run "task" --api-auth --dual-agent -i 3
+# Test Claude CLI directly to isolate issues
+claude run "create a simple test file" -i 1
 
-# Test API connectivity
-acc --test-api-connection
+# If Claude CLI works but ACC doesn't, report an issue
+# Include debug output:
+DEBUG=* acc run "test task" -i 1 -v
 ```
 
 ### Performance Troubleshooting
@@ -941,11 +919,13 @@ acc run "task" --persistent-browser --dual-agent -i 3
 #### High Memory Usage
 ```bash
 # Monitor resource usage
-acc --resource-monitor &
-acc run "task" --dual-agent -i 5
+top | grep -E "(node|claude)"
 
-# Use lightweight browser mode
-acc run "task" --lightweight-browser --dual-agent -i 3
+# Reduce concurrent operations
+acc run "task" --max-concurrent 1 --dual-agent -i 3
+
+# Use shorter SDK timeouts
+acc run "task" --sdk-timeout 180000 --dual-agent -i 3
 ```
 
 ## Disclaimer

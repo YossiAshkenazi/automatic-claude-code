@@ -1,4 +1,5 @@
 import { Logger } from '../logger';
+import { SDKResponse, SDKResult } from '../types';
 // Temporarily disabled due to TS errors: import { BrowserSessionManager } from './browserSessionManager';
 
 // We'll dynamically import the SDK to handle cases where it might not be installed locally
@@ -11,7 +12,12 @@ export interface SDKClaudeOptions {
   verbose?: boolean;
   timeout?: number;
   allowedTools?: string;
+  enableSessionContinuity?: boolean;
+  maxTurns?: number;
 }
+
+// Alias for backward compatibility
+export type SDKExecutionOptions = SDKClaudeOptions;
 
 /**
  * SDK-based Claude executor using the official TypeScript SDK
@@ -20,6 +26,8 @@ export interface SDKClaudeOptions {
 export class SDKClaudeExecutor {
   private logger: Logger;
   private isSDKAvailable: boolean = false;
+  private activeSessions: Map<string, any> = new Map(); // Track active SDK sessions
+  private sessionHistory: Map<string, SDKResponse[]> = new Map(); // Track session message history
   // private browserSessionManager: BrowserSessionManager;
 
   constructor(logger: Logger) {
@@ -230,7 +238,7 @@ export class SDKClaudeExecutor {
   async executeWithSDK(
     prompt: string,
     options: SDKClaudeOptions = {}
-  ): Promise<{ output: string; exitCode: number }> {
+  ): Promise<SDKResult> {
     // Ensure SDK is loaded
     if (!this.isSDKAvailable) {
       await this.initializeSDK();
@@ -373,9 +381,337 @@ export class SDKClaudeExecutor {
   }
 
   /**
+   * Creates an error result object for enhanced SDK integration
+   */
+  private createErrorResult(
+    errorMessage: string,
+    messages: SDKResponse[],
+    sessionId: string,
+    executionTime: number
+  ): SDKResult {
+    return {
+      output: `Execution error: ${errorMessage}`,
+      exitCode: 1,
+      sessionId,
+      messages: [
+        ...messages,
+        {
+          type: 'error',
+          error: errorMessage,
+          timestamp: new Date()
+        }
+      ],
+      hasError: true,
+      executionTime
+    };
+  }
+
+  /**
+   * Generates a unique session ID for autopilot integration
+   */
+  private generateSessionId(): string {
+    return `sdk-session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Get session history for a given session ID (autopilot support)
+   */
+  getSessionHistory(sessionId: string): SDKResponse[] {
+    return this.sessionHistory.get(sessionId) || [];
+  }
+
+  /**
+   * Clear session data (for cleanup)
+   */
+  clearSession(sessionId: string): void {
+    this.activeSessions.delete(sessionId);
+    this.sessionHistory.delete(sessionId);
+    this.logger.debug(`Cleared session data for: ${sessionId}`);
+  }
+
+  /**
+   * Get all active session IDs
+   */
+  getActiveSessionIds(): string[] {
+    return Array.from(this.activeSessions.keys());
+  }
+
+  /**
+   * Check if a session is currently active
+   */
+  isSessionActive(sessionId: string): boolean {
+    return this.activeSessions.has(sessionId);
+  }
+
+  /**
    * Check if SDK is available
    */
   isAvailable(): boolean {
     return this.isSDKAvailable;
+  }
+
+  /**
+   * Refresh browser session - useful for authentication issues
+   */
+  async refreshBrowserSession(): Promise<void> {
+    try {
+      await this.browserSessionManager.resetBrowserSessions();
+      this.logger.info('Browser sessions refreshed successfully');
+    } catch (error) {
+      this.logger.warning('Failed to refresh browser sessions', { error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Get detailed SDK status for diagnostics
+   */
+  async getSDKStatus(): Promise<{
+    sdkAvailable: boolean;
+    browserAuth: any;
+    circuitBreakerOpen: boolean;
+    executionStats: {
+      attempts: number;
+      failures: number;
+      successRate: number;
+    };
+  }> {
+    const authResult = await this.checkBrowserAuthentication();
+    
+    return {
+      sdkAvailable: this.isSDKAvailable,
+      browserAuth: authResult,
+      circuitBreakerOpen: this.circuitBreakerOpen,
+      executionStats: {
+        attempts: this.executionAttempts,
+        failures: this.failureCount,
+        successRate: this.executionAttempts > 0 ? Math.round(((this.executionAttempts - this.failureCount) / this.executionAttempts) * 100) : 0
+      }
+    };
+  }
+
+  /**
+   * Reset execution statistics and circuit breaker
+   */
+  resetStats(): void {
+    this.executionAttempts = 0;
+    this.failureCount = 0;
+    this.circuitBreakerOpen = false;
+    this.lastFailureTime = 0;
+    this.logger.debug('SDK executor statistics reset');
+  }
+
+  /**
+   * Record successful execution for circuit breaker logic
+   */
+  private recordSuccess(): void {
+    this.failureCount = 0;
+    this.circuitBreakerOpen = false;
+  }
+
+  /**
+   * Record failed execution for circuit breaker logic
+   */
+  private recordFailure(): void {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+    
+    // Open circuit breaker after 5 consecutive failures
+    if (this.failureCount >= 5) {
+      this.circuitBreakerOpen = true;
+      this.logger.warning(`SDK circuit breaker opened after ${this.failureCount} failures`);
+    }
+  }
+
+  /**
+   * Determine if execution should be retried
+   */
+  private shouldRetry(error: any, attempt: number): boolean {
+    if (attempt >= this.maxRetries) return false;
+    if (this.circuitBreakerOpen) return false;
+    
+    const errorMessage = error?.message?.toLowerCase() || '';
+    
+    // Don't retry installation or authentication errors
+    if (errorMessage.includes('not installed') || 
+        errorMessage.includes('api key') ||
+        errorMessage.includes('unauthorized')) {
+      return false;
+    }
+    
+    // Retry network, timeout, and temporary errors
+    if (errorMessage.includes('timeout') ||
+        errorMessage.includes('network') ||
+        errorMessage.includes('connection') ||
+        errorMessage.includes('temporary')) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Enhance error with context and user guidance
+   */
+  private enhanceError(error: any, context: any): Error {
+    const originalMessage = error?.message || 'Unknown error';
+    
+    let enhancedMessage = `SDK Execution Failed: ${originalMessage}`;
+    
+    if (context.browserUsed) {
+      enhancedMessage += `\nBrowser used: ${context.browserUsed}`;
+    }
+    
+    if (context.attempt > 1) {
+      enhancedMessage += `\nFailed after ${context.attempt} attempts`;
+    }
+    
+    // Add troubleshooting suggestions
+    if (originalMessage.toLowerCase().includes('authentication')) {
+      enhancedMessage += '\n\nTroubleshooting:';
+      enhancedMessage += '\n1. Ensure you are logged into Claude in your browser';
+      enhancedMessage += '\n2. Try refreshing the Claude tab';
+      enhancedMessage += '\n3. Clear browser cache if issues persist';
+    } else if (originalMessage.toLowerCase().includes('timeout')) {
+      enhancedMessage += '\n\nTroubleshooting:';
+      enhancedMessage += '\n1. Try a simpler task first';
+      enhancedMessage += '\n2. Increase timeout with --timeout option';
+      enhancedMessage += '\n3. Check your internet connection';
+    }
+    
+    const enhancedError = new Error(enhancedMessage);
+    enhancedError.name = error?.name || 'SDKExecutionError';
+    enhancedError.stack = error?.stack;
+    
+    return enhancedError;
+  }
+
+  /**
+   * Delay helper for retry logic
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Execute multiple iterations (for autopilot mode)
+   */
+  async executeAutopilot(
+    initialPrompt: string,
+    options: SDKClaudeOptions & { maxIterations?: number }
+  ): Promise<{
+    results: SDKExecutionResult[];
+    totalTokens: number;
+    totalDuration: number;
+    success: boolean;
+  }> {
+    const maxIterations = options.maxIterations || 10;
+    const results: SDKExecutionResult[] = [];
+    let totalTokens = 0;
+    let totalDuration = 0;
+    let currentPrompt = initialPrompt;
+    let sessionId = options.sessionId;
+    
+    this.logger.info(`Starting SDK autopilot mode with max ${maxIterations} iterations`);
+    
+    for (let i = 0; i < maxIterations; i++) {
+      this.logger.debug(`Autopilot iteration ${i + 1}/${maxIterations}`);
+      
+      try {
+        const result = await this.executeWithSDK(currentPrompt, {
+          ...options,
+          sessionId
+        });
+        
+        results.push(result);
+        totalTokens += result.tokensUsed || 0;
+        totalDuration += result.duration || 0;
+        sessionId = result.sessionId || sessionId;
+        
+        // Check if task is complete
+        const isComplete = this.isTaskComplete(result.output);
+        if (isComplete) {
+          this.logger.info(`Task completed in ${i + 1} iterations`);
+          return {
+            results,
+            totalTokens,
+            totalDuration,
+            success: true
+          };
+        }
+        
+        // Generate next prompt based on current result
+        currentPrompt = this.generateNextPrompt(result.output, initialPrompt);
+        
+      } catch (error) {
+        this.logger.error(`Autopilot iteration ${i + 1} failed:`, error);
+        
+        if (!options.continueOnError) {
+          return {
+            results,
+            totalTokens,
+            totalDuration,
+            success: false
+          };
+        }
+        
+        // Generate error recovery prompt
+        currentPrompt = this.generateErrorRecoveryPrompt(error, initialPrompt);
+      }
+      
+      // Small delay between iterations
+      if (i < maxIterations - 1) {
+        await this.delay(1000);
+      }
+    }
+    
+    this.logger.warning(`Autopilot reached max iterations (${maxIterations}) without completion`);
+    
+    return {
+      results,
+      totalTokens,
+      totalDuration,
+      success: false
+    };
+  }
+
+  /**
+   * Check if task appears to be complete
+   */
+  private isTaskComplete(output: string): boolean {
+    const lowerOutput = output.toLowerCase();
+    const completionIndicators = [
+      'task completed',
+      'successfully implemented',
+      'all tests pass',
+      'build successful',
+      'deployment complete',
+      'feature implemented',
+      'bug fixed',
+      'task finished',
+      'implementation complete'
+    ];
+    
+    return completionIndicators.some(indicator => lowerOutput.includes(indicator));
+  }
+
+  /**
+   * Generate next prompt based on current result
+   */
+  private generateNextPrompt(currentOutput: string, originalPrompt: string): string {
+    // Simple continuation logic - could be enhanced with AI analysis
+    if (currentOutput.toLowerCase().includes('error') || currentOutput.toLowerCase().includes('failed')) {
+      return `The previous attempt encountered issues. Please fix the errors and continue with: ${originalPrompt}`;
+    }
+    
+    return `Continue with the task. Previous output: ${currentOutput.substring(0, 500)}... Please proceed with the next steps.`;
+  }
+
+  /**
+   * Generate error recovery prompt
+   */
+  private generateErrorRecoveryPrompt(error: any, originalPrompt: string): string {
+    const errorMessage = error?.message || 'Unknown error';
+    return `The previous attempt failed with error: ${errorMessage}. Please try a different approach for: ${originalPrompt}`;
   }
 }

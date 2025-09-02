@@ -27,7 +27,7 @@ interface LogEntry {
 }
 
 export class Logger extends EventEmitter {
-  private logDir: string;
+  private logDir: string = '';
   private currentLogFile: string | null = null;
   private currentWorkLogFile: string | null = null;
   private repoName: string;
@@ -41,12 +41,20 @@ export class Logger extends EventEmitter {
   private progressBar: any | null = null;
   private spinner: any = null;
   private showJsonDetails: boolean = false;
+  
+  // Simplified mode for essential logging only
+  private essentialMode: boolean = false;
 
-  constructor(repoName?: string) {
+  constructor(repoName?: string, options?: { essentialMode?: boolean; enableFileLogging?: boolean }) {
     super();
     this.repoName = repoName || this.extractRepoName();
-    this.logDir = this.initializeLogDirectory();
-    this.initializeLogFile();
+    this.essentialMode = options?.essentialMode || false;
+    this.fileEnabled = options?.enableFileLogging ?? true;
+    
+    if (this.fileEnabled) {
+      this.logDir = this.initializeLogDirectory();
+      this.initializeLogFile();
+    }
   }
 
   private extractRepoName(): string {
@@ -299,10 +307,17 @@ export class Logger extends EventEmitter {
       iteration: this.iteration
     };
     
-    this.writeToFile(entry);
-    this.logToConsole(entry);
+    // Always write to file if enabled (for analysis tools compatibility)
+    if (this.fileEnabled) {
+      this.writeToFile(entry);
+    }
     
-    // Emit event for real-time monitoring
+    // Only log to console if not in essential mode or if it's an essential message
+    if (this.shouldLogInEssentialMode(level)) {
+      this.logToConsole(entry);
+    }
+    
+    // Emit event for real-time monitoring (optional)
     this.emit('log', entry);
   }
 
@@ -442,6 +457,30 @@ export class Logger extends EventEmitter {
     this.fileEnabled = enabled;
   }
 
+  /**
+   * Enable essential logging mode - only critical messages and progress
+   */
+  public setEssentialMode(enabled: boolean): void {
+    this.essentialMode = enabled;
+    if (enabled) {
+      // In essential mode, we only keep basic console output
+      this.showJsonDetails = false;
+    }
+  }
+
+  /**
+   * Check if we should log this message in essential mode
+   */
+  private shouldLogInEssentialMode(level: LogLevel): boolean {
+    if (!this.essentialMode) return true;
+    
+    // In essential mode, only log critical levels
+    return level === LogLevel.ERROR || 
+           level === LogLevel.WARNING || 
+           level === LogLevel.SUCCESS ||
+           level === LogLevel.PROGRESS;
+  }
+
   public getLogFilePath(): string | null {
     return this.currentLogFile;
   }
@@ -465,7 +504,7 @@ export class Logger extends EventEmitter {
     this.stopSpinner();
 
     // Close session log stream
-    if (this.writeStream) {
+    if (this.writeStream && this.fileEnabled) {
       this.writeToFile({
         timestamp: new Date(),
         level: LogLevel.INFO,
@@ -478,7 +517,7 @@ export class Logger extends EventEmitter {
     }
 
     // Close work log stream
-    if (this.workWriteStream) {
+    if (this.workWriteStream && this.fileEnabled) {
       this.writeToWorkFile({
         timestamp: new Date(),
         level: LogLevel.INFO,

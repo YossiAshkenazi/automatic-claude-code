@@ -3,7 +3,7 @@ import { Logger } from '../logger';
 import { SessionManager } from '../sessionManager';
 import { monitoringManager } from '../monitoringManager';
 import { OutputParser, ParsedOutput } from '../outputParser';
-import { ClaudeExecutor } from '../services/claudeExecutor';
+import { SDKClaudeExecutor } from '../services/sdkClaudeExecutor';
 import {
   AgentRole,
   AgentMessage,
@@ -51,7 +51,7 @@ export class AgentCoordinator extends EventEmitter {
   private outputParser: OutputParser;
   private managerAgent: ManagerAgent;
   private workerAgent: WorkerAgent;
-  private claudeExecutor: ClaudeExecutor;
+  private claudeExecutor: SDKClaudeExecutor;
 
   private executionContext: ExecutionContext;
   private messageQueue: AgentMessage[] = [];
@@ -73,7 +73,7 @@ export class AgentCoordinator extends EventEmitter {
     this.logger = new Logger();
     this.sessionManager = new SessionManager();
     this.outputParser = new OutputParser();
-    this.claudeExecutor = new ClaudeExecutor(this.logger);
+    this.claudeExecutor = new SDKClaudeExecutor(this.logger);
     
     // Initialize execution context with default values
     this.executionContext = {

@@ -17,6 +17,7 @@ export class MonitoringManager {
 
   async startServer(): Promise<boolean> {
     if (!config.isMonitoringEnabled()) {
+      console.log(chalk.gray('ℹ️  Monitoring disabled - use --enable-monitoring to enable dashboard'));
       return false;
     }
 
@@ -152,6 +153,7 @@ export class MonitoringManager {
   // Send data to monitoring server with rate limiting
   async sendMonitoringData(data: any): Promise<boolean> {
     if (!config.isMonitoringEnabled()) {
+      // Silently ignore if monitoring is disabled
       return false;
     }
 

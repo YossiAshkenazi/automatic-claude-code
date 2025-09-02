@@ -13,6 +13,7 @@ import { Logger } from './logger';
 import { LogViewer } from './logViewer';
 import { launchTUI } from './tuiBrowser';
 import { AgentCoordinator } from './agents/agentCoordinator';
+import { SDKAutopilotEngine, AutopilotOptions, AutopilotResult } from './core/SDKAutopilotEngine';
 import { ClaudeUtils } from './claudeUtils';
 import { monitoringManager } from './monitoringManager';
 import { config } from './config';
@@ -55,7 +56,8 @@ class AutomaticClaudeCode {
   private outputParser: OutputParser;
   private promptBuilder: PromptBuilder;
   private logger: Logger;
-  private claudeExecutor: ClaudeExecutor;
+  private claudeExecutor: ClaudeExecutor; // Legacy support
+  private sdkAutopilotEngine: SDKAutopilotEngine; // New primary engine
   private browserSessionManager: BrowserSessionManager;
   private iteration: number = 0;
   private sessionHistory: string[] = [];
@@ -65,7 +67,8 @@ class AutomaticClaudeCode {
     this.outputParser = new OutputParser();
     this.promptBuilder = new PromptBuilder();
     this.logger = new Logger();
-    this.claudeExecutor = new ClaudeExecutor(this.logger);
+    this.claudeExecutor = new ClaudeExecutor(this.logger); // Legacy support
+    this.sdkAutopilotEngine = new SDKAutopilotEngine(this.logger); // New primary engine
     this.browserSessionManager = new BrowserSessionManager(this.logger);
   }
 
@@ -135,7 +138,7 @@ class AutomaticClaudeCode {
   }
 
   async runClaudeCode(prompt: string, options: LoopOptions): Promise<{ output: string; exitCode: number }> {
-    // Convert LoopOptions to ClaudeExecutionOptions
+    // Convert LoopOptions to ClaudeExecutionOptions for legacy execution
     const claudeOptions: ClaudeExecutionOptions = {
       model: options.model,
       workDir: options.workDir,
@@ -146,11 +149,68 @@ class AutomaticClaudeCode {
       timeout: options.timeout
     };
 
-    // Use the centralized ClaudeExecutor service
+    // Use the legacy ClaudeExecutor service for backwards compatibility
     return await this.claudeExecutor.executeClaudeCode(prompt, claudeOptions);
   }
 
-  async runLoop(initialPrompt: string, options: LoopOptions): Promise<void> {
+  async runLoop(initialPrompt: string, options: LoopOptions | AutopilotOptions): Promise<void> {
+    const maxIterations = Math.min(options.maxIterations || 10, 50); // Increased cap for SDK mode
+    
+    console.log(chalk.blue.bold('\n🚀 Starting SDK Autopilot Execution\n'));
+    console.log(chalk.cyan(`Initial Task: ${initialPrompt}`));
+    console.log(chalk.cyan(`Max Iterations: ${maxIterations} (SDK-enhanced)`));
+    console.log(chalk.cyan(`Working Directory: ${options.workDir || process.cwd()}`));
+    console.log(chalk.cyan(`Session Log: ${this.logger.getLogFilePath()}`));
+    console.log(chalk.cyan(`Work Output: ${this.logger.getWorkLogFilePath()}\n`));
+    
+    this.logger.info('Starting SDK Autopilot execution', {
+      initialPrompt,
+      maxIterations,
+      workDir: options.workDir || process.cwd(),
+      options
+    });
+
+    try {
+      // Convert LoopOptions to AutopilotOptions
+      const autopilotOptions: AutopilotOptions = {
+        model: options.model,
+        workDir: options.workDir,
+        maxIterations,
+        timeout: options.timeout,
+        verbose: options.verbose,
+        continueOnError: options.continueOnError,
+        allowedTools: options.allowedTools,
+        sessionId: options.sessionId,
+        enableHooks: true, // Enable hooks for compatibility
+        enableMonitoring: true, // Enable monitoring by default
+        agentRole: 'single' // Single agent mode
+      };
+
+      // Use the new SDK Autopilot Engine
+      const result = await this.sdkAutopilotEngine.execute(initialPrompt, autopilotOptions);
+      
+      // Display results
+      this.displaySDKResults(result);
+      
+    } catch (error) {
+      this.logger.error('SDK Autopilot execution failed', { error: error instanceof Error ? error.message : String(error) });
+      
+      // Fallback to legacy execution if SDK fails
+      console.log(chalk.yellow('\n⚠️ SDK execution failed, falling back to legacy mode...\n'));
+      
+      try {
+        await this.runLegacyLoop(initialPrompt, options);
+      } catch (legacyError) {
+        console.error(chalk.red('Both SDK and legacy execution failed:'), legacyError);
+        throw legacyError;
+      }
+    }
+  }
+
+  /**
+   * Legacy loop execution method - kept for fallback compatibility
+   */
+  private async runLegacyLoop(initialPrompt: string, options: LoopOptions): Promise<void> {
     const maxIterations = Math.min(options.maxIterations || 10, 20); // Hard cap at 20 iterations
     let currentPrompt = initialPrompt;
     let sessionId: string | undefined;
@@ -158,14 +218,12 @@ class AutomaticClaudeCode {
     const maxConsecutiveErrors = 3;
     let lastError: Error | null = null;
     
-    console.log(chalk.blue.bold('\n🚀 Starting Automatic Claude Code Loop\n'));
+    console.log(chalk.blue.bold('\n🔄 Starting Legacy Claude Code Loop\n'));
     console.log(chalk.cyan(`Initial Task: ${initialPrompt}`));
-    console.log(chalk.cyan(`Max Iterations: ${maxIterations} (hard-capped at 20)`));
+    console.log(chalk.cyan(`Max Iterations: ${maxIterations} (legacy mode)`));
     console.log(chalk.cyan(`Working Directory: ${options.workDir || process.cwd()}`));
-    console.log(chalk.cyan(`Session Log: ${this.logger.getLogFilePath()}`));
-    console.log(chalk.cyan(`Work Output: ${this.logger.getWorkLogFilePath()}\n`));
     
-    this.logger.info('Starting Automatic Claude Code Loop', {
+    this.logger.info('Starting Legacy Claude Code Loop', {
       initialPrompt,
       maxIterations,
       workDir: options.workDir || process.cwd(),
@@ -330,14 +388,7 @@ class AutomaticClaudeCode {
         console.log(chalk.white(`  • Last error: ${lastError.message.substring(0, 100)}...`));
       }
       
-      // Get execution stats from claudeExecutor if available
-      const executorStats = (this.claudeExecutor as any).getExecutionStats?.();
-      if (executorStats) {
-        console.log(chalk.cyan('\n📊 Execution Statistics:'));
-        console.log(chalk.white(`  • Success rate: ${executorStats.successRate}%`));
-        console.log(chalk.white(`  • Average duration: ${executorStats.averageDuration}ms`));
-        console.log(chalk.white(`  • Circuit breaker: ${executorStats.circuitBreakerState}`));
-      }
+      // SDK execution stats would be available through monitoring if needed
     }
 
     await this.sessionManager.saveSession();
@@ -513,146 +564,133 @@ class AutomaticClaudeCode {
     return true; // Allow continuation for generic errors
   }
 
-  // Browser session management methods
+  // Enhanced browser session management methods for SDK architecture
   async handleBrowserSessionCheck(): Promise<void> {
-    console.log(chalk.blue.bold('\n🔍 Checking Browser Session Status\n'));
+    console.log(chalk.blue.bold('\n🔍 SDK Browser Session Status\n'));
     
     try {
-      const status = await this.browserSessionManager.checkBrowserSessions();
+      // Use the SDK Autopilot Engine for comprehensive browser checking
+      const healthMetrics = await this.sdkAutopilotEngine.getHealthMetrics();
+      const browserStatus = await healthMetrics.browserHealth;
       
-      if (status.hasActiveSessions) {
-        console.log(chalk.green('✅ Active Claude browser sessions found!'));
-        console.log(chalk.cyan(`📊 ${status.authenticatedSessions} authenticated session(s) with ${status.claudeTabsOpen} Claude tab(s) open`));
+      console.log(chalk.cyan('📊 SDK Health Metrics:'));
+      console.log(chalk.cyan(`  • Total Executions: ${healthMetrics.totalExecutions}`));
+      console.log(chalk.cyan(`  • Success Rate: ${healthMetrics.successRate}%`));
+      console.log(chalk.cyan(`  • Preferred Method: ${healthMetrics.preferredMethod.toUpperCase()}`));
+      
+      if (browserStatus.hasActiveSessions) {
+        console.log(chalk.green('\n✅ Active Claude browser sessions found!'));
+        console.log(chalk.cyan(`📊 ${browserStatus.authenticatedSessions} authenticated session(s) with ${browserStatus.claudeTabsOpen} Claude tab(s) open`));
         
-        if (status.recommendedBrowser) {
-          console.log(chalk.blue(`💡 Best browser: ${status.recommendedBrowser.toUpperCase()}`));
+        if (browserStatus.recommendedBrowser) {
+          console.log(chalk.blue(`💡 Best browser: ${browserStatus.recommendedBrowser.toUpperCase()}`));
         }
         
-        // Show session details
-        console.log(chalk.yellow.bold('\n🌐 Browser Details:'));
-        status.sessionsFound.forEach(session => {
-          const statusIcon = session.isActive ? '🟢' : '🔴';
-          const claudeIcon = session.claudeTabOpen ? '🌟' : '⭕';
-          console.log(`  ${statusIcon} ${session.browser.toUpperCase()} - ${claudeIcon} ${session.claudeTabOpen ? 'Claude tab active' : 'No Claude tab'}`);
-          if (session.authenticatedAt) {
-            console.log(chalk.gray(`     Authenticated: ${session.authenticatedAt.toLocaleString()}`));
-          }
-          if (session.process) {
-            console.log(chalk.gray(`     Process: PID ${session.process.pid}`));
-          }
-        });
+        console.log(chalk.green.bold('\n🚀 Ready for SDK Execution!'));
+        console.log(chalk.gray('   Try: acc run "your task" --use-sdk-only'));
       } else {
         console.log(chalk.red('❌ No active Claude browser sessions detected'));
         
-        if (status.issues.length > 0) {
-          console.log(chalk.yellow.bold('\n⚠️  Issues Found:'));
-          status.issues.forEach(issue => {
-            console.log(chalk.red(`  • ${issue}`));
-          });
-        }
-        
-        console.log(chalk.cyan.bold('\n📋 To fix this:'));
+        console.log(chalk.cyan.bold('\n📋 To enable SDK execution:'));
         console.log(chalk.white('  1. Open your browser and go to https://claude.ai'));
         console.log(chalk.white('  2. Sign in to your Claude account'));
         console.log(chalk.white('  3. Keep the Claude tab open'));
         console.log(chalk.white('  4. Run this command again to verify'));
-        
-        if (status.recommendedBrowser) {
-          console.log(chalk.blue(`\n💡 Recommended browser: ${status.recommendedBrowser.toUpperCase()}`));
-        }
       }
       
-      process.exit(status.hasActiveSessions ? 0 : 1);
+      process.exit(browserStatus.hasActiveSessions ? 0 : 1);
       
     } catch (error) {
-      console.error(chalk.red('❌ Error checking browser sessions:'), error);
-      console.log(chalk.yellow('\n💡 Try running with --verbose for more details'));
+      console.error(chalk.red('❌ Error checking SDK browser sessions:'), error);
       process.exit(1);
     }
   }
 
   async handleBrowserStatus(): Promise<void> {
-    console.log(chalk.blue.bold('\n📊 Browser Session Status\n'));
-    
-    try {
-      const status = await this.browserSessionManager.checkBrowserSessions();
-      
-      // Create status table
-      const table = new Table({
-        head: ['Browser', 'Status', 'Claude Tab', 'Authenticated', 'PID'],
-        colWidths: [12, 10, 12, 15, 10],
-        style: {
-          head: ['cyan'],
-          border: ['gray']
-        }
-      });
-      
-      if (status.sessionsFound.length > 0) {
-        status.sessionsFound.forEach(session => {
-          table.push([
-            session.browser.toUpperCase(),
-            session.isActive ? chalk.green('Active') : chalk.red('Inactive'),
-            session.claudeTabOpen ? chalk.green('Yes') : chalk.red('No'),
-            session.authenticatedAt ? chalk.green('Yes') : chalk.yellow('Unknown'),
-            session.process?.pid?.toString() || 'N/A'
-          ]);
-        });
-      } else {
-        table.push(['No browsers found', '', '', '', '']);
-      }
-      
-      console.log(table.toString());
-      
-      // Summary
-      console.log(chalk.cyan.bold('\n📈 Summary:'));
-      console.log(chalk.white(`• Total browsers: ${status.sessionsFound.length}`));
-      console.log(chalk.white(`• Active sessions: ${status.sessionsFound.filter(s => s.isActive).length}`));
-      console.log(chalk.white(`• Claude tabs: ${status.claudeTabsOpen}`));
-      console.log(chalk.white(`• Authenticated: ${status.authenticatedSessions}`));
-      
-      if (status.recommendedBrowser) {
-        console.log(chalk.blue(`• Recommended: ${status.recommendedBrowser.toUpperCase()}`));
-      }
-      
-    } catch (error) {
-      console.error(chalk.red('❌ Error getting browser status:'), error);
-      process.exit(1);
-    }
+    console.log(chalk.yellow('⚠️  Browser session management is deprecated in SDK-only architecture'));
+    console.log(chalk.gray('   Browser authentication is now handled transparently by the Claude SDK'));
+    console.log(chalk.green('✅ Claude SDK handles browser authentication automatically'));
+    process.exit(0);
   }
 
   async handleClearBrowserCache(): Promise<void> {
-    console.log(chalk.yellow.bold('\n🧹 Clearing Browser Cache\n'));
-    
-    try {
-      await this.browserSessionManager.clearBrowserCache();
-      console.log(chalk.green('✅ Browser cache cleared successfully'));
-      console.log(chalk.cyan('💡 You may need to re-authenticate with Claude'));
-    } catch (error) {
-      console.error(chalk.red('❌ Error clearing browser cache:'), error);
-      process.exit(1);
-    }
+    console.log(chalk.yellow('⚠️  Browser cache management is deprecated in SDK-only architecture'));
+    console.log(chalk.gray('   Browser authentication is now handled transparently by the Claude SDK'));
+    console.log(chalk.green('✅ No manual cache management needed'));
+    process.exit(0);
   }
 
   async handleResetBrowserSessions(): Promise<void> {
-    console.log(chalk.yellow.bold('\n🔄 Resetting Browser Sessions\n'));
-    
-    try {
-      await this.browserSessionManager.resetBrowserSessions();
-      console.log(chalk.green('✅ Browser sessions reset successfully'));
-      console.log(chalk.cyan('💡 Please re-authenticate with Claude before running tasks'));
-    } catch (error) {
-      console.error(chalk.red('❌ Error resetting browser sessions:'), error);
-      process.exit(1);
-    }
+    console.log(chalk.yellow('⚠️  Browser session reset is deprecated in SDK-only architecture'));
+    console.log(chalk.gray('   Browser authentication is now handled transparently by the Claude SDK'));
+    console.log(chalk.green('✅ No manual session reset needed'));
+    process.exit(0);
   }
 
   async handleMonitorBrowserSessions(): Promise<void> {
-    try {
-      await this.browserSessionManager.monitorBrowserSessions();
-    } catch (error) {
-      console.error(chalk.red('❌ Error monitoring browser sessions:'), error);
-      process.exit(1);
+    console.log(chalk.yellow('⚠️  Browser session monitoring is deprecated in SDK-only architecture'));
+    console.log(chalk.gray('   Browser authentication is now handled transparently by the Claude SDK'));
+    console.log(chalk.green('✅ No manual session monitoring needed'));
+    process.exit(0);
+  }
+
+  /**
+   * Display SDK Autopilot execution results
+   */
+  private displaySDKResults(result: AutopilotResult): void {
+    console.log(chalk.blue.bold('\n📊 SDK Autopilot Execution Summary:\n'));
+    
+    if (result.success) {
+      console.log(chalk.green('✅ Execution completed successfully!'));
+    } else {
+      console.log(chalk.red('❌ Execution completed with errors'));
     }
+    
+    console.log(chalk.cyan(`Iterations: ${result.iterations}`));
+    console.log(chalk.cyan(`Duration: ${(result.totalDuration / 1000).toFixed(2)}s`));
+    console.log(chalk.cyan(`Method: ${result.executionMethod.toUpperCase()}`));
+    console.log(chalk.cyan(`Success Rate: ${result.successRate}%`));
+    
+    if (result.browserUsed) {
+      console.log(chalk.cyan(`Browser: ${result.browserUsed.toUpperCase()}`));
+    }
+    
+    if (result.modelUsed) {
+      console.log(chalk.cyan(`Model: ${result.modelUsed}`));
+    }
+    
+    if (result.totalTokens > 0) {
+      console.log(chalk.cyan(`Tokens Used: ${result.totalTokens}`));
+    }
+    
+    if (result.toolsInvoked && result.toolsInvoked.length > 0) {
+      console.log(chalk.cyan(`Tools Used: ${result.toolsInvoked.join(', ')}`));
+    }
+    
+    if (result.errors && result.errors.length > 0) {
+      console.log(chalk.yellow.bold('\n⚠️ Errors encountered:'));
+      result.errors.forEach((error, index) => {
+        const status = error.recovered ? chalk.green('✓ Recovered') : chalk.red('✗ Failed');
+        console.log(chalk.gray(`  ${index + 1}. Iteration ${error.iteration}: ${status}`));
+        console.log(chalk.gray(`     ${error.error.substring(0, 100)}...`));
+      });
+    }
+    
+    if (result.qualityScore) {
+      console.log(chalk.cyan(`Quality Score: ${(result.qualityScore * 100).toFixed(1)}%`));
+    }
+    
+    console.log('');
+    
+    // Log the result for session management
+    this.logger.info('SDK Autopilot execution completed', {
+      success: result.success,
+      iterations: result.iterations,
+      duration: result.totalDuration,
+      method: result.executionMethod,
+      successRate: result.successRate,
+      tokensUsed: result.totalTokens
+    });
   }
 
   // Helper method to identify Claude's actual work output
@@ -678,8 +716,6 @@ async function main() {
     .option('--dual-agent', 'Enable dual-agent mode (Manager + Worker)')
     .option('--manager-model <model>', 'Manager agent model (sonnet or opus)', 'opus')
     .option('--worker-model <model>', 'Worker agent model (sonnet or opus)', 'sonnet')
-    .option('--use-pty', 'Enable PTY-based execution (default for dual-agent)')
-    .option('--no-pty', 'Disable PTY-based execution and use spawn')
     .option('--no-monitoring', 'Disable monitoring server')
     .option('--timeout <minutes>', 'Timeout for each Claude execution in minutes (default: 30)', '30')
     .option('--resume <sessionId>', 'Resume an existing session instead of creating a new one')
@@ -687,6 +723,10 @@ async function main() {
     .option('--refresh-browser-session', 'Force browser session refresh before execution')
     .option('--browser-auth', 'Force browser authentication mode')
     .option('--api-mode', 'Force API key mode (requires ANTHROPIC_API_KEY)')
+    .option('--use-sdk-only', 'Force SDK-only execution (no CLI fallback)')
+    .option('--use-legacy', 'Force legacy CLI execution (bypass SDK)')
+    .option('--sdk-status', 'Show SDK and browser status')
+    .option('--quality-gate', 'Enable quality validation checks')
     .option('--check-browser-session', 'Check browser session status and exit')
     .option('--browser-status', 'Show all browser session status and exit')
     .option('--clear-browser-cache', 'Clear browser session cache')
@@ -696,12 +736,62 @@ async function main() {
     .option('--persistent-browser', 'Use persistent browser sessions')
     .option('--clean-browser', 'Start with clean browser profile')
     .action(async (prompt, options) => {
-      // Handle browser session management commands first
+      // Show deprecation warnings for removed options
+      if (options.usePty) {
+        console.log(chalk.yellow('⚠️  WARNING: --use-pty flag is deprecated in SDK-only architecture'));
+        console.log(chalk.gray('   All execution now uses the Claude SDK directly'));
+      }
+      if (options.noPty) {
+        console.log(chalk.yellow('⚠️  WARNING: --no-pty flag is deprecated in SDK-only architecture'));
+        console.log(chalk.gray('   All execution now uses the Claude SDK directly'));
+      }
+      
+      // Handle SDK status check
+      if (options.sdkStatus) {
+        const app = new AutomaticClaudeCode();
+        const healthMetrics = await app['sdkAutopilotEngine'].getHealthMetrics();
+        
+        console.log(chalk.blue.bold('\n📊 SDK Health Status\n'));
+        console.log(chalk.cyan(`Total Executions: ${healthMetrics.totalExecutions}`));
+        console.log(chalk.cyan(`Success Rate: ${healthMetrics.successRate}%`));
+        console.log(chalk.cyan(`Average Duration: ${healthMetrics.averageDuration}ms`));
+        console.log(chalk.cyan(`Preferred Method: ${healthMetrics.preferredMethod.toUpperCase()}`));
+        
+        const sdkHealth = await healthMetrics.sdkHealth;
+        console.log(chalk.cyan(`\nSDK Available: ${sdkHealth.sdkAvailable ? '✅' : '❌'}`));
+        console.log(chalk.cyan(`Circuit Breaker: ${sdkHealth.circuitBreakerOpen ? '🔴 Open' : '🟢 Closed'}`));
+        
+        const browserHealth = await healthMetrics.browserHealth;
+        console.log(chalk.cyan(`\nBrowser Sessions: ${browserHealth.hasActiveSessions ? '✅' : '❌'}`));
+        
+        return;
+      }
+
+      // Handle browser session management commands
       if (options.checkBrowserSession || options.browserStatus || 
           options.clearBrowserCache || options.resetBrowserSessions ||
           options.monitorBrowserSessions) {
-        console.log(chalk.yellow('Browser session management commands are not yet implemented.'));
-        console.log(chalk.cyan('Available commands: run, dual, examples, monitor, logs, sessions'));
+        const app = new AutomaticClaudeCode();
+        
+        try {
+          if (options.checkBrowserSession) {
+            await app.handleBrowserSessionCheck();
+          } else if (options.browserStatus) {
+            await app['handleBrowserStatus']();
+          } else if (options.clearBrowserCache) {
+            await app['handleClearBrowserCache']();
+          } else if (options.resetBrowserSessions) {
+            await app['handleResetBrowserSessions']();
+          } else if (options.monitorBrowserSessions) {
+            await app['handleMonitorBrowserSessions']();
+          } else {
+            // Default to showing enhanced status
+            await app.handleBrowserSessionCheck();
+          }
+        } catch (error) {
+          console.error(chalk.red('Browser command failed:'), error);
+          process.exit(1);
+        }
         return;
       }
 
@@ -710,76 +800,91 @@ async function main() {
         await monitoringManager.startServer();
       }
 
-      // Handle dual-agent mode
+      // Handle dual-agent mode with SDK-based coordination
       if (options.dualAgent) {
-        // Determine PTY usage - use config default, command line options override
-        const configDefaultPTY = config.get('dualAgent').usePTY;
-        const usePTY = options.noPty ? false : (options.usePty !== undefined ? options.usePty : configDefaultPTY);
+        console.log(chalk.cyan('🚀 Starting SDK-based dual-agent coordination (Manager + Worker)'));
+        console.log(chalk.gray('   Using direct Claude SDK calls instead of PTY coordination'));
         
-        const coordinator = new AgentCoordinator({
-          coordinationInterval: 3,
-          qualityGateThreshold: 0.8,
-          maxConcurrentTasks: 2,
-          enableCrossValidation: true,
-          timeoutMs: 300000,
-          retryAttempts: 3
-        });
-        
-        console.log(chalk.cyan(`🚀 Starting dual-agent coordination${usePTY ? ' with PTY execution' : ' with spawn execution'}`));
+        const autopilotEngine = new SDKAutopilotEngine(new Logger());
         
         try {
-          await coordinator.startCoordination(prompt, {
+          const autopilotOptions: AutopilotOptions = {
+            dualAgent: true,
             maxIterations: parseInt(options.iterations),
-            managerModel: options.managerModel,
-            workerModel: options.workerModel,
+            managerModel: options.managerModel || 'opus',
+            workerModel: options.workerModel || 'sonnet',
             workDir: options.dir,
             allowedTools: options.tools,
             continueOnError: options.continueOnError,
             verbose: options.verbose,
-            timeout: parseInt(options.timeout) * 60000,
-            usePTY: usePTY
-          });
-        } catch (error) {
-          console.error(chalk.red('Fatal error in dual-agent mode:'), error);
+            timeout: parseInt(options.timeout) * 60000
+          };
+
+          const result = await autopilotEngine.runAutopilotLoop(prompt, autopilotOptions);
           
-          // If PTY failed and it wasn't explicitly requested, try falling back to spawn
-          if (usePTY && !options.usePty) {
-            console.log(chalk.yellow('🔄 PTY execution failed, retrying with spawn execution...'));
-            try {
-              await coordinator.startCoordination(prompt, {
-                maxIterations: parseInt(options.iterations),
-                managerModel: options.managerModel,
-                workerModel: options.workerModel,
-                workDir: options.dir,
-                allowedTools: options.tools,
-                continueOnError: options.continueOnError,
-                verbose: options.verbose,
-                timeout: parseInt(options.timeout) * 60000,
-                usePTY: false
-              });
-            } catch (fallbackError) {
-              console.error(chalk.red('Fatal error after fallback:'), fallbackError);
-              process.exit(1);
+          if (result.success) {
+            console.log(chalk.green('✅ SDK dual-agent coordination completed successfully'));
+            console.log(chalk.gray(`   Duration: ${(result.duration / 1000).toFixed(1)}s`));
+            console.log(chalk.gray(`   Iterations: ${result.iterations}`));
+            console.log(chalk.gray(`   Coordination: ${result.coordinationType}`));
+            
+            if (result.dualAgentMetrics) {
+              console.log(chalk.cyan('\n📊 Dual-Agent Metrics:'));
+              console.log(chalk.gray(`   Handoffs: ${result.dualAgentMetrics.handoffCount}`));
+              console.log(chalk.gray(`   Manager iterations: ${result.dualAgentMetrics.managerIterations}`));
+              console.log(chalk.gray(`   Worker iterations: ${result.dualAgentMetrics.workerIterations}`));
+              console.log(chalk.gray(`   Quality score: ${(result.dualAgentMetrics.qualityScore * 100).toFixed(1)}%`));
             }
           } else {
+            console.error(chalk.red('❌ SDK dual-agent coordination failed'));
+            console.error(chalk.red(`   Error: ${result.error}`));
             process.exit(1);
           }
+        } catch (error) {
+          console.error(chalk.red('Fatal error in SDK dual-agent mode:'), error);
+          process.exit(1);
         }
       } else {
-        // Single-agent mode
+        // Single-agent mode with SDK Autopilot Engine
         const app = new AutomaticClaudeCode();
         
         try {
-          await app.runLoop(prompt, {
-            maxIterations: parseInt(options.iterations),
-            model: options.model,
-            workDir: options.dir,
-            allowedTools: options.tools,
-            continueOnError: options.continueOnError,
-            verbose: options.verbose,
-            timeout: parseInt(options.timeout) * 60000,
-            sessionId: options.resume,
-          });
+          // Check for legacy mode override
+          if (options.useLegacy) {
+            console.log(chalk.yellow('⚠️  Using legacy CLI mode (SDK bypassed)'));
+            await app['runLegacyLoop'](prompt, {
+              maxIterations: parseInt(options.iterations),
+              model: options.model,
+              workDir: options.dir,
+              allowedTools: options.tools,
+              continueOnError: options.continueOnError,
+              verbose: options.verbose,
+              timeout: parseInt(options.timeout) * 60000,
+              sessionId: options.resume,
+            });
+          } else {
+            // Use SDK Autopilot Engine (default)
+            const autopilotOptions = {
+              maxIterations: parseInt(options.iterations),
+              model: options.model,
+              workDir: options.dir,
+              allowedTools: options.tools,
+              continueOnError: options.continueOnError,
+              verbose: options.verbose,
+              timeout: parseInt(options.timeout) * 60000,
+              sessionId: options.resume,
+              browser: options.browser,
+              refreshBrowserSession: options.refreshBrowserSession,
+              headless: options.headlessBrowser,
+              useSDKOnly: options.useSdkOnly,
+              enableHooks: true,
+              enableMonitoring: !options.noMonitoring,
+              qualityGate: options.qualityGate,
+              agentRole: 'single' as const
+            };
+
+            await app.runLoop(prompt, autopilotOptions);
+          }
         } catch (error) {
           console.error(chalk.red('Fatal error:'), error);
           process.exit(1);
@@ -803,17 +908,14 @@ async function main() {
     .option('--escalation-threshold <number>', 'Max failures before human intervention (default: 5)', '5')
     .option('--fallback-single', 'Fall back to single-agent mode if dual-agent fails')
     .action(async (prompt, options) => {
-      const coordinator = new AgentCoordinator({
-        coordinationInterval: 3,
-        qualityGateThreshold: 0.8,
-        maxConcurrentTasks: 2,
-        enableCrossValidation: true,
-        timeoutMs: parseInt(options.timeout) * 60000,
-        retryAttempts: parseInt(options.maxRetries)
-      });
+      console.log(chalk.cyan('🚀 Starting dedicated SDK dual-agent session'));
+      console.log(chalk.gray('   Manager (Opus) + Worker (Sonnet) coordination via Claude SDK'));
+      
+      const autopilotEngine = new SDKAutopilotEngine(new Logger());
       
       try {
-        await coordinator.startCoordination(prompt, {
+        const autopilotOptions: AutopilotOptions = {
+          dualAgent: true,
           maxIterations: parseInt(options.iterations),
           managerModel: options.manager,
           workerModel: options.worker,
@@ -821,11 +923,88 @@ async function main() {
           allowedTools: options.tools,
           continueOnError: options.continueOnError,
           verbose: options.verbose,
-          timeout: parseInt(options.timeout) * 60000 // Convert minutes to milliseconds
-        });
+          timeout: parseInt(options.timeout) * 60000
+        };
+
+        const result = await autopilotEngine.runAutopilotLoop(prompt, autopilotOptions);
+        
+        if (result.success) {
+          console.log(chalk.green('\n✅ SDK dual-agent session completed successfully'));
+          console.log(chalk.gray(`   Duration: ${(result.duration / 1000).toFixed(1)}s`));
+          console.log(chalk.gray(`   Total iterations: ${result.iterations}`));
+          
+          if (result.dualAgentMetrics) {
+            console.log(chalk.cyan('\n📊 Dual-Agent Performance:'));
+            console.log(chalk.gray(`   Manager-Worker handoffs: ${result.dualAgentMetrics.handoffCount}`));
+            console.log(chalk.gray(`   Manager iterations: ${result.dualAgentMetrics.managerIterations}`));
+            console.log(chalk.gray(`   Worker iterations: ${result.dualAgentMetrics.workerIterations}`));
+            console.log(chalk.gray(`   Overall quality: ${(result.dualAgentMetrics.qualityScore * 100).toFixed(1)}%`));
+          }
+          
+          // Validate coordination quality
+          const qualityValidation = autopilotEngine.validateDualAgentQuality();
+          if (qualityValidation.issues.length > 0) {
+            console.log(chalk.yellow('\n⚠️  Coordination Quality Issues:'));
+            qualityValidation.issues.forEach(issue => {
+              console.log(chalk.gray(`   - ${issue}`));
+            });
+          } else {
+            console.log(chalk.green(`\n✅ SDK coordination quality: ${(qualityValidation.overallQuality * 100).toFixed(1)}%`));
+          }
+        } else {
+          console.error(chalk.red('\n❌ SDK dual-agent session failed'));
+          console.error(chalk.red(`   Error: ${result.error}`));
+          
+          if (options.fallbackSingle) {
+            console.log(chalk.yellow('\n🔄 Falling back to single-agent mode...'));
+            // Fall back to single agent mode
+            const singleAgentOptions: AutopilotOptions = {
+              dualAgent: false,
+              maxIterations: parseInt(options.iterations),
+              model: 'sonnet',
+              workDir: options.dir,
+              allowedTools: options.tools,
+              continueOnError: options.continueOnError,
+              verbose: options.verbose,
+              timeout: parseInt(options.timeout) * 60000
+            };
+            
+            const fallbackResult = await autopilotEngine.runAutopilotLoop(prompt, singleAgentOptions);
+            if (fallbackResult.success) {
+              console.log(chalk.green('✅ Fallback single-agent execution completed'));
+            } else {
+              console.error(chalk.red('❌ Fallback execution also failed'));
+              process.exit(1);
+            }
+          } else {
+            process.exit(1);
+          }
+        }
       } catch (error) {
-        console.error(chalk.red('Fatal error in dual-agent mode:'), error);
-        process.exit(1);
+        console.error(chalk.red('Fatal error in SDK dual-agent mode:'), error);
+        if (options.fallbackSingle) {
+          console.log(chalk.yellow('\n🔄 Attempting single-agent fallback...'));
+          try {
+            const singleAgentEngine = new SDKAutopilotEngine(new Logger());
+            const fallbackOptions: AutopilotOptions = {
+              dualAgent: false,
+              maxIterations: parseInt(options.iterations),
+              model: 'sonnet',
+              workDir: options.dir,
+              allowedTools: options.tools,
+              continueOnError: options.continueOnError,
+              verbose: options.verbose,
+              timeout: parseInt(options.timeout) * 60000
+            };
+            
+            await singleAgentEngine.runAutopilotLoop(prompt, fallbackOptions);
+          } catch (fallbackError) {
+            console.error(chalk.red('❌ Fallback also failed:'), fallbackError);
+            process.exit(1);
+          }
+        } else {
+          process.exit(1);
+        }
       }
     });
 

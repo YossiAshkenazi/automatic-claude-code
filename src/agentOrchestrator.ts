@@ -3,7 +3,7 @@ import { SessionManager } from './sessionManager';
 import { OutputParser, ParsedOutput } from './outputParser';
 import { Logger } from './logger';
 import { ClaudeUtils } from './claudeUtils';
-import { ClaudeExecutor, ClaudeExecutionOptions } from './services/claudeExecutor';
+import { SDKClaudeExecutor, SDKExecutionOptions } from './services/sdkClaudeExecutor';
 import chalk from 'chalk';
 
 export interface AgentConfig {
@@ -67,7 +67,7 @@ export class AgentOrchestrator {
   private sessionManager: SessionManager;
   private outputParser: OutputParser;
   private logger: Logger;
-  private claudeExecutor: ClaudeExecutor;
+  private claudeExecutor: SDKClaudeExecutor;
   private agents: Map<string, AgentSession> = new Map();
   private handoffHistory: AgentHandoff[] = [];
   private messageHistory: AgentMessage[] = [];
@@ -82,7 +82,7 @@ export class AgentOrchestrator {
     this.sessionManager = new SessionManager();
     this.outputParser = new OutputParser();
     this.logger = new Logger();
-    this.claudeExecutor = new ClaudeExecutor(this.logger);
+    this.claudeExecutor = new SDKClaudeExecutor(this.logger);
   }
 
   async startDualAgentSession(
@@ -802,8 +802,8 @@ export class AgentOrchestrator {
     prompt: string,
     options: any
   ): Promise<{ output: string; exitCode: number }> {
-    // Convert options to ClaudeExecutionOptions
-    const claudeOptions: ClaudeExecutionOptions = {
+    // Convert options to SDKExecutionOptions
+    const claudeOptions: SDKExecutionOptions = {
       model: options.model,
       workDir: options.workDir,
       allowedTools: options.allowedTools,
@@ -813,8 +813,8 @@ export class AgentOrchestrator {
       timeout: options.timeout
     };
 
-    // Use the centralized ClaudeExecutor service
-    return await this.claudeExecutor.executeClaudeCode(prompt, claudeOptions);
+    // Use the SDKClaudeExecutor service
+    return await this.claudeExecutor.executeWithSDK(prompt, claudeOptions);
   }
 
   private getClaudeCommand(): { command: string; baseArgs: string[] } {

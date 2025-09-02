@@ -14,7 +14,15 @@ export interface Config {
   defaultWorkDir?: string;
   systemPrompts?: string[];
   
-  // Dual-agent monitoring settings
+  // Simplified logging settings
+  logging: {
+    enableFileLogging: boolean;
+    essentialMode: boolean;
+    logLevel: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR';
+    showProgress: boolean;
+  };
+  
+  // Optional monitoring settings (disabled by default)
   monitoring: {
     enabled: boolean;
     serverUrl: string;
@@ -24,7 +32,7 @@ export interface Config {
     autoStartServer: boolean;
   };
   
-  // Dual-agent settings
+  // Dual-agent settings (SDK-only)
   dualAgent: {
     enabled: boolean;
     managerModel: 'sonnet' | 'opus';
@@ -33,7 +41,6 @@ export interface Config {
     qualityGateThreshold: number;
     maxConcurrentTasks: number;
     enableCrossValidation: boolean;
-    usePTY: boolean; // Enable PTY-based execution by default
   };
 }
 
@@ -61,12 +68,21 @@ class ConfigManager {
     sessionHistoryLimit: 100,
     autoSaveInterval: 60000,
     
+    // Essential logging by default
+    logging: {
+      enableFileLogging: true,
+      essentialMode: false,
+      logLevel: 'INFO',
+      showProgress: true,
+    },
+    
+    // Monitoring disabled by default - completely optional
     monitoring: {
-      enabled: true,
+      enabled: false,
       serverUrl: 'http://localhost:4005',
       webSocketUrl: 'ws://localhost:4005',
       uiUrl: 'http://localhost:6011',
-      autoStartServer: true,
+      autoStartServer: false,
     },
     
     dualAgent: {
@@ -77,7 +93,6 @@ class ConfigManager {
       qualityGateThreshold: 0.8,
       maxConcurrentTasks: 2,
       enableCrossValidation: true,
-      usePTY: true, // Default to PTY-based execution for better authentication
     },
   };
 
@@ -147,6 +162,23 @@ class ConfigManager {
     this.saveConfig(this.config);
   }
 
+  // Helper methods for logging
+  getLoggingConfig(): Config['logging'] {
+    return this.config.logging;
+  }
+  
+  isFileLoggingEnabled(): boolean {
+    return this.config.logging.enableFileLogging;
+  }
+  
+  isEssentialLoggingMode(): boolean {
+    return this.config.logging.essentialMode;
+  }
+  
+  shouldShowProgress(): boolean {
+    return this.config.logging.showProgress;
+  }
+  
   // Helper methods for monitoring
   isMonitoringEnabled(): boolean {
     return this.config.monitoring.enabled;

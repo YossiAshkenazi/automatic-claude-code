@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import { ClaudeUtils } from '../claudeUtils';
 import { Logger } from '../logger';
 import { OutputParser, ParsedOutput } from '../outputParser';
-import { ClaudeExecutor } from '../services/claudeExecutor';
+import { SDKClaudeExecutor } from '../services/sdkClaudeExecutor';
 import {
   AgentMessage,
   WorkItem,
@@ -22,7 +22,7 @@ export interface WorkerAgentConfig {
   verbose?: boolean;
   allowedTools?: string;
   usePTY?: boolean;
-  claudeExecutor?: ClaudeExecutor;
+  claudeExecutor?: SDKClaudeExecutor;
 }
 
 export interface TaskExecutionResult {
@@ -54,7 +54,7 @@ export class WorkerAgent extends EventEmitter {
   private currentSession?: string;
   private agentConfig?: WorkerAgentConfig;
   private messageHistory: AgentMessage[] = [];
-  private claudeExecutor?: ClaudeExecutor;
+  private claudeExecutor?: SDKClaudeExecutor;
   private ptySessionId?: string;
   private activeAssignments: Map<string, TaskAssignment> = new Map();
   private progressTracking: Map<string, ProgressUpdate> = new Map();

@@ -1,6 +1,7 @@
 /**
  * Testing Infrastructure Module
  * Epic 2: Core Session Management Resolution
+ * Epic 3: Process Isolation and Testing Infrastructure
  * 
  * Exports all testing utilities for SDK session isolation and testing
  */
@@ -31,6 +32,13 @@ export {
   HandleCleanupResult,
   HandleTrackingOptions
 } from './ProcessHandleTracker';
+export { 
+  default as IsolatedTestRunner,
+  IsolatedTestOptions,
+  IsolatedTestResult,
+  TestProcessInfo,
+  IPCMessage
+} from './IsolatedTestRunner';
 
 // Note: Convenience functions available as TestSDKFactory.createIsolated, etc.
 // to avoid circular dependency issues

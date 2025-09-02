@@ -1,0 +1,165 @@
+{
+  "type": "record",
+  "name": "OrderEvent",
+  "namespace": "com.automaticclaudecode.kafka.avro",
+  "doc": "Order event schema for e-commerce transactions",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Unique event identifier"
+    },
+    {
+      "name": "orderId",
+      "type": "string", 
+      "doc": "Order identifier"
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Customer identifier"
+    },
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "OrderEventType",
+        "symbols": ["ORDER_CREATED", "ORDER_UPDATED", "ORDER_CANCELLED", "ORDER_SHIPPED", "ORDER_DELIVERED", "ORDER_RETURNED"]
+      },
+      "doc": "Type of order event"
+    },
+    {
+      "name": "timestamp",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Event timestamp"
+    },
+    {
+      "name": "orderDetails",
+      "type": {
+        "type": "record",
+        "name": "OrderDetails",
+        "fields": [
+          {
+            "name": "totalAmount",
+            "type": {
+              "type": "bytes",
+              "logicalType": "decimal",
+              "precision": 10,
+              "scale": 2
+            },
+            "doc": "Total order amount"
+          },
+          {
+            "name": "currency",
+            "type": "string",
+            "default": "USD",
+            "doc": "Currency code"
+          },
+          {
+            "name": "status",
+            "type": {
+              "type": "enum",
+              "name": "OrderStatus",
+              "symbols": ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"]
+            },
+            "doc": "Current order status"
+          },
+          {
+            "name": "items",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "OrderItem",
+                "fields": [
+                  {
+                    "name": "productId",
+                    "type": "string",
+                    "doc": "Product identifier"
+                  },
+                  {
+                    "name": "sku",
+                    "type": "string",
+                    "doc": "Stock keeping unit"
+                  },
+                  {
+                    "name": "quantity",
+                    "type": "int",
+                    "doc": "Item quantity"
+                  },
+                  {
+                    "name": "unitPrice",
+                    "type": {
+                      "type": "bytes",
+                      "logicalType": "decimal",
+                      "precision": 8,
+                      "scale": 2
+                    },
+                    "doc": "Unit price"
+                  }
+                ]
+              }
+            },
+            "doc": "Order items"
+          },
+          {
+            "name": "shippingAddress",
+            "type": ["null", {
+              "type": "record",
+              "name": "Address",
+              "fields": [
+                {"name": "street", "type": "string"},
+                {"name": "city", "type": "string"},
+                {"name": "state", "type": "string"},
+                {"name": "zipCode", "type": "string"},
+                {"name": "country", "type": "string"}
+              ]
+            }],
+            "default": null,
+            "doc": "Shipping address"
+          }
+        ]
+      },
+      "doc": "Order details"
+    },
+    {
+      "name": "metadata",
+      "type": {
+        "type": "record",
+        "name": "OrderEventMetadata",
+        "fields": [
+          {
+            "name": "source",
+            "type": "string",
+            "doc": "Source system"
+          },
+          {
+            "name": "version",
+            "type": "string",
+            "default": "1.0",
+            "doc": "Schema version"
+          },
+          {
+            "name": "correlationId",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Correlation ID"
+          },
+          {
+            "name": "tags",
+            "type": ["null", {
+              "type": "map",
+              "values": "string"
+            }],
+            "default": null,
+            "doc": "Additional metadata tags"
+          }
+        ]
+      },
+      "doc": "Event metadata"
+    }
+  ]
+}

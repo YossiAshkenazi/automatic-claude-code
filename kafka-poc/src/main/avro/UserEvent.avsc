@@ -1,0 +1,127 @@
+{
+  "type": "record",
+  "name": "UserEvent",
+  "namespace": "com.automaticclaudecode.kafka.avro",
+  "doc": "User event schema with backward and forward compatibility support",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Unique event identifier"
+    },
+    {
+      "name": "userId", 
+      "type": "string",
+      "doc": "User identifier"
+    },
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "EventType",
+        "symbols": ["USER_CREATED", "USER_UPDATED", "USER_DELETED", "USER_LOGIN", "USER_LOGOUT"]
+      },
+      "doc": "Type of user event"
+    },
+    {
+      "name": "timestamp",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Event timestamp in milliseconds"
+    },
+    {
+      "name": "sessionId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional session identifier"
+    },
+    {
+      "name": "metadata",
+      "type": {
+        "type": "record",
+        "name": "EventMetadata",
+        "fields": [
+          {
+            "name": "source",
+            "type": "string",
+            "doc": "Source system that generated the event"
+          },
+          {
+            "name": "version",
+            "type": "string",
+            "default": "1.0",
+            "doc": "Schema version"
+          },
+          {
+            "name": "correlationId",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Correlation ID for event tracing"
+          },
+          {
+            "name": "ipAddress",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Client IP address"
+          },
+          {
+            "name": "userAgent",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Client user agent"
+          }
+        ]
+      },
+      "doc": "Event metadata information"
+    },
+    {
+      "name": "payload",
+      "type": {
+        "type": "record",
+        "name": "UserEventPayload", 
+        "fields": [
+          {
+            "name": "email",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "User email address"
+          },
+          {
+            "name": "firstName",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "User first name"
+          },
+          {
+            "name": "lastName",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "User last name"
+          },
+          {
+            "name": "status",
+            "type": ["null", {
+              "type": "enum",
+              "name": "UserStatus",
+              "symbols": ["ACTIVE", "INACTIVE", "SUSPENDED", "PENDING"]
+            }],
+            "default": null,
+            "doc": "User status"
+          },
+          {
+            "name": "preferences",
+            "type": ["null", {
+              "type": "map",
+              "values": "string"
+            }],
+            "default": null,
+            "doc": "User preferences as key-value pairs"
+          }
+        ]
+      },
+      "doc": "Event payload with user-specific data"
+    }
+  ]
+}

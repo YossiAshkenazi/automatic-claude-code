@@ -1,0 +1,130 @@
+spring:
+  application:
+    name: kafka-poc
+  
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    security:
+      protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+    
+    # Producer Configuration
+    producer:
+      acks: all
+      retries: 2147483647
+      max-in-flight-requests-per-connection: 5
+      enable-idempotence: true
+      compression-type: lz4
+      batch-size: 32768
+      linger-ms: 5
+      buffer-memory: 134217728
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      properties:
+        max.request.size: 10485760
+        request.timeout.ms: 30000
+        delivery.timeout.ms: 120000
+        schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8081}
+        auto.register.schemas: true
+        use.latest.version: true
+    
+    # Consumer Configuration
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:kafka-poc-group}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer
+      properties:
+        specific.avro.reader: true
+        schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8081}
+        session.timeout.ms: 30000
+        heartbeat.interval.ms: 3000
+        max.poll.interval.ms: 300000
+        max.poll.records: 500
+        fetch.min.bytes: 1024
+        fetch.max.wait.ms: 500
+    
+    # Streams Configuration
+    streams:
+      application-id: ${KAFKA_STREAMS_APP_ID:kafka-poc-streams}
+      auto-startup: true
+      properties:
+        processing.guarantee: exactly_once_v2
+        num.stream.threads: 4
+        commit.interval.ms: 1000
+        cache.max.bytes.buffering: 10485760
+
+# Management and Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,kafka
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+
+# Custom Application Configuration
+kafka-poc:
+  topics:
+    user-events: user-events
+    order-events: order-events
+    notification-events: notification-events
+    dead-letter: dead-letter-queue
+  
+  producer:
+    retry:
+      max-attempts: 3
+      backoff-delay: 1000
+      max-delay: 10000
+    circuit-breaker:
+      failure-rate-threshold: 50
+      slow-call-rate-threshold: 50
+      slow-call-duration-threshold: 2000
+      permitted-number-of-calls-in-half-open-state: 5
+      sliding-window-size: 10
+      minimum-number-of-calls: 10
+  
+  consumer:
+    retry:
+      max-attempts: 3
+      backoff-delay: 2000
+      max-delay: 30000
+    circuit-breaker:
+      failure-rate-threshold: 60
+      slow-call-rate-threshold: 60
+      slow-call-duration-threshold: 5000
+      permitted-number-of-calls-in-half-open-state: 3
+      sliding-window-size: 10
+      minimum-number-of-calls: 5
+
+# Distributed Tracing
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
+
+# Logging Configuration
+logging:
+  level:
+    com.automaticclaudecode.kafka: DEBUG
+    org.springframework.kafka: INFO
+    org.apache.kafka: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{traceId},%X{spanId}] %logger{36} - %msg%n"
+
+# Performance Tuning
+server:
+  tomcat:
+    max-threads: 200
+    min-spare-threads: 10
+    max-connections: 10000

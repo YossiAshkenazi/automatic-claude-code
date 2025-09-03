@@ -5,6 +5,14 @@ Adapted from Dan Disler's Gemini CLI implementation in agentic-drop-zones
 
 This wrapper uses subprocess to execute Claude Code CLI directly,
 bypassing the need for API keys by relying on existing CLI authentication.
+
+Enhanced with Multi-Agent Support:
+- Production-ready base for multi-agent systems
+- Epic 3 process management integration
+- Comprehensive resource tracking and cleanup
+- Circuit breaker pattern for authentication failures
+- Enhanced error handling and recovery
+- Multi-agent wrapper available in multi_agent_wrapper/
 """
 
 import asyncio

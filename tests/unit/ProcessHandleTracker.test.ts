@@ -10,13 +10,13 @@
  * - Process termination enforcement
  */
 
-import { Logger } from '../../logger';
-import { TestSDKFactory, TestSDKOptions } from '../../testing/TestSDKFactory';
+import { Logger } from '@/logger';
+import { TestSDKFactory, TestSDKOptions } from '@/testing/TestSDKFactory';
 import ProcessHandleTracker, {
   HandleType,
   ProcessTerminationOptions,
   HandleTrackingOptions
-} from '../../testing/ProcessHandleTracker';
+} from '@/testing/ProcessHandleTracker';
 
 describe('ProcessHandleTracker', () => {
   let logger: Logger;

@@ -4,19 +4,19 @@
  */
 
 import { EventEmitter } from 'events';
-import { Logger } from '../../logger';
-import { SDKAutopilotEngine, AutopilotOptions, AutopilotResult } from '../../core/SDKAutopilotEngine';
-import { SDKClaudeExecutor } from '../../services/sdkClaudeExecutor';
-import { TaskCompletionAnalyzer } from '../../core/TaskCompletionAnalyzer';
-import { SessionManager } from '../../sessionManager';
-import { SDKDualAgentCoordinator } from '../../agents/SDKDualAgentCoordinator';
+import { Logger } from '@/logger';
+import { SDKAutopilotEngine, AutopilotOptions, AutopilotResult } from '@/core/SDKAutopilotEngine';
+import { SDKClaudeExecutor } from '@/services/sdkClaudeExecutor';
+import { TaskCompletionAnalyzer } from '@/core/TaskCompletionAnalyzer';
+import { SessionManager } from '@/sessionManager';
+import { SDKDualAgentCoordinator } from '@/agents/SDKDualAgentCoordinator';
 
 // Mock dependencies
-jest.mock('../../logger');
-jest.mock('../../services/sdkClaudeExecutor');
-jest.mock('../../core/TaskCompletionAnalyzer');
-jest.mock('../../sessionManager');
-jest.mock('../../agents/SDKDualAgentCoordinator');
+jest.mock('@/logger');
+jest.mock('@/services/sdkClaudeExecutor');
+jest.mock('@/core/TaskCompletionAnalyzer');
+jest.mock('@/sessionManager');
+jest.mock('@/agents/SDKDualAgentCoordinator');
 
 describe('SDKAutopilotEngine', () => {
   let engine: SDKAutopilotEngine;

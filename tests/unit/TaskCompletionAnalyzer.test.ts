@@ -3,8 +3,8 @@
  * Tests the core logic for SDK response analysis in Story 1.2
  */
 
-import { Logger } from '../../logger';
-import { TaskCompletionAnalyzer } from '../../core/TaskCompletionAnalyzer';
+import { Logger } from '@/logger';
+import { TaskCompletionAnalyzer } from '@/core/TaskCompletionAnalyzer';
 import {
   SDKResult,
   SDKResponse,
@@ -12,7 +12,7 @@ import {
   ExecutionContext,
   CompletionAnalysis,
   CompletionPattern
-} from '../../types';
+} from '@/types';
 
 describe('TaskCompletionAnalyzer', () => {
   let analyzer: TaskCompletionAnalyzer;

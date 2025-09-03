@@ -3,7 +3,7 @@
  * Tests SDK-based Claude execution functionality
  */
 
-import { Logger } from '../../logger';
+import { Logger } from '@/logger';
 import {
   SDKClaudeExecutor,
   SDKClaudeOptions,
@@ -13,11 +13,11 @@ import {
   NetworkError,
   APIKeyRequiredError,
   RetryExhaustedError
-} from '../../services/sdkClaudeExecutor';
-import { SDKResult } from '../../types';
+} from '@/services/sdkClaudeExecutor';
+import { SDKResult } from '@/types';
 
 // Mock the logger
-jest.mock('../../logger');
+jest.mock('@/logger');
 
 // Mock dynamic imports
 const mockSDK = {

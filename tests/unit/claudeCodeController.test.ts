@@ -5,7 +5,7 @@
  * functionality without requiring actual Claude Code installation for basic tests.
  */
 
-import { ClaudeCodeController, ClaudeCodeControllerOptions } from '../../controllers/claudeCodeController';
+import { ClaudeCodeController, ClaudeCodeControllerOptions } from '@/controllers/claudeCodeController';
 import { EventEmitter } from 'events';
 
 describe('ClaudeCodeController', () => {

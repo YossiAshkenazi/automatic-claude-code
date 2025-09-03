@@ -7,22 +7,22 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { EventEmitter } from 'events';
-import { Logger } from '../../logger';
+import { Logger } from '@/logger';
 import {
   SimplifiedSessionManager,
   Session,
   SessionIteration,
   SessionSummary,
   ConsoleProgressReporter
-} from '../../core/SimplifiedSessionManager';
-import { ParsedOutput } from '../../outputParser';
+} from '@/core/SimplifiedSessionManager';
+import { ParsedOutput } from '@/outputParser';
 
 // Mock fs and path modules
 jest.mock('fs/promises');
 jest.mock('path');
 jest.mock('os');
 jest.mock('crypto');
-jest.mock('../../logger');
+jest.mock('@/logger');
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockPath = path as jest.Mocked<typeof path>;

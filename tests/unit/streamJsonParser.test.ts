@@ -1,4 +1,4 @@
-import { StreamJsonParser } from '../outputParser';
+import { StreamJsonParser } from '@/outputParser';
 import stripAnsi from 'strip-ansi';
 
 describe('StreamJsonParser', () => {

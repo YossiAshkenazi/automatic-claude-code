@@ -165,7 +165,7 @@ export class PythonAgentWebSocketService {
     totalUptime: 0
   };
 
-  constructor(url: string = 'ws://localhost:8765') {
+  constructor(url: string = 'ws://localhost:8766') {
     this.url = url;
     this.clientId = uuidv4();
   }

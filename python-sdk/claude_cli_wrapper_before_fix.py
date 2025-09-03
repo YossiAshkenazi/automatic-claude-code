@@ -1241,13 +1241,8 @@ class ClaudeCliWrapper:
         is_error_line = is_stderr or any(pattern in line_lower for pattern in error_patterns)
         
         if is_error_line:
-            # Enhanced authentication error detection for comprehensive test coverage
-            auth_error_patterns = [
-                'invalid api key', 'authentication failed', 'unauthorized access',
-                'token expired', 'subscription required', 'permission denied'
-            ]
-            
-            if any(pattern in line_lower for pattern in auth_error_patterns):
+            # Special handling for authentication errors
+            if "invalid api key" in line_lower or "authentication failed" in line_lower:
                 return CliMessage(
                     type="auth_error",
                     content=f"{line}\n\nPlease run: claude setup-token",

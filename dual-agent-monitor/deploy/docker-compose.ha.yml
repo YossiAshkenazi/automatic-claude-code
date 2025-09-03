@@ -16,7 +16,8 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=8080
+      - PORT=4005
+      - WEBSOCKET_SERVER_PORT=4005
       - DATABASE_URL=${DATABASE_URL_PRIMARY}
       - JWT_SECRET=${JWT_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}
@@ -59,7 +60,8 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=8080
+      - PORT=4005
+      - WEBSOCKET_SERVER_PORT=4005
       - DATABASE_URL=${DATABASE_URL_SECONDARY}
       - JWT_SECRET=${JWT_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}
@@ -222,6 +224,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "4005:4005"  # API backend (standardized)
+      - "6011:6011"  # Dashboard frontend (standardized)
       - "8404:8404"  # Stats page
     volumes:
       - ./deploy/ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro

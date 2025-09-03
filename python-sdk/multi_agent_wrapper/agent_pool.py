@@ -9,7 +9,7 @@ Integrates with MultiAgentCLIWrapper for efficient resource utilization.
 import asyncio
 import time
 import logging
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor

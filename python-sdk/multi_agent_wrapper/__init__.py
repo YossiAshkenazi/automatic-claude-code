@@ -17,7 +17,9 @@ from .multi_agent_wrapper import (
     AgentRole,
     MultiAgentConfig,
     AgentCommunication,
-    HealthCheckResult
+    HealthCheckResult,
+    create_dual_agent_system,
+    create_specialist_team
 )
 
 from .agent_pool import AgentPool
@@ -34,6 +36,8 @@ __all__ = [
     "MultiAgentConfig",
     "AgentCommunication",
     "HealthCheckResult",
+    "create_dual_agent_system",
+    "create_specialist_team",
     "AgentPool",
     "CommunicationBridge",
     "HealthMonitor"

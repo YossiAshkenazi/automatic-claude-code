@@ -1,13 +1,15 @@
 import React, { useState, useCallback } from 'react';
-import { Plus, RefreshCw, Settings, BarChart3, MessageSquare, Users, AlertCircle } from 'lucide-react';
+import { Plus, RefreshCw, Settings, BarChart3, MessageSquare, Users, AlertCircle, Send } from 'lucide-react';
 import { AgentList } from './AgentList';
 import { AgentCreator } from './AgentCreator';
 import { AgentSettings } from './AgentSettings';
 import { AgentInteractionDisplay } from './AgentInteractionDisplay';
+import { ConnectionStatus } from './ConnectionStatus';
+import { TaskAssignmentModal } from './TaskAssignmentModal';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
-import { useAgentManager } from '../../hooks/useAgentManager';
+import { useRealAgentManager } from '../../hooks/useRealAgentManager';
 import { cn } from '../../lib/utils';
 import type { Agent, CreateAgentRequest, UpdateAgentRequest } from '../../types/agent';
 
@@ -21,45 +23,45 @@ export function MultiAgentDashboard({ className }: MultiAgentDashboardProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [showAgentCreator, setShowAgentCreator] = useState(false);
   const [showAgentSettings, setShowAgentSettings] = useState(false);
+  const [showTaskAssignment, setShowTaskAssignment] = useState(false);
 
   const {
     // State
     agents,
-    selectedAgent,
-    communications,
     tasks,
     events,
     loading,
     error,
-    
-    // Connection
-    isConnected,
-    connectionStatus,
+    connected: isConnected,
+    connecting,
     
     // Actions
     createAgent,
-    updateAgent,
-    deleteAgent,
-    startAgent,
-    stopAgent,
-    restartAgent,
-    selectAgent,
-    clearError,
-    refresh,
+    executeCommand,
+    assignTask,
+    connect,
+    disconnect,
     reconnect,
+    refreshSystemStatus,
     
     // Computed
     activeAgents,
     managerAgents,
     workerAgents,
     specialistAgents,
-    recentCommunications,
-    activeTasks
-  } = useAgentManager({
-    maxAgents: 5,
-    autoReconnect: true,
-    refreshInterval: 5000
+    activeTasks,
+    
+    // Service
+    service
+  } = useRealAgentManager({
+    autoConnect: true,
+    enableToasts: true
   });
+
+  // Mock data for now - these will come from the backend later
+  const communications: any[] = [];
+  const recentCommunications: any[] = [];
+  const selectedAgent = null;
 
   const handleCreateAgent = useCallback(async (request: CreateAgentRequest): Promise<Agent> => {
     const agent = await createAgent(request);
@@ -67,42 +69,32 @@ export function MultiAgentDashboard({ className }: MultiAgentDashboardProps) {
   }, [createAgent]);
 
   const handleUpdateAgent = useCallback(async (request: UpdateAgentRequest) => {
-    await updateAgent(request);
-  }, [updateAgent]);
+    // TODO: Implement agent updates via Python backend
+    console.log('Update agent request:', request);
+  }, []);
 
   const handleDeleteAgent = useCallback(async (agentId: string) => {
     if (confirm('Are you sure you want to delete this agent? This action cannot be undone.')) {
-      await deleteAgent(agentId);
+      // TODO: Implement agent deletion via Python backend
+      console.log('Delete agent:', agentId);
     }
-  }, [deleteAgent]);
+  }, []);
 
   const handleAgentCommand = useCallback(async (agentId: string, command: any) => {
     try {
-      switch (command.type) {
-        case 'start':
-          await startAgent(agentId);
-          break;
-        case 'stop':
-          await stopAgent(agentId);
-          break;
-        case 'restart':
-          await restartAgent(agentId);
-          break;
-        default:
-          console.warn('Unknown agent command:', command.type);
-      }
+      await executeCommand(agentId, command.type, command.parameters || {});
     } catch (error) {
       console.error('Agent command failed:', error);
     }
-  }, [startAgent, stopAgent, restartAgent]);
+  }, [executeCommand]);
 
   const getOverviewStats = () => {
-    const totalTasks = agents.reduce((sum, agent) => sum + agent.metrics.totalTasks, 0);
-    const completedTasks = agents.reduce((sum, agent) => sum + agent.metrics.completedTasks, 0);
-    const totalCost = agents.reduce((sum, agent) => sum + agent.metrics.totalCost, 0);
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => t.status === 'completed').length;
+    const totalCost = agents.reduce((sum, agent) => sum + (agent.metrics?.tokensUsed || 0) * 0.001, 0);
     const avgHealthScore = agents.length > 0 
-      ? agents.reduce((sum, agent) => sum + agent.metrics.healthScore, 0) / agents.length
-      : 0;
+      ? agents.reduce((sum, agent) => sum + ((agent.metrics?.successRate || 1) * 100), 0) / agents.length
+      : 100;
 
     return {
       totalTasks,
@@ -322,32 +314,14 @@ export function MultiAgentDashboard({ className }: MultiAgentDashboardProps) {
       <div className="flex items-center justify-between p-6 border-b border-gray-200">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Multi-Agent Dashboard</h1>
-          <div className="flex items-center gap-4 mt-2">
-            <div className={cn(
-              'flex items-center gap-2 px-2 py-1 rounded-full text-xs',
-              isConnected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-            )}>
-              <div className={cn(
-                'w-2 h-2 rounded-full',
-                isConnected ? 'bg-green-500' : 'bg-red-500'
-              )} />
-              {isConnected ? 'Connected' : 'Disconnected'}
-            </div>
-            
-            {error && (
-              <div className="flex items-center gap-2 text-red-600">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-sm">{error}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearError}
-                  className="text-xs"
-                >
-                  Dismiss
-                </Button>
-              </div>
-            )}
+          <div className="mt-2">
+            <ConnectionStatus
+              connected={isConnected}
+              connecting={connecting}
+              error={error}
+              onReconnect={reconnect}
+              onDismissError={() => console.log('Clear error')}
+            />
           </div>
         </div>
 
@@ -383,10 +357,19 @@ export function MultiAgentDashboard({ className }: MultiAgentDashboardProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={refresh}
+            onClick={refreshSystemStatus}
             disabled={loading}
           >
             <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setShowTaskAssignment(true)}
+            disabled={!isConnected || activeAgents.length === 0}
+          >
+            <Send className="w-4 h-4" />
+            <span className="hidden sm:inline ml-2">Assign Task</span>
           </Button>
 
           <Button
@@ -409,15 +392,15 @@ export function MultiAgentDashboard({ className }: MultiAgentDashboardProps) {
             selectedAgent={selectedAgent}
             loading={loading}
             error={error}
-            onSelectAgent={selectAgent}
+            onSelectAgent={(agentId) => console.log('Selected agent:', agentId)}
             onCreateAgent={() => setShowAgentCreator(true)}
             onCommand={handleAgentCommand}
             onEditAgent={(agent) => {
-              selectAgent(agent.id);
+              console.log('Edit agent:', agent.id);
               setShowAgentSettings(true);
             }}
             onDeleteAgent={handleDeleteAgent}
-            onRefresh={refresh}
+            onRefresh={refreshSystemStatus}
           />
         )}
         
@@ -447,6 +430,13 @@ export function MultiAgentDashboard({ className }: MultiAgentDashboardProps) {
         onClose={() => setShowAgentSettings(false)}
         onUpdate={handleUpdateAgent}
         onDelete={handleDeleteAgent}
+      />
+
+      <TaskAssignmentModal
+        isOpen={showTaskAssignment}
+        onClose={() => setShowTaskAssignment(false)}
+        agents={agents}
+        onAssignTask={assignTask}
       />
     </div>
   );

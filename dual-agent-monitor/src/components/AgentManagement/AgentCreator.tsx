@@ -19,6 +19,7 @@ import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { cn } from '../../lib/utils';
 import type { CreateAgentRequest, AgentConfiguration, Agent } from '../../types/agent';
+import { useRealAgentManager } from '../../hooks/useRealAgentManager';
 
 interface AgentCreatorProps {
   isOpen: boolean;

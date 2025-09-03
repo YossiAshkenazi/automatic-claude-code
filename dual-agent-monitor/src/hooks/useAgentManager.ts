@@ -55,7 +55,7 @@ export function useAgentManager(options: UseAgentManagerOptions = {}) {
     lastMessage,
     reconnect,
     connectionStatus
-  } = useWebSocket('ws://localhost:4005/agents', {
+  } = useWebSocket('ws://localhost:8765', {
     maxReconnectAttempts: autoReconnect ? 10 : 0,
     onOpen: () => {
       console.log('Connected to agent management server');

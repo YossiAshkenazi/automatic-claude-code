@@ -19,7 +19,6 @@ import time
 import uuid
 from typing import Dict, List, Any
 import websockets
-from websockets.client import WebSocketClientProtocol
 import logging
 
 from api.websocket.server import WebSocketServer

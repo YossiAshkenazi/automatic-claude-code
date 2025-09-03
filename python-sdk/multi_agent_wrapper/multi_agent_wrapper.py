@@ -297,13 +297,8 @@ class MultiAgentCLIWrapper:
             
             self.logger.info(f"Agent created: {config.agent_id} ({config.role.value})")
             
-            # Register agent wrapper with handle manager for tracking
-            agent_resource_id = self.handle_manager.register_resource(
-                agent_info.wrapper, ResourceType.PROCESS,
-                f"Agent wrapper {config.agent_id}",
-                metadata={'agent_id': config.agent_id, 'role': config.role.value}
-            )
-            self.registered_resources.add(agent_resource_id)
+            # Note: We don't register ClaudeCliWrapper as PROCESS resource since it's not a subprocess
+            # The wrapper will manage its own process cleanup through its internal handle manager
         
         return config.agent_id
     
@@ -836,8 +831,11 @@ class MultiAgentCLIWrapper:
             if errors:
                 self.logger.warning(f"Shutdown cleanup errors: {errors}")
             
-            # Shutdown thread pool
-            self.thread_pool.shutdown(wait=True, timeout=timeout / 4)
+            # Shutdown thread pool (Python 3.9+ doesn't support timeout parameter)
+            try:
+                self.thread_pool.shutdown(wait=True)
+            except Exception as e:
+                self.logger.warning(f"Error shutting down thread pool: {e}")
             
             # Clear all agents
             with self.agent_lock:

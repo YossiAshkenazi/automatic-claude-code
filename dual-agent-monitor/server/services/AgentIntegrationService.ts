@@ -46,6 +46,7 @@ export interface SessionData {
   managerAgent: AgentStatus;
   workerAgent: AgentStatus;
   messages: AgentMessage[];
+  task?: string; // Add the missing task property
   taskQueue: Array<{
     id: string;
     title: string;
@@ -103,6 +104,7 @@ export class AgentIntegrationService extends EventEmitter {
       id: sessionId,
       startTime: new Date(),
       status: 'active',
+      task: task, // Add the task property
       managerAgent: {
         agent: 'manager',
         status: 'idle',

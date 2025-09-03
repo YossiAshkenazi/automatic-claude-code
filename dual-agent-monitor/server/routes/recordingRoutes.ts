@@ -245,7 +245,7 @@ export function createRecordingRoutes(
         interactions = await database.getRecordingInteractionsByTimeRange(
           recordingId,
           startTimeMs ? parseInt(startTimeMs as string) : 0,
-          endTimeMs ? parseInt(endTimeMs as string) : undefined
+          endTimeMs ? parseInt(endTimeMs as string) : Number.MAX_SAFE_INTEGER
         );
       } else {
         interactions = await database.getRecordingInteractions(recordingId);

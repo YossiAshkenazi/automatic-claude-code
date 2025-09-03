@@ -12,11 +12,24 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from ..websocket.message_protocol import (
+from .message_protocol import (
     Message, MessageType, MessageProtocol, AgentInfo, AgentType, 
     TaskInfo, TaskStatus
 )
-from ...claude_cli_wrapper import ClaudeCliWrapper, ClaudeCliOptions
+import sys
+import os
+# Add the python-sdk root directory to path to find claude_cli_wrapper
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+try:
+    from claude_cli_wrapper import ClaudeCliWrapper, ClaudeCliOptions
+except ImportError:
+    # Fallback for when running from different directories
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+        from claude_cli_wrapper import ClaudeCliWrapper, ClaudeCliOptions
+    except ImportError as e:
+        logger.error(f"Failed to import claude_cli_wrapper: {e}")
+        raise ImportError("Could not import claude_cli_wrapper. Make sure it's in the python-sdk directory.")
 
 
 logger = logging.getLogger(__name__)

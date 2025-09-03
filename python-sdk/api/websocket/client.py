@@ -10,7 +10,6 @@ import uuid
 from typing import Optional, Callable, Any, Dict
 from datetime import datetime
 import websockets
-from websockets.client import WebSocketClientProtocol
 from websockets.exceptions import WebSocketException, ConnectionClosed
 
 from .message_protocol import Message, MessageType, MessageProtocol
@@ -44,7 +43,7 @@ class WebSocketClient:
         self.reconnect_interval = reconnect_interval
         self.max_reconnect_attempts = max_reconnect_attempts
         
-        self.websocket: Optional[WebSocketClientProtocol] = None
+        self.websocket: Optional[websockets.WebSocketClientProtocol] = None
         self.connected = False
         self.running = False
         self.reconnect_attempts = 0

@@ -170,12 +170,12 @@ wss.on('connection', (ws) => {
   }
 
   // Send all sessions from database
-  dbService.getAllSessions().then(sessions => {
+  dbService.getAllSessions().then((sessions: any) => {
     ws.send(JSON.stringify({
       type: 'sessions:list',
       data: sessions
     }));
-  }).catch(error => {
+  }).catch((error: any) => {
     console.error('Error fetching sessions:', error);
   });
 
@@ -694,7 +694,7 @@ app.get('/api/sessions', async (req, res) => {
     
     // If we have a current session, add it to the list
     if (currentSession) {
-      const existingIndex = sessions.findIndex(s => s.id === currentSession.id);
+      const existingIndex = sessions.findIndex((s: any) => s.id === currentSession!.id);
       if (existingIndex >= 0) {
         sessions[existingIndex] = currentSession;
       } else {

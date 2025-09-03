@@ -33,7 +33,7 @@ if (usePostgres) {
     password: process.env.POSTGRES_PASSWORD || 'dual_agent_secure_pass_2025',
     ssl: process.env.POSTGRES_SSL === 'true',
     maxConnections: parseInt(process.env.POSTGRES_MAX_CONNECTIONS || '20'),
-  });
+  }) as DatabaseInterface;
 } else {
   console.log('Using in-memory database for development/testing');
   dbService = new InMemoryDatabaseService() as DatabaseInterface;

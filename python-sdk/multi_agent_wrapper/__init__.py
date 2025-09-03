@@ -22,7 +22,7 @@ from .multi_agent_wrapper import (
     create_specialist_team
 )
 
-from .agent_pool import AgentPool
+from .agent_pool import AgentPool, PoolConfig
 from .communication_bridge import CommunicationBridge
 from .health_monitor import HealthMonitor
 
@@ -39,6 +39,7 @@ __all__ = [
     "create_dual_agent_system",
     "create_specialist_team",
     "AgentPool",
+    "PoolConfig",
     "CommunicationBridge",
     "HealthMonitor"
 ]

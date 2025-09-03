@@ -5,7 +5,16 @@ import {
   SessionSummary,
   AgentCommunication,
   SystemEvent,
-  PerformanceMetrics
+  PerformanceMetrics,
+  SessionRecording,
+  RecordingInteraction,
+  PlaybackSession,
+  PlaybackSettings,
+  RecordingAnnotation,
+  RecordingBookmark,
+  RecordingExport,
+  ExportOptions,
+  KeyMoment
 } from '../types';
 
 export class InMemoryDatabaseService {
@@ -15,6 +24,14 @@ export class InMemoryDatabaseService {
   private events: Map<string, SystemEvent[]> = new Map();
   private metrics: Map<string, PerformanceMetrics[]> = new Map();
   private summaries: Map<string, SessionSummary> = new Map();
+  
+  // Recording-related storage
+  private recordings: Map<string, SessionRecording> = new Map();
+  private interactions: Map<string, RecordingInteraction[]> = new Map();
+  private playbacks: Map<string, PlaybackSession> = new Map();
+  private annotations: Map<string, RecordingAnnotation[]> = new Map();
+  private bookmarks: Map<string, RecordingBookmark[]> = new Map();
+  private exports: Map<string, RecordingExport> = new Map();
 
   constructor() {
     console.log('Initializing in-memory database service');
@@ -562,5 +579,528 @@ export class InMemoryDatabaseService {
     this.events.clear();
     this.metrics.clear();
     this.summaries.clear();
+    this.recordings.clear();
+    this.interactions.clear();
+    this.playbacks.clear();
+    this.annotations.clear();
+    this.bookmarks.clear();
+    this.exports.clear();
+  }
+
+  // ===============================================
+  // SESSION RECORDING METHODS
+  // ===============================================
+
+  async createSessionRecording(recording: {
+    sessionId: string;
+    recordingName?: string;
+    description?: string;
+    recordedBy?: string;
+    recordingQuality?: 'low' | 'medium' | 'high' | 'lossless';
+  }): Promise<string> {
+    const id = uuidv4();
+    const sessionRecording: SessionRecording = {
+      id,
+      sessionId: recording.sessionId,
+      recordingName: recording.recordingName || `Recording ${id}`,
+      description: recording.description,
+      recordedBy: recording.recordedBy,
+      recordingQuality: recording.recordingQuality || 'medium',
+      recordingStartedAt: new Date(),
+      recordingCompletedAt: undefined,
+      status: 'recording',
+      totalInteractions: 0,
+      totalSizeBytes: 0,
+      sharedPublicly: false,
+      downloadCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    this.recordings.set(id, sessionRecording);
+    this.interactions.set(id, []);
+    this.annotations.set(id, []);
+    this.bookmarks.set(id, []);
+    
+    return id;
+  }
+
+  async getSessionRecording(recordingId: string): Promise<SessionRecording | null> {
+    return this.recordings.get(recordingId) || null;
+  }
+
+  async getAllSessionRecordings(limit?: number): Promise<SessionRecording[]> {
+    const recordings = Array.from(this.recordings.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    return limit ? recordings.slice(0, limit) : recordings;
+  }
+
+  async updateSessionRecording(recordingId: string, updates: Partial<SessionRecording>): Promise<void> {
+    const recording = this.recordings.get(recordingId);
+    if (!recording) return;
+    
+    Object.assign(recording, updates, { updatedAt: new Date() });
+    this.recordings.set(recordingId, recording);
+  }
+
+  async deleteSessionRecording(recordingId: string): Promise<void> {
+    this.recordings.delete(recordingId);
+    this.interactions.delete(recordingId);
+    this.annotations.delete(recordingId);
+    this.bookmarks.delete(recordingId);
+    
+    // Delete related exports
+    for (const [exportId, exportData] of this.exports.entries()) {
+      if (exportData.recordingId === recordingId) {
+        this.exports.delete(exportId);
+      }
+    }
+  }
+
+  async addRecordingInteraction(interaction: {
+    recordingId: string;
+    sessionId: string;
+    interactionType: string;
+    timestamp: Date;
+    relativeTimeMs: number;
+    durationMs?: number;
+    agentType?: 'manager' | 'worker' | 'system' | 'user';
+    content: string;
+    contentType?: 'text' | 'json' | 'binary' | 'image' | 'file';
+    metadata?: any;
+    relatedMessageId?: string;
+    relatedEventId?: string;
+    parentInteractionId?: string;
+  }): Promise<void> {
+    const recordingInteraction: RecordingInteraction = {
+      id: uuidv4(),
+      recordingId: interaction.recordingId,
+      sessionId: interaction.sessionId,
+      sequenceNumber: 0,
+      interactionType: interaction.interactionType as any,
+      timestamp: interaction.timestamp,
+      relativeTimeMs: interaction.relativeTimeMs,
+      durationMs: interaction.durationMs,
+      agentType: interaction.agentType,
+      content: interaction.content,
+      contentType: interaction.contentType || 'text',
+      relatedMessageId: interaction.relatedMessageId,
+      relatedEventId: interaction.relatedEventId,
+      parentInteractionId: interaction.parentInteractionId,
+      metadata: interaction.metadata,
+      isCompressed: false
+    };
+    
+    const interactions = this.interactions.get(interaction.recordingId) || [];
+    interactions.push(recordingInteraction);
+    this.interactions.set(interaction.recordingId, interactions);
+  }
+
+  async getRecordingInteractions(recordingId: string, startTime?: number, endTime?: number): Promise<RecordingInteraction[]> {
+    const interactions = this.interactions.get(recordingId) || [];
+    
+    if (startTime !== undefined || endTime !== undefined) {
+      return interactions.filter(interaction => {
+        const time = interaction.relativeTimeMs;
+        if (startTime !== undefined && time < startTime) return false;
+        if (endTime !== undefined && time > endTime) return false;
+        return true;
+      });
+    }
+    
+    return interactions;
+  }
+
+  async getRecordingInteractionsByTimeRange(
+    recordingId: string, 
+    startTimeMs: number, 
+    endTimeMs: number
+  ): Promise<RecordingInteraction[]> {
+    return this.getRecordingInteractions(recordingId, startTimeMs, endTimeMs);
+  }
+
+  async createPlaybackSession(playback: {
+    recordingId: string;
+    userId?: string;
+    playbackName?: string;
+    playbackSettings?: PlaybackSettings;
+  }): Promise<string> {
+    const id = uuidv4();
+    const playbackSession: PlaybackSession = {
+      id,
+      recordingId: playback.recordingId,
+      userId: playback.userId,
+      playbackName: playback.playbackName || `Playback ${id}`,
+      currentPositionMs: 0,
+      playbackSpeed: 1.0,
+      isPlaying: false,
+      isPaused: false,
+      startedAt: new Date(),
+      lastAccessedAt: new Date(),
+      totalWatchTimeMs: 0,
+      annotationsAdded: 0,
+      bookmarksAdded: 0,
+      playbackSettings: playback.playbackSettings,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    this.playbacks.set(id, playbackSession);
+    return id;
+  }
+
+  async getPlaybackSession(playbackId: string): Promise<PlaybackSession | null> {
+    return this.playbacks.get(playbackId) || null;
+  }
+
+  async updatePlaybackSession(playbackId: string, updates: {
+    currentPositionMs?: number;
+    playbackSpeed?: number;
+    isPlaying?: boolean;
+    isPaused?: boolean;
+    totalWatchTimeMs?: number;
+    notes?: string;
+    playbackSettings?: PlaybackSettings;
+  }): Promise<void> {
+    const playback = this.playbacks.get(playbackId);
+    if (!playback) return;
+    
+    Object.assign(playback, updates, { updatedAt: new Date() });
+    this.playbacks.set(playbackId, playback);
+  }
+
+  async getUserPlaybackSessions(userId: string, recordingId?: string): Promise<PlaybackSession[]> {
+    const sessions = Array.from(this.playbacks.values())
+      .filter(session => session.userId === userId)
+      .filter(session => !recordingId || session.recordingId === recordingId);
+    
+    return sessions.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  }
+
+  async deletePlaybackSession(playbackId: string): Promise<void> {
+    this.playbacks.delete(playbackId);
+  }
+
+  async addRecordingAnnotation(annotation: {
+    recordingId: string;
+    playbackSessionId?: string;
+    userId?: string;
+    timestampMs: number;
+    durationMs?: number;
+    annotationType: 'note' | 'highlight' | 'bookmark' | 'flag' | 'question';
+    title: string;
+    content: string;
+    color?: string;
+    isPublic?: boolean;
+    tags?: string[];
+    priority?: 'low' | 'normal' | 'high' | 'critical';
+  }): Promise<string> {
+    const id = uuidv4();
+    const recordingAnnotation: RecordingAnnotation = {
+      id,
+      recordingId: annotation.recordingId,
+      playbackSessionId: annotation.playbackSessionId,
+      userId: annotation.userId,
+      timestampMs: annotation.timestampMs,
+      durationMs: annotation.durationMs,
+      annotationType: annotation.annotationType,
+      title: annotation.title,
+      content: annotation.content,
+      color: annotation.color || '#yellow',
+      isPublic: annotation.isPublic || false,
+      tags: annotation.tags || [],
+      priority: annotation.priority || 'normal',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    const annotations = this.annotations.get(annotation.recordingId) || [];
+    annotations.push(recordingAnnotation);
+    this.annotations.set(annotation.recordingId, annotations);
+    
+    return id;
+  }
+
+  async getRecordingAnnotations(recordingId: string, userId?: string): Promise<RecordingAnnotation[]> {
+    const annotations = this.annotations.get(recordingId) || [];
+    
+    if (userId) {
+      return annotations.filter(annotation => 
+        annotation.userId === userId || annotation.isPublic
+      );
+    }
+    
+    return annotations;
+  }
+
+  async updateRecordingAnnotation(annotationId: string, updates: Partial<RecordingAnnotation>): Promise<void> {
+    for (const annotations of this.annotations.values()) {
+      const index = annotations.findIndex(a => a.id === annotationId);
+      if (index !== -1) {
+        Object.assign(annotations[index], updates, { updatedAt: new Date() });
+        break;
+      }
+    }
+  }
+
+  async deleteRecordingAnnotation(annotationId: string): Promise<void> {
+    for (const [recordingId, annotations] of this.annotations.entries()) {
+      const filtered = annotations.filter(a => a.id !== annotationId);
+      this.annotations.set(recordingId, filtered);
+    }
+  }
+
+  async addRecordingBookmark(bookmark: {
+    recordingId: string;
+    userId?: string;
+    timestampMs: number;
+    title: string;
+    description?: string;
+    bookmarkType?: 'user' | 'system' | 'auto' | 'key_moment';
+    icon?: string;
+    color?: string;
+    chapterMarker?: boolean;
+  }): Promise<string> {
+    const id = uuidv4();
+    const recordingBookmark: RecordingBookmark = {
+      id,
+      recordingId: bookmark.recordingId,
+      userId: bookmark.userId,
+      timestampMs: bookmark.timestampMs,
+      title: bookmark.title,
+      description: bookmark.description,
+      bookmarkType: bookmark.bookmarkType || 'user',
+      icon: bookmark.icon || '📌',
+      color: bookmark.color || '#blue',
+      chapterMarker: bookmark.chapterMarker || false,
+      accessCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    const bookmarks = this.bookmarks.get(bookmark.recordingId) || [];
+    bookmarks.push(recordingBookmark);
+    bookmarks.sort((a, b) => a.timestampMs - b.timestampMs);
+    this.bookmarks.set(bookmark.recordingId, bookmarks);
+    
+    return id;
+  }
+
+  async getRecordingBookmarks(recordingId: string, userId?: string): Promise<RecordingBookmark[]> {
+    const bookmarks = this.bookmarks.get(recordingId) || [];
+    
+    if (userId) {
+      return bookmarks.filter(bookmark => 
+        bookmark.userId === userId || bookmark.bookmarkType === 'system'
+      );
+    }
+    
+    return bookmarks;
+  }
+
+  async updateRecordingBookmark(bookmarkId: string, updates: Partial<RecordingBookmark>): Promise<void> {
+    for (const bookmarks of this.bookmarks.values()) {
+      const index = bookmarks.findIndex(b => b.id === bookmarkId);
+      if (index !== -1) {
+        Object.assign(bookmarks[index], updates);
+        break;
+      }
+    }
+  }
+
+  async deleteRecordingBookmark(bookmarkId: string): Promise<void> {
+    for (const [recordingId, bookmarks] of this.bookmarks.entries()) {
+      const filtered = bookmarks.filter(b => b.id !== bookmarkId);
+      this.bookmarks.set(recordingId, filtered);
+    }
+  }
+
+  async createRecordingExport(exportRequest: {
+    recordingId: string;
+    requestedBy?: string;
+    exportFormat: 'json' | 'csv' | 'video' | 'html' | 'pdf' | 'zip';
+    exportOptions?: ExportOptions;
+    includeAnnotations?: boolean;
+    includeBookmarks?: boolean;
+    includeMetadata?: boolean;
+    startTimeMs?: number;
+    endTimeMs?: number;
+  }): Promise<string> {
+    const id = uuidv4();
+    const recordingExport: RecordingExport = {
+      id,
+      recordingId: exportRequest.recordingId,
+      requestedBy: exportRequest.requestedBy,
+      exportFormat: exportRequest.exportFormat,
+      exportOptions: exportRequest.exportOptions,
+      includeAnnotations: exportRequest.includeAnnotations || false,
+      includeBookmarks: exportRequest.includeBookmarks || false,
+      includeMetadata: exportRequest.includeMetadata || true,
+      startTimeMs: exportRequest.startTimeMs,
+      endTimeMs: exportRequest.endTimeMs,
+      status: 'pending',
+      downloadCount: 0,
+      requestedAt: new Date()
+    };
+    
+    this.exports.set(id, recordingExport);
+    return id;
+  }
+
+  async getRecordingExport(exportId: string): Promise<RecordingExport | null> {
+    return this.exports.get(exportId) || null;
+  }
+
+  async getRecordingExports(recordingId: string): Promise<RecordingExport[]> {
+    return Array.from(this.exports.values())
+      .filter(exp => exp.recordingId === recordingId)
+      .sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime());
+  }
+
+  async updateRecordingExport(exportId: string, updates: {
+    status?: 'pending' | 'processing' | 'completed' | 'failed';
+    filePath?: string;
+    fileSizeBytes?: number;
+    completedAt?: Date;
+    errorMessage?: string;
+  }): Promise<void> {
+    const exportData = this.exports.get(exportId);
+    if (!exportData) return;
+    
+    Object.assign(exportData, updates, { updatedAt: new Date() });
+    this.exports.set(exportId, exportData);
+  }
+
+  async deleteRecordingExport(exportId: string): Promise<void> {
+    this.exports.delete(exportId);
+  }
+
+  async getRecordingAnalytics(recordingId: string): Promise<{
+    totalViews: number;
+    totalWatchTime: number;
+    averageWatchTime: number;
+    completionRate: number;
+    annotationCount: number;
+    bookmarkCount: number;
+    exportCount: number;
+    viewerCount: number;
+  }> {
+    const playbacks = Array.from(this.playbacks.values())
+      .filter(p => p.recordingId === recordingId);
+    
+    const annotations = this.annotations.get(recordingId) || [];
+    const bookmarks = this.bookmarks.get(recordingId) || [];
+    const exports = Array.from(this.exports.values())
+      .filter(exp => exp.recordingId === recordingId);
+    
+    const totalViews = playbacks.length;
+    const totalWatchTime = playbacks.reduce((sum, p) => sum + p.totalWatchTimeMs, 0);
+    const averageWatchTime = totalViews > 0 ? totalWatchTime / totalViews : 0;
+    const uniqueViewers = new Set(playbacks.map(p => p.userId).filter(Boolean)).size;
+    
+    return {
+      totalViews,
+      totalWatchTime,
+      averageWatchTime,
+      completionRate: 0.85, // Mock completion rate
+      annotationCount: annotations.length,
+      bookmarkCount: bookmarks.length,
+      exportCount: exports.length,
+      viewerCount: uniqueViewers
+    };
+  }
+
+  async getPopularRecordings(limit?: number): Promise<Array<{
+    recordingId: string;
+    recordingName: string;
+    viewCount: number;
+    downloadCount: number;
+    rating?: number;
+  }>> {
+    const recordingStats = new Map<string, {
+      recordingName: string;
+      viewCount: number;
+      downloadCount: number;
+    }>();
+    
+    // Count views
+    for (const playback of this.playbacks.values()) {
+      const recording = this.recordings.get(playback.recordingId);
+      if (recording) {
+        const existing = recordingStats.get(playback.recordingId) || {
+          recordingName: recording.recordingName || recording.id,
+          viewCount: 0,
+          downloadCount: 0
+        };
+        existing.viewCount++;
+        recordingStats.set(playback.recordingId, existing);
+      }
+    }
+    
+    // Count downloads
+    for (const exportData of this.exports.values()) {
+      if (exportData.status === 'completed') {
+        const existing = recordingStats.get(exportData.recordingId);
+        if (existing) {
+          existing.downloadCount++;
+        }
+      }
+    }
+    
+    const results = Array.from(recordingStats.entries())
+      .map(([recordingId, stats]) => ({
+        recordingId,
+        recordingName: stats.recordingName,
+        viewCount: stats.viewCount,
+        downloadCount: stats.downloadCount,
+        rating: Math.random() * 5 // Mock rating
+      }))
+      .sort((a, b) => b.viewCount - a.viewCount);
+    
+    return limit ? results.slice(0, limit) : results;
+  }
+
+  async detectKeyMoments(recordingId: string): Promise<KeyMoment[]> {
+    const interactions = this.interactions.get(recordingId) || [];
+    const keyMoments: KeyMoment[] = [];
+    
+    // Simple key moment detection based on interaction patterns
+    interactions.forEach((interaction, index) => {
+      if (interaction.interactionType === 'error') {
+        keyMoments.push({
+          timestampMs: interaction.relativeTimeMs,
+          title: 'Error Detected',
+          description: 'Error occurred during execution',
+          momentType: 'error',
+          importance: 'high',
+          automaticallyDetected: true,
+          relatedInteractionIds: [interaction.id]
+        });
+      }
+    });
+    
+    return keyMoments;
+  }
+
+  async addKeyMoment(recordingId: string, keyMoment: {
+    timestampMs: number;
+    title: string;
+    description: string;
+    momentType: 'error' | 'completion' | 'decision_point' | 'interaction_peak' | 'user_defined';
+    importance: 'low' | 'medium' | 'high';
+    automaticallyDetected?: boolean;
+    relatedInteractionIds?: string[];
+  }): Promise<void> {
+    // For in-memory implementation, we just store it as an annotation
+    await this.addRecordingAnnotation({
+      recordingId,
+      timestampMs: keyMoment.timestampMs,
+      annotationType: 'bookmark',
+      title: keyMoment.title,
+      content: keyMoment.description,
+      priority: keyMoment.importance === 'high' ? 'high' : 
+               keyMoment.importance === 'medium' ? 'normal' : 'low'
+    });
   }
 }

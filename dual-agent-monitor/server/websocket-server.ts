@@ -9,6 +9,7 @@ import { AnalyticsService } from './analytics/AnalyticsService.js';
 import { SessionReplayManager } from './replay/SessionReplayManager.js';
 import { MLService } from './ml/MLService.js';
 import { AgentIntegrationService } from './services/AgentIntegrationService.js';
+import { DemoAgent } from './demoAgent.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // Utility function to safely handle strings with unicode issues
@@ -64,6 +65,7 @@ const mlService = new MLService(dbService as any, {
   anomalyDetectionSensitivity: 'medium'
 });
 const agentIntegration = new AgentIntegrationService();
+const demoAgent = new DemoAgent();
 const clients = new Set<WebSocket>();
 
 // Initialize services
@@ -151,6 +153,9 @@ let currentSession: DualAgentSession | null = null;
 wss.on('connection', (ws) => {
   console.log('New WebSocket client connected');
   clients.add(ws);
+  
+  // Register WebSocket client with demo agent
+  demoAgent.addWebSocketClient(ws);
 
   // Analytics subscription tracking for this connection
   let analyticsInterval: NodeJS.Timeout | null = null;
@@ -280,6 +285,71 @@ wss.on('connection', (ws) => {
           if (analyticsUnsubscribe) {
             analyticsUnsubscribe();
             analyticsUnsubscribe = null;
+          }
+          break;
+
+        case 'demo:start':
+          try {
+            const scenario = data.scenario || 'oauth';
+            const demoSessionId = await demoAgent.startInteractiveDemo(scenario);
+            demoAgent.generateLiveMetrics(demoSessionId);
+            
+            ws.send(JSON.stringify({
+              type: 'demo:started',
+              data: { demoSessionId, scenario }
+            }));
+          } catch (error: any) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to start demo: ${error.message}`
+            }));
+          }
+          break;
+
+        case 'demo:stop':
+          try {
+            const { demoSessionId } = data;
+            const stopped = demoAgent.stopDemo(demoSessionId);
+            
+            ws.send(JSON.stringify({
+              type: 'demo:stopped',
+              data: { success: stopped, demoSessionId }
+            }));
+          } catch (error: any) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to stop demo: ${error.message}`
+            }));
+          }
+          break;
+
+        case 'demo:analytics':
+          try {
+            const analytics = await demoAgent.createAnalyticsDemo();
+            ws.send(JSON.stringify({
+              type: 'demo:analytics',
+              data: analytics
+            }));
+          } catch (error: any) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to generate analytics demo: ${error.message}`
+            }));
+          }
+          break;
+
+        case 'demo:status':
+          try {
+            const status = demoAgent.getDemoStatus();
+            ws.send(JSON.stringify({
+              type: 'demo:status',
+              data: status
+            }));
+          } catch (error: any) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to get demo status: ${error.message}`
+            }));
           }
           break;
 
@@ -2009,8 +2079,156 @@ app.get('/api/replay/status', async (req, res) => {
   }
 });
 
+// Demo Agent API Endpoints
+app.post('/api/demo/start', async (req, res) => {
+  try {
+    const { scenario } = req.body;
+    const demoSessionId = await demoAgent.startInteractiveDemo(scenario || 'oauth');
+    demoAgent.generateLiveMetrics(demoSessionId);
+    
+    res.json({
+      success: true,
+      demoSessionId,
+      scenario: scenario || 'oauth',
+      message: 'Interactive demo started successfully'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
-// Duplicate endpoint removed - using the main /api/sessions endpoint above
+app.post('/api/demo/stop', async (req, res) => {
+  try {
+    const { demoSessionId } = req.body;
+    
+    if (!demoSessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'demoSessionId is required'
+      });
+    }
+    
+    const stopped = demoAgent.stopDemo(demoSessionId);
+    
+    res.json({
+      success: stopped,
+      message: stopped ? 'Demo stopped successfully' : 'Demo session not found'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.get('/api/demo/status', async (req, res) => {
+  try {
+    const status = demoAgent.getDemoStatus();
+    const stats = demoAgent.getDemoStats();
+    
+    res.json({
+      success: true,
+      status,
+      stats
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/demo/analytics', async (req, res) => {
+  try {
+    const analytics = await demoAgent.createAnalyticsDemo();
+    
+    res.json({
+      success: true,
+      analytics,
+      message: 'Demo analytics data generated and broadcast'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/demo/continuous/start', async (req, res) => {
+  try {
+    const { intervalMinutes } = req.body;
+    demoAgent.startContinuousDemo(intervalMinutes || 10);
+    
+    res.json({
+      success: true,
+      message: `Continuous demo mode started (every ${intervalMinutes || 10} minutes)`
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/demo/continuous/stop', async (req, res) => {
+  try {
+    demoAgent.stopContinuousDemo();
+    
+    res.json({
+      success: true,
+      message: 'Continuous demo mode stopped'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Enhanced mock data seeding endpoint
+app.post('/api/demo/seed', async (req, res) => {
+  try {
+    console.log('🎭 Seeding database with comprehensive demo data...');
+    
+    // Run the seeding function
+    const { seedDatabase } = await import('./database/seed.js');
+    await seedDatabase();
+    
+    // Create analytics demo
+    const analytics = await demoAgent.createAnalyticsDemo();
+    
+    // Broadcast update to all connected clients
+    broadcast({
+      type: 'demo:seeded',
+      data: {
+        message: 'Database seeded with comprehensive demo data',
+        analytics
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: 'Database seeded with comprehensive demo data',
+      analytics
+    });
+  } catch (error: any) {
+    console.error('Error seeding demo data:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+
 
 // Enhanced port configuration with proper environment variable handling
 const DEFAULT_PORT = 4005;

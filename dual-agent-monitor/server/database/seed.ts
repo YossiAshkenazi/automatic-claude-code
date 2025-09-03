@@ -2,10 +2,11 @@
 import { DatabaseService } from './DatabaseService';
 import { databaseConfig, validateConfig } from './config';
 import { v4 as uuidv4 } from 'uuid';
+import { DualAgentMockDataGenerator } from './mockData';
 
 async function seedDatabase() {
   try {
-    console.log('🌱 Starting database seeding...');
+    console.log('🌱 Starting comprehensive database seeding with realistic dual-agent data...');
     
     // Validate configuration
     validateConfig(databaseConfig);
@@ -13,93 +14,79 @@ async function seedDatabase() {
     if (databaseConfig.type === 'sqlite' && databaseConfig.sqlite) {
       const db = new DatabaseService(databaseConfig.sqlite.filename);
       
-      // Create sample session
-      const sampleSessionId = await db.createSession({
-        startTime: new Date(Date.now() - 3600000), // 1 hour ago
-        status: 'completed',
-        initialTask: 'Create a simple React component with TypeScript',
-        workDir: '/tmp/sample-project'
-      });
+      console.log('🎭 Generating realistic dual-agent sessions...');
       
-      // Add sample messages
-      await db.addMessage({
-        id: uuidv4(),
-        sessionId: sampleSessionId,
-        agentType: 'manager',
-        messageType: 'prompt',
-        content: 'I need to create a React component that displays user information with TypeScript types.',
-        timestamp: new Date(Date.now() - 3500000),
-        metadata: {
-          tools: ['Read', 'Write'],
-          files: ['src/components/UserCard.tsx'],
-          duration: 2500
+      // Generate comprehensive mock data
+      const mockSessions = DualAgentMockDataGenerator.generateRealisticSessions(15);
+      const allMetrics: any[] = [];
+      const allSystemEvents: any[] = [];
+      const allCommunications: any[] = [];
+      
+      console.log(`📊 Processing ${mockSessions.length} realistic sessions with full conversation flows...`);
+      
+      // Create all sessions and their data
+      for (const session of mockSessions) {
+        console.log(`  📝 Creating session: ${session.initialTask.substring(0, 60)}...`);
+        
+        // Create session
+        const sessionId = await db.createSession({
+          startTime: session.startTime,
+          status: session.status,
+          initialTask: session.initialTask,
+          workDir: session.workDir
+        });
+        
+        // Update session with proper ID for relationships
+        session.id = sessionId;
+        session.messages.forEach(msg => msg.sessionId = sessionId);
+        
+        // Add all messages for this session
+        for (const message of session.messages) {
+          await db.addMessage({
+            id: message.id,
+            sessionId: sessionId,
+            agentType: message.agentType,
+            messageType: message.messageType,
+            content: message.content,
+            timestamp: message.timestamp,
+            metadata: message.metadata
+          });
         }
-      });
-      
-      await db.addMessage({
-        id: uuidv4(),
-        sessionId: sampleSessionId,
-        agentType: 'worker',
-        messageType: 'response',
-        content: 'I\'ll create a TypeScript React component for displaying user information. Let me start by creating the component file.',
-        timestamp: new Date(Date.now() - 3400000),
-        metadata: {
-          tools: ['Write', 'Edit'],
-          files: ['src/components/UserCard.tsx', 'src/types/User.ts'],
-          duration: 1800,
-          cost: 0.025
+        
+        // Update session status and end time if completed
+        if (session.endTime) {
+          await db.updateSessionStatus(sessionId, session.status, session.endTime);
         }
-      });
+      }
       
-      await db.addMessage({
-        id: uuidv4(),
-        sessionId: sampleSessionId,
-        agentType: 'manager',
-        messageType: 'prompt',
-        content: 'Great! Now let\'s add some basic styling and make it responsive.',
-        timestamp: new Date(Date.now() - 3200000),
-        metadata: {
-          tools: ['Edit'],
-          files: ['src/components/UserCard.tsx', 'src/components/UserCard.css'],
-          duration: 1200
-        }
-      });
+      console.log('📈 Generating performance metrics...');
+      // Generate and add performance metrics
+      const performanceMetrics = DualAgentMockDataGenerator.generatePerformanceMetrics(mockSessions);
+      for (const metric of performanceMetrics) {
+        await db.addPerformanceMetric(metric);
+      }
       
-      // Update session to completed
-      await db.updateSessionStatus(sampleSessionId, 'completed', new Date(Date.now() - 3000000));
+      console.log('🎯 Adding system events...');
+      // Generate and add system events  
+      const systemEvents = DualAgentMockDataGenerator.generateSystemEvents(mockSessions);
+      for (const event of systemEvents) {
+        await db.addSystemEvent(event);
+      }
       
-      // Add system events
-      await db.addSystemEvent({
-        id: uuidv4(),
-        sessionId: sampleSessionId,
-        eventType: 'session_end',
-        details: 'Session completed successfully with React component created',
-        timestamp: new Date(Date.now() - 3000000)
-      });
+      console.log('🤝 Creating agent communication records...');
+      // Generate agent communications (if supported by DB)
+      const communications = DualAgentMockDataGenerator.generateAgentCommunications(mockSessions);
+      // Note: Add communications if your DB supports it
       
-      // Add performance metrics
-      await db.addPerformanceMetric({
-        sessionId: sampleSessionId,
-        agentType: 'manager',
-        responseTime: 1250,
-        tokensUsed: 450,
-        cost: 0.015,
-        errorRate: 0,
-        timestamp: new Date(Date.now() - 3300000)
-      });
-      
-      await db.addPerformanceMetric({
-        sessionId: sampleSessionId,
-        agentType: 'worker',
-        responseTime: 2100,
-        tokensUsed: 680,
-        cost: 0.032,
-        errorRate: 0,
-        timestamp: new Date(Date.now() - 3100000)
-      });
-      
-      console.log('✅ Database seeding completed successfully');
-      console.log(`📊 Sample session created: ${sampleSessionId}`);
+      console.log('\n🎉 COMPREHENSIVE SEEDING COMPLETED!\n');
+      console.log(`📊 Demo Data Summary:`);
+      console.log(`   Sessions: ${mockSessions.length} (with realistic dual-agent conversations)`);
+      console.log(`   Messages: ${mockSessions.reduce((sum, s) => sum + s.messages.length, 0)} (detailed Manager-Worker exchanges)`);
+      console.log(`   Metrics: ${performanceMetrics.length} performance data points`);
+      console.log(`   Events: ${systemEvents.length} system events`);
+      console.log(`   Communications: ${communications.length} agent coordination records`);
+      console.log(`   Project Types: OAuth, API Development, Bug Fixes, Feature Enhancements`);
+      console.log(`\n🚀 Dashboard ready with compelling demo data at http://localhost:6011\n`);
       
       db.close();
     } else {

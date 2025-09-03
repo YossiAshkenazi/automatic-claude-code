@@ -1,0 +1,24 @@
+{
+  "watch": ["src/**/*.ts", "dual-agent-monitor/src/**/*", "python-sdk/*.py"],
+  "ext": "ts,tsx,js,jsx,py,json",
+  "ignore": [
+    "node_modules/**/*",
+    "dist/**/*",
+    "dual-agent-monitor/dist/**/*",
+    "python-sdk/build/**/*",
+    "python-sdk/__pycache__/**/*",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "logs/**/*",
+    "temp/**/*"
+  ],
+  "exec": "pnpm run build && node dist/index.js",
+  "env": {
+    "NODE_ENV": "development",
+    "DEBUG": "*"
+  },
+  "delay": 1000,
+  "legacyWatch": true,
+  "verbose": true,
+  "colours": true
+}

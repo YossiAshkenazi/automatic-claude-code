@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Monitor, Plus, RefreshCw, Wifi, WifiOff, BarChart3, Clock, List, Globe, Network, Activity, Brain, GitBranch } from 'lucide-react';
+import { Monitor, Plus, RefreshCw, Wifi, WifiOff, BarChart3, Clock, List, Globe, Network, Activity, Brain, GitBranch, Workflow, Users, CheckSquare } from 'lucide-react';
 import { DualAgentSession, AgentMessage, WebSocketMessage } from './types';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useMobile } from './hooks/useMobile';
@@ -22,13 +22,20 @@ import {
   MessageFlowDiagram,
   CommunicationTimeline,
   AgentActivityMonitor,
-  CommunicationAnalytics
+  CommunicationAnalytics,
+  WorkflowCanvas
 } from './components/visualization';
+
+// Task Management
+import TaskManagement from './components/TaskManagement';
+
+// Agent Management
+import { MultiAgentDashboard } from './components/AgentManagement';
 
 // Responsive layout
 import { ResponsiveLayout } from './components/layout/ResponsiveLayout';
 
-type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'analytics' | 'sessions' | 'cross-project' | 'message-flow' | 'comm-timeline' | 'agent-activity' | 'comm-analytics';
+type ViewMode = 'dual-pane' | 'timeline' | 'metrics' | 'analytics' | 'sessions' | 'cross-project' | 'message-flow' | 'comm-timeline' | 'agent-activity' | 'comm-analytics' | 'workflow-canvas' | 'agent-management' | 'tasks';
 
 function App() {
   const mobile = useMobile();
@@ -40,7 +47,7 @@ function App() {
   }
   const [sessions, setSessions] = useState<DualAgentSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<DualAgentSession | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('cross-project');
+  const [viewMode, setViewMode] = useState<ViewMode>('agent-management');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -302,9 +309,12 @@ function App() {
           <div className="flex items-center gap-2">
             {/* View Mode Buttons */}
             <div className="flex items-center gap-1 mr-4">
+              {getViewModeButton('agent-management', <Users size={18} />, 'Agent Management')}
+              {getViewModeButton('tasks', <CheckSquare size={18} />, 'Tasks')}
               {getViewModeButton('cross-project', <Globe size={18} />, 'All Projects')}
               {getViewModeButton('sessions', <List size={18} />, 'Sessions')}
               {getViewModeButton('dual-pane', <Monitor size={18} />, 'Dual Pane')}
+              {getViewModeButton('workflow-canvas', <Workflow size={18} />, 'Workflow Canvas')}
               {getViewModeButton('timeline', <Clock size={18} />, 'Timeline')}
               {getViewModeButton('analytics', <BarChart3 size={18} />, 'Analytics')}
               {getViewModeButton('message-flow', <Network size={18} />, 'Message Flow')}
@@ -360,7 +370,29 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex">
-        {viewMode === 'cross-project' ? (
+        {viewMode === 'agent-management' ? (
+          <div className="w-full">
+            <MultiAgentDashboard />
+          </div>
+        ) : viewMode === 'tasks' ? (
+          <div className="w-full">
+            <div className="p-6">
+              <TaskManagement
+                activeSessions={sessions.filter(s => s.status === 'running').map(s => ({
+                  id: s.id,
+                  agentType: 'manager' as const, // TODO: Determine from session metadata
+                  status: s.status as 'running',
+                  taskCount: s.messages.length // Rough estimate
+                }))}
+                onCreateSession={(agentType, taskIds) => {
+                  // Create a new session for the specified agent type with tasks
+                  const taskDescription = `Execute ${taskIds.length} tasks with ${agentType} agent`;
+                  createNewSession();
+                }}
+              />
+            </div>
+          </div>
+        ) : viewMode === 'cross-project' ? (
           <div className="w-full">
             <CrossProjectView
               events={allEvents}
@@ -524,6 +556,45 @@ function App() {
                     session={selectedSession}
                     messages={selectedSession.messages}
                     comparisonSessions={sessions.filter(s => s.id !== selectedSession.id)}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {viewMode === 'workflow-canvas' && (
+              <div className="w-full">
+                <SessionControls 
+                  session={selectedSession}
+                  onStatusChange={handleStatusChange}
+                  onExport={() => handleExportSession(selectedSession.id)}
+                  onDelete={() => handleDeleteSession(selectedSession.id)}
+                />
+                <div className="p-4 h-[calc(100vh-200px)]">
+                  <WorkflowCanvas
+                    session={selectedSession}
+                    messages={selectedSession.messages}
+                    isRealTime={isConnected}
+                    onNodeSelect={(nodeId, nodeType) => {
+                      console.log('Node selected:', nodeId, nodeType);
+                      // TODO: Show node details in sidebar or modal
+                    }}
+                    onEdgeSelect={(edgeId) => {
+                      console.log('Edge selected:', edgeId);
+                      // TODO: Show edge details
+                    }}
+                    onTaskAssign={(taskId, agentType) => {
+                      console.log('Task assigned:', taskId, 'to', agentType);
+                      // TODO: Implement task assignment via WebSocket
+                    }}
+                    onTaskCreate={(task) => {
+                      console.log('Task created:', task);
+                      // TODO: Implement task creation
+                    }}
+                    showControls={true}
+                    showMinimap={true}
+                    enableInteraction={true}
+                    height="calc(100vh - 250px)"
+                    className="bg-white rounded-lg shadow-sm"
                   />
                 </div>
               </div>

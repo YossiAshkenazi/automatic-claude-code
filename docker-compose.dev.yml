@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # React Dashboard
+  dashboard:
+    build:
+      context: ./dual-agent-monitor
+      dockerfile: Dockerfile.dev
+      target: development
+    ports:
+      - "6011:6011"
+    volumes:
+      - ./dual-agent-monitor/src:/app/src
+      - ./dual-agent-monitor/public:/app/public
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_API_BASE_URL=http://localhost:4005
+      - REACT_APP_WS_BASE_URL=ws://localhost:4005
+    depends_on:
+      - python-orchestrator
+      - postgres
+    command: pnpm run dev
+    stdin_open: true
+    tty: true
+
+  # Python Orchestrator
+  python-orchestrator:
+    build:
+      context: ./python-sdk
+      dockerfile: Dockerfile.dev
+    ports:
+      - "4005:4005"
+    volumes:
+      - ./python-sdk:/app
+      - /app/__pycache__
+    environment:
+      - PYTHON_ENV=development
+      - PYTHONPATH=/app
+      - PYTHON_DEBUG=true
+      - DATABASE_URL=postgresql://dev_user:dev_password@postgres:5432/visual_agent_dev
+    depends_on:
+      - postgres
+      - redis
+    command: python -m uvicorn multi_agent_wrapper:app --reload --host 0.0.0.0 --port 4005
+    stdin_open: true
+    tty: true
+
+  # Hook System & Observability
+  hooks-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.hooks
+    ports:
+      - "4000:4000"
+      - "6001:6001"
+    volumes:
+      - ./.claude/hooks:/app/hooks
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=development
+      - HOOKS_PORT=4000
+      - HOOKS_DASHBOARD_PORT=6001
+    command: node hooks/observability-server.js
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: visual_agent_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./dual-agent-monitor/server/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev_user -d visual_agent_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Redis for Caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Development Tools Container
+  devtools:
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/dual-agent-monitor/node_modules
+    command: tail -f /dev/null
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+
+networks:
+  default:
+    name: visual-agent-dev
+    driver: bridge

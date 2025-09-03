@@ -1,8 +1,10 @@
-# Automatic Claude Code (v2.0.0)
+# Visual Agent Management Platform (v2.1.0)
 
-A powerful dual-agent system that revolutionizes AI-assisted development through coordinated Claude Code automation. Features a Manager-Worker architecture where specialized agents collaborate to tackle complex development tasks with unprecedented sophistication and reliability.
+**A comprehensive visual management platform for parallel Claude Code CLI agents with real-time workflow orchestration.**
 
-> 🎉 **Major Update v2.0.0**: ACC now uses pure SDK integration! Simplified architecture eliminates complex browser authentication and PTY systems. Direct integration with Claude Code CLI for maximum reliability and performance.
+Transform your development workflow with intuitive visual management of multiple Claude agents. Create Manager and Worker agents through a modern React dashboard, watch them communicate in real-time, manage task handoffs, and control entire development workflows through an elegant UI.
+
+> 🎯 **Major Project Evolution v2.1.0**: Full pivot to Visual Agent Management Platform! Now featuring React dashboard, real-time WebSocket communication, multi-agent coordination, and comprehensive visual workflow orchestration.
 
 ## ✅ Build Status (Verified September 3, 2025)
 
@@ -50,16 +52,23 @@ A powerful dual-agent system that revolutionizes AI-assisted development through
 
 ## 📚 Documentation
 
-The project documentation has been organized into logical categories for easy navigation:
+### **📖 Core Platform Documentation**
+- **[📋 Documentation Hub](./docs/INDEX.md)** - Complete documentation overview and navigation
+- **[🎯 Visual Agent Management PRD](./docs/VISUAL_AGENT_MANAGEMENT_PRD.md)** - Product requirements and vision
+- **[🏗️ Technical Architecture](./docs/TECHNICAL_ARCHITECTURE.md)** - System architecture and design
+- **[📊 Epic Structure](./docs/EPIC_STRUCTURE.md)** - Development roadmap and milestones
 
-- **[Documentation Index](./docs/INDEX.md)** - Complete documentation overview
-- **[Quick Start Guide](./docs/setup/QUICK_START.md)** - Get started in minutes
-- **[Architecture Overview](./docs/architecture/overview.md)** - System design and architecture
-- **[Development Guide](./docs/development/prd.md)** - Development documentation
-- **[Testing Guide](./docs/testing/TESTING_GUIDE.md)** - Testing procedures
-- **[API Reference](./docs/reference/api-documentation.md)** - API documentation
+### **🔧 Integration & Development**
+- **[🔌 Integration Guide](./docs/INTEGRATION_GUIDE.md)** - Complete component integration instructions
+- **[📡 API Specification](./docs/API_SPECIFICATION.md)** - REST endpoints and WebSocket protocols
+- **[👨‍💻 Developer Guide](./docs/DEVELOPER_GUIDE.md)** - Comprehensive development and contribution guide
 
-For the complete documentation structure, see [docs/INDEX.md](./docs/INDEX.md).
+### **🚀 Quick Links**
+- **[⚡ Quick Start](./docs/setup/QUICK_START.md)** - Get started with visual agent platform in minutes
+- **[🔧 Developer Setup](./docs/DEVELOPER_GUIDE.md#quick-start-for-developers)** - Complete development environment
+- **[🧪 Integration Testing](./docs/INTEGRATION_GUIDE.md#testing-integration)** - End-to-end testing guide
+
+**Platform Vision**: Windows-based visual interface for managing multiple parallel Claude Code CLI agents with real-time workflow orchestration and comprehensive monitoring.
 
 ## Installation
 

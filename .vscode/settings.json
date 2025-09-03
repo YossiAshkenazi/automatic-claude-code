@@ -1,0 +1,119 @@
+{
+  // === INTEGRATED DEVELOPMENT SETTINGS ===
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.suggest.autoImports": true,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  
+  // === MULTI-ROOT WORKSPACE SETTINGS ===
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/__pycache__": true,
+    "**/logs": true,
+    "**/temp": true
+  },
+  
+  // === FILE ASSOCIATIONS ===
+  "files.associations": {
+    "*.env.*": "dotenv",
+    "docker-compose*.yml": "dockercompose",
+    "Dockerfile*": "dockerfile"
+  },
+  
+  // === PYTHON CONFIGURATION ===
+  "python.defaultInterpreterPath": "./python-sdk/venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.analysis.extraPaths": ["./python-sdk"],
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestPath": "./python-sdk/venv/Scripts/pytest.exe",
+  "python.formatting.provider": "black",
+  "python.linting.enabled": true,
+  "python.linting.flake8Enabled": true,
+  
+  // === TYPESCRIPT & JAVASCRIPT ===
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true,
+    "source.organizeImports": true
+  },
+  "eslint.workingDirectories": [
+    "./src",
+    "./dual-agent-monitor/src",
+    "./dual-agent-monitor/server"
+  ],
+  
+  // === DEVELOPMENT WORKFLOW ===
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/__pycache__/**": true,
+    "**/logs/**": true,
+    "**/temp/**": true,
+    "**/.git/**": true
+  },
+  
+  // === INTEGRATED TERMINAL ===
+  "terminal.integrated.profiles.windows": {
+    "PowerShell": {
+      "source": "PowerShell",
+      "args": ["-NoExit", "-ExecutionPolicy", "Bypass"]
+    },
+    "Command Prompt": {
+      "path": "cmd.exe",
+      "args": []
+    },
+    "Python Environment": {
+      "path": "powershell.exe", 
+      "args": [
+        "-NoExit",
+        "-Command",
+        "cd python-sdk; if (Test-Path venv/Scripts/activate.ps1) { .\\venv\\Scripts\\activate.ps1 }"
+      ]
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  
+  // === DEBUGGING ===
+  "debug.allowBreakpointsEverywhere": true,
+  "debug.console.fontSize": 14,
+  "debug.inlineValues": "on",
+  
+  // === EXTENSIONS CONFIGURATION ===
+  "emmet.includeLanguages": {
+    "typescript": "html",
+    "typescriptreact": "html"
+  },
+  
+  // === GIT INTEGRATION ===
+  "git.suggestSmartCommit": false,
+  "git.autofetch": true,
+  "git.enableSmartCommit": true,
+  
+  // === WORKSPACE RECOMMENDATIONS ===
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.debugpy",
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-typescript-next",
+    "esbenp.prettier-vscode",
+    "ms-vscode.vscode-json",
+    "ms-azuretools.vscode-docker",
+    "ms-vscode-remote.remote-containers"
+  ],
+  
+  // === DEVELOPMENT ENVIRONMENT INDICATORS ===
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#2563eb",
+    "titleBar.activeForeground": "#ffffff",
+    "statusBar.background": "#2563eb",
+    "statusBar.foreground": "#ffffff"
+  },
+  "workbench.statusBar.visible": true,
+  
+  // === HOT RELOAD CONFIGURATION ===
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "files.hotExit": "onExitAndWindowClose",
+  "editor.quickSuggestionsDelay": 100
+}

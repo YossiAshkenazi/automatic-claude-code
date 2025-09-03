@@ -1,0 +1,162 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-cli",
+      "type": "npm",
+      "script": "build",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "setup-debug-environment",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy", "Bypass",
+        "-File", "scripts/setup-debug-environment.ps1"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "new"
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    },
+    {
+      "label": "start-dashboard-debug",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["run", "debug:dashboard"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "new"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "typescript",
+        "fileLocation": "relative",
+        "pattern": {
+          "regexp": "^([^\\s].*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "webpack-dev-server",
+          "endsPattern": "webpack compiled|failed"
+        }
+      }
+    },
+    {
+      "label": "start-python-debug",
+      "type": "shell",
+      "command": "python",
+      "args": ["-m", "debugpy", "--listen", "5678", "--wait-for-client", "claude_cli_wrapper.py"],
+      "options": {
+        "cwd": "${workspaceFolder}/python-sdk",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}/python-sdk",
+          "PYTHON_ENV": "development"
+        }
+      },
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "new"
+      },
+      "isBackground": true
+    },
+    {
+      "label": "dev:platform",
+      "type": "npm",
+      "script": "dev:platform",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "new"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": ".",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[.*\\] .*",
+          "endsPattern": "^\\[.*\\] .*ready.*"
+        }
+      }
+    },
+    {
+      "label": "test:all",
+      "type": "npm", 
+      "script": "test:all",
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "build:all",
+      "type": "npm",
+      "script": "build:all", 
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "dependsOrder": "sequence",
+      "dependsOn": ["build-cli"]
+    },
+    {
+      "label": "clean:all",
+      "type": "npm",
+      "script": "clean:all",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "lint:all",
+      "type": "npm",
+      "script": "lint:all",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

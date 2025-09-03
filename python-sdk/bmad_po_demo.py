@@ -88,15 +88,38 @@ async def demo_bmad_po():
         
         # Demo 1: Create story
         print("\n--- Demo 1: Story Creation ---")
+        print("Creating story for: 'User needs to reset forgotten password'")
         story = await sarah.create_story("User needs to reset forgotten password")
-        print("Story created:")
-        print(story)
+        print(f"Story created (length: {len(story)}):")
+        if story and story.strip():
+            try:
+                # Handle potential encoding issues on Windows
+                print(story.encode('utf-8', errors='replace').decode('utf-8'))
+            except Exception as e:
+                print(f"Encoding issue: {e}")
+                # Try to print safely by removing problematic characters
+                safe_story = ''.join(char for char in story if ord(char) < 128)
+                print(f"Safe ASCII version: {safe_story}")
+        else:
+            print("⚠️  WARNING: Empty story returned")
+            return
         
         # Demo 2: Validate story  
         print("\n--- Demo 2: Story Validation ---")
+        print(f"Validating story (first 100 chars): {story[:100]}...")
         validation = await sarah.validate_story(story)
-        print("Validation result:")
-        print(validation)
+        print(f"Validation result (length: {len(validation)}):")
+        if validation and validation.strip():
+            try:
+                # Handle potential encoding issues on Windows
+                print(validation.encode('utf-8', errors='replace').decode('utf-8'))
+            except Exception as e:
+                print(f"Encoding issue: {e}")
+                # Try to print safely by removing problematic characters
+                safe_validation = ''.join(char for char in validation if ord(char) < 128)
+                print(f"Safe ASCII version: {safe_validation}")
+        else:
+            print("⚠️  WARNING: Empty validation returned")
         
         print("\n=== SUCCESS ===")
         print("BMAD PO integration working with:")

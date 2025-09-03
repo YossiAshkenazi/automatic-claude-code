@@ -1,0 +1,47 @@
+{
+  "recommendations": [
+    // === CORE DEVELOPMENT ===
+    "ms-python.python",
+    "ms-python.debugpy",
+    "ms-vscode.vscode-typescript-next",
+    
+    // === REACT & FRONTEND ===
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-json",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    
+    // === CONTAINERIZATION ===
+    "ms-azuretools.vscode-docker",
+    "ms-vscode-remote.remote-containers",
+    
+    // === PRODUCTIVITY ===
+    "ms-vscode.powershell",
+    "formulahendry.auto-rename-tag",
+    "christian-kohler.path-intellisense",
+    "streetsidesoftware.code-spell-checker",
+    
+    // === COLLABORATION ===
+    "ms-vsliveshare.vsliveshare",
+    "ms-vscode.vscode-pull-request-github",
+    
+    // === DATABASE ===
+    "ms-mssql.mssql",
+    "cweijan.vscode-postgresql-client2",
+    
+    // === TESTING ===
+    "ms-vscode.test-adapter-converter",
+    "hbenl.vscode-test-explorer",
+    
+    // === UTILITIES ===
+    "ms-vscode.hexeditor",
+    "ms-vscode.live-server",
+    "redhat.vscode-yaml",
+    "dotenv.dotenv-vscode"
+  ],
+  
+  "unwantedRecommendations": [
+    "ms-vscode.vscode-typescript",
+    "ms-vscode.node-debug2"
+  ]
+}

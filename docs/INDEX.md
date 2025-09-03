@@ -1,29 +1,54 @@
-# Automatic Claude Code Documentation
+# Visual Agent Management Platform - Documentation Hub
 
-## 📚 Documentation Structure
+## 🎯 **Project Vision**
+A comprehensive visual management platform for parallel Claude Code CLI agents with real-time workflow orchestration, enabling intuitive creation and coordination of Manager and Worker agents through a modern React dashboard.
 
-Welcome to the Automatic Claude Code documentation. All documentation has been organized into logical categories for easy navigation.
+## 📚 **Core Documentation**
 
-### 🚀 [Setup](./setup/)
-- [Quick Start Guide](./setup/QUICK_START.md) - Get started in minutes
-- [Quick Setup](./setup/QUICK-SETUP.md) - Rapid installation guide
-- [Getting Started](./setup/getting-started.md) - Comprehensive setup guide
+### 🏗️ **Visual Agent Platform Architecture**
+- **[Visual Agent Management PRD](./VISUAL_AGENT_MANAGEMENT_PRD.md)** - Complete product requirements and vision
+- **[Technical Architecture](./TECHNICAL_ARCHITECTURE.md)** - System architecture and component design
+- **[Epic Structure](./EPIC_STRUCTURE.md)** - 6-epic development roadmap and milestones
+- **[Integration Guide](./INTEGRATION_GUIDE.md)** - Complete component integration instructions
+- **[API Specification](./API_SPECIFICATION.md)** - REST endpoints and WebSocket protocols
+- **[Developer Guide](./DEVELOPER_GUIDE.md)** - Comprehensive development and contribution guide
+
+### 🚀 **Getting Started**
+- **[Quick Start Guide](./setup/QUICK_START.md)** - Get started in minutes with visual agent platform
+- **[Developer Setup](./DEVELOPER_GUIDE.md#quick-start-for-developers)** - Complete development environment setup
+- **[System Requirements](./VISUAL_AGENT_MANAGEMENT_PRD.md#technical-requirements)** - Platform requirements and dependencies
+
+### 🔧 **Integration & Development**
+- **[Component Integration](./INTEGRATION_GUIDE.md#component-integration-patterns)** - Frontend-backend integration patterns
+- **[WebSocket Protocols](./API_SPECIFICATION.md#websocket-protocol)** - Real-time communication specifications
+- **[Agent Coordination](./INTEGRATION_GUIDE.md#agent-coordination-workflows)** - Manager-Worker coordination workflows
+- **[Custom Extensions](./DEVELOPER_GUIDE.md#extension--customization)** - Creating custom agent types and visualizations
+
+### 📊 **API & Protocols**
+- **[REST API Endpoints](./API_SPECIFICATION.md#rest-api-endpoints)** - Complete API reference
+- **[WebSocket Events](./API_SPECIFICATION.md#websocket-event-types)** - Real-time event specifications
+- **[Authentication & Security](./API_SPECIFICATION.md#authentication--security)** - Security protocols and JWT authentication
+- **[Client Libraries](./API_SPECIFICATION.md#api-client-libraries)** - Python and TypeScript client examples
+
+### 🧪 **Testing & Quality**
+- **[Integration Testing](./INTEGRATION_GUIDE.md#testing-integration)** - End-to-end integration tests
+- **[Development Testing](./DEVELOPER_GUIDE.md#testing-strategy)** - Frontend and backend testing strategies
+- **[Performance Testing](./DEVELOPER_GUIDE.md#performance-monitoring)** - Performance profiling and optimization
+
+### 🚀 **Legacy Setup & Architecture**
+- [Quick Setup](./setup/QUICK-SETUP.md) - Rapid installation guide (legacy)
+- [Getting Started](./setup/getting-started.md) - Comprehensive setup guide (legacy)
 - [Docker Setup](./setup/DOCKER.md) - Docker containerization guide
+- [Architecture Overview](./architecture/overview.md) - Legacy system architecture
+- [Dual-Agent Architecture](./architecture/dual-agent-architecture.md) - Original Manager-Worker pattern
 
-### 🏗️ [Architecture](./architecture/)
-- [Architecture Overview](./architecture/overview.md) - System architecture documentation
-- [Dual-Agent Architecture](./architecture/dual-agent-architecture.md) - Manager-Worker pattern details
-- [PTY Technical Guide](./architecture/pty-technical-guide.md) - PTY implementation details
-
-### 💻 [Development](./development/)
-- [Product Requirements Document](./development/prd.md) - Full PRD for the system
+### 💻 **Legacy Development**
+- [Product Requirements Document](./development/prd.md) - Original PRD for CLI system
 - [Phase 3 Roadmap](./development/PHASE3_ROADMAP.md) - Future development plans
-- [Claude Headless Alternative](./development/CLAUDE-HEADLESS-ALTERNATIVE.md) - Alternative implementation approaches
-- [OAuth Installation Summary](./development/OAUTH_INSTALLATION_SUMMARY.md) - OAuth implementation details
-- [PTY Implementation Summary](./development/PTY-IMPLEMENTATION-COMPLETION-SUMMARY.md) - PTY completion report
-- [Story Implementation Summary](./development/STORY_1_1_IMPLEMENTATION_SUMMARY.md) - Feature implementation details
-- [Documentation Update Summary](./development/DOCUMENTATION-UPDATE-SUMMARY.md) - Documentation changes
-- [Documentation Update v1.2.0](./development/DOCUMENTATION-UPDATE-SUMMARY-v1.2.0.md) - v1.2.0 documentation changes
+- [Claude Headless Alternative](./development/CLAUDE-HEADLESS-ALTERNATIVE.md) - Alternative approaches
+- [OAuth Implementation](./development/OAUTH_INSTALLATION_SUMMARY.md) - OAuth integration details
+- [PTY Implementation](./development/PTY-IMPLEMENTATION-COMPLETION-SUMMARY.md) - PTY completion
+- [Documentation Updates](./development/DOCUMENTATION-UPDATE-SUMMARY.md) - Change summaries
 
 ### 🔧 [Operations](./operations/)
 - [Usage Guide](./operations/usage-guide.md) - How to use the system

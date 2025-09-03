@@ -331,34 +331,31 @@ export class PythonAgentWebSocketService {
   ): Promise<AgentInfo> {
     const message: PythonMessage = {
       id: uuidv4(),
-      type: MessageType.COMMAND_EXECUTE,
+      type: MessageType.AGENT_CREATE,
       timestamp: new Date().toISOString(),
       payload: {
-        command: 'create_agent',
-        data: {
-          role: agentType,
-          model,
-          capabilities,
-          agent_id: `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          name: `${agentType} Agent`
-        }
-      }
+        agent_type: agentType,
+        model,
+        capabilities
+      },
+      correlation_id: uuidv4()
     };
 
     const response = await this.sendAndWaitResponse(message);
-    if (response.type === 'command_response' && response.payload.success) {
-      const result = response.payload.result;
+    if (response.type === MessageType.COMMAND_RESULT && response.payload.result?.success) {
+      const agentInfo = response.payload.result.agent_info;
       
-      // Convert to AgentInfo format
+      // Convert to expected AgentInfo format
       return {
-        id: result.agent_id,
+        id: agentInfo.id || response.payload.result.agent_id,
         type: agentType,
-        status: 'idle',
-        created_at: new Date().toISOString(),
-        last_activity: new Date().toISOString(),
-        model: model,
-        capabilities: capabilities,
-        metrics: {
+        status: agentInfo.status || 'idle',
+        created_at: agentInfo.created_at || new Date().toISOString(),
+        last_activity: agentInfo.last_activity || new Date().toISOString(),
+        current_task: agentInfo.current_task,
+        model: agentInfo.model || model,
+        capabilities: agentInfo.capabilities || capabilities,
+        metrics: agentInfo.metrics || {
           tasks_completed: 0,
           tasks_failed: 0,
           avg_response_time: 0,
@@ -369,7 +366,7 @@ export class PythonAgentWebSocketService {
       };
     }
 
-    throw new Error(response.payload?.result?.error || response.payload.error_message || 'Failed to create agent');
+    throw new Error(response.payload.result?.error || response.payload.error_message || 'Failed to create agent');
   }
 
   public async executeCommand(

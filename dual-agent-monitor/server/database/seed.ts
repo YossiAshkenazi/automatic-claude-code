@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { DatabaseService } from './DatabaseService';
-import { databaseConfig, validateConfig } from './config';
+import { DatabaseService } from './DatabaseService.js';
+import { databaseConfig, validateConfig } from './config.js';
 import { v4 as uuidv4 } from 'uuid';
-import { DualAgentMockDataGenerator } from './mockData';
+import { DualAgentMockDataGenerator } from './mockData.js';
 
 async function seedDatabase() {
   try {

@@ -178,13 +178,13 @@ export function useRealAgentManager(options: UseRealAgentManagerOptions = {}) {
   }, [enableToasts]);
 
   // Agent management
-  const createAgent = useCallback(async (request: CreateAgentRequest): Promise<Agent | null> => {
+  const createAgent = useCallback(async (request: CreateAgentRequest): Promise<Agent> => {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
       const pythonAgentType = convertAgentType(request.type);
-      const model = request.configuration?.model || 'sonnet';
-      const capabilities = request.configuration?.capabilities || [];
+      const model = request.configuration?.model || 'claude-3-sonnet-20240229';
+      const capabilities = request.configuration?.capabilities || ['general'];
       
       const agentInfo = await pythonAgentWebSocket.createAgent(
         pythonAgentType,
@@ -192,7 +192,40 @@ export function useRealAgentManager(options: UseRealAgentManagerOptions = {}) {
         capabilities
       );
       
-      const agent = convertPythonAgent(agentInfo);
+      // Create agent with proper name from request
+      const agent: Agent = {
+        id: agentInfo.id,
+        name: request.name,
+        type: request.type,
+        role: getClaudeRole(model),
+        status: 'idle',
+        createdAt: agentInfo.created_at,
+        lastActivity: agentInfo.last_activity,
+        currentTask: null,
+        specialization: request.specialization,
+        metrics: {
+          totalTasks: 0,
+          completedTasks: 0,
+          failedTasks: 0,
+          averageResponseTime: 0,
+          totalTokensUsed: 0,
+          totalCost: 0,
+          uptime: 0,
+          healthScore: 100
+        },
+        configuration: {
+          model: model,
+          maxTokens: request.configuration?.maxTokens || 4000,
+          temperature: request.configuration?.temperature || 0.1,
+          maxIterations: request.configuration?.maxIterations || 10,
+          timeoutSeconds: request.configuration?.timeoutSeconds || 300,
+          capabilities: capabilities,
+          resourceLimits: request.configuration?.resourceLimits || {
+            maxMemoryMB: 512,
+            maxCpuPercent: 50
+          }
+        }
+      };
       
       setState(prev => ({
         ...prev,
@@ -213,7 +246,7 @@ export function useRealAgentManager(options: UseRealAgentManagerOptions = {}) {
         toast.error(`Failed to create agent: ${errorMessage}`);
       }
 
-      return null;
+      throw error;
     }
   }, [enableToasts]);
 

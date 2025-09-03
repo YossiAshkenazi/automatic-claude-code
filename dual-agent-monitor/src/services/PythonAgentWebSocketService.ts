@@ -165,7 +165,7 @@ export class PythonAgentWebSocketService {
     totalUptime: 0
   };
 
-  constructor(url: string = 'ws://localhost:8766') {
+  constructor(url: string = import.meta.env.VITE_PYTHON_WS_URL || 'ws://localhost:8765') {
     this.url = url;
     this.clientId = uuidv4();
   }
@@ -331,21 +331,45 @@ export class PythonAgentWebSocketService {
   ): Promise<AgentInfo> {
     const message: PythonMessage = {
       id: uuidv4(),
-      type: MessageType.AGENT_CREATE,
+      type: MessageType.COMMAND_EXECUTE,
       timestamp: new Date().toISOString(),
       payload: {
-        agent_type: agentType,
-        model,
-        capabilities
+        command: 'create_agent',
+        data: {
+          role: agentType,
+          model,
+          capabilities,
+          agent_id: `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: `${agentType} Agent`
+        }
       }
     };
 
     const response = await this.sendAndWaitResponse(message);
-    if (response.type === MessageType.COMMAND_RESULT && response.payload.success) {
-      return response.payload.agent_info;
+    if (response.type === 'command_response' && response.payload.success) {
+      const result = response.payload.result;
+      
+      // Convert to AgentInfo format
+      return {
+        id: result.agent_id,
+        type: agentType,
+        status: 'idle',
+        created_at: new Date().toISOString(),
+        last_activity: new Date().toISOString(),
+        model: model,
+        capabilities: capabilities,
+        metrics: {
+          tasks_completed: 0,
+          tasks_failed: 0,
+          avg_response_time: 0,
+          tokens_used: 0,
+          uptime: 0,
+          success_rate: 1.0
+        }
+      };
     }
 
-    throw new Error(response.payload.error_message || 'Failed to create agent');
+    throw new Error(response.payload?.result?.error || response.payload.error_message || 'Failed to create agent');
   }
 
   public async executeCommand(

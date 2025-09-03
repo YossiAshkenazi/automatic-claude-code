@@ -82,6 +82,40 @@ dual-agent-monitor/            # Monitoring dashboard
 Each agent returns <1K tokens"
 ```
 
+### ⚠️ CRITICAL RULE: MANDATORY SUBAGENT DELEGATION FOR TOKEN CONSERVATION
+
+**NEVER DO DIRECT WORK IN PRIMARY SESSION** - Always delegate to subagents to preserve context:
+
+#### Token Conservation Protocol (Non-Negotiable)
+
+1. **Immediate Delegation**: ANY task that involves file operations, searches, or analysis MUST be delegated to subagents
+2. **Context Protection**: Primary session should only contain:
+   - Task planning and orchestration
+   - Subagent results summaries (max 1K tokens each)
+   - Final consolidated responses
+3. **Prohibited in Primary Session**:
+   - Direct file reading/writing operations
+   - Codebase searches or exploration
+   - Multi-step implementation work
+   - Repetitive operations
+   - Any work that could consume >5K tokens
+
+#### Enforcement Rules
+
+```javascript
+// WRONG - Pollutes primary context
+Read file → Analyze → Implement → Test → Document
+// +50K tokens accumulated in primary session ❌
+
+// CORRECT - Preserves primary context  
+Task("analysis-agent", "analyze codebase") → 1K summary
+Task("implementation-agent", "implement feature") → 500 token confirmation  
+Task("test-agent", "run tests") → 300 token results
+// Total: <2K tokens in primary session ✅
+```
+
+**Key Principle**: The primary session is a **strategic orchestrator**, not a worker. Keep it clean, focused, and token-efficient for maximum session longevity and performance.
+
 ### Available Subagents
 - **general-purpose**: Complex multi-step tasks
 - **test-runner**: Run tests and analyze failures

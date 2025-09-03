@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { ClaudeUtils } from '../claudeUtils';
 import { Logger } from '../logger';
 import { OutputParser, ParsedOutput } from '../outputParser';
+import { SDKClaudeExecutor } from '../services/sdkClaudeExecutor';
 import {
   AgentMessage,
   WorkItem,
@@ -20,6 +21,8 @@ export interface WorkerAgentConfig {
   timeout: number;
   verbose?: boolean;
   allowedTools?: string;
+  usePTY?: boolean;
+  claudeExecutor?: SDKClaudeExecutor;
 }
 
 export interface TaskExecutionResult {
@@ -51,6 +54,8 @@ export class WorkerAgent extends EventEmitter {
   private currentSession?: string;
   private agentConfig?: WorkerAgentConfig;
   private messageHistory: AgentMessage[] = [];
+  private claudeExecutor?: SDKClaudeExecutor;
+  private ptySessionId?: string;
   private activeAssignments: Map<string, TaskAssignment> = new Map();
   private progressTracking: Map<string, ProgressUpdate> = new Map();
   private capabilities: Map<string, WorkerCapability> = new Map();
@@ -79,12 +84,29 @@ export class WorkerAgent extends EventEmitter {
   async initialize(config: WorkerAgentConfig): Promise<void> {
     this.agentConfig = config;
     this.isInitialized = true;
+    this.claudeExecutor = config.claudeExecutor;
     
-    this.logger.info('Worker agent initialized', { 
-      model: config.model,
-      workDir: config.workDir,
-      timeout: config.timeout 
-    });
+    // Initialize PTY session if enabled
+    if (config.usePTY && this.claudeExecutor) {
+      const ptySession = await this.claudeExecutor.getOrCreatePTYSession(
+        this.currentSession || 'worker',
+        config.workDir
+      );
+      this.ptySessionId = ptySession.sessionId || this.currentSession || 'worker';
+      
+      this.logger.info('Worker agent initialized with PTY', {
+        model: config.model,
+        workDir: config.workDir,
+        timeout: config.timeout,
+        ptySessionId: this.ptySessionId
+      });
+    } else {
+      this.logger.info('Worker agent initialized with spawn', {
+        model: config.model,
+        workDir: config.workDir,
+        timeout: config.timeout
+      });
+    }
 
     this.emit('agent_initialized', { role: 'worker', config });
   }
@@ -598,6 +620,18 @@ Provide a clear summary of what was improved and how it addresses the feedback.
       throw new Error('Worker agent not initialized');
     }
 
+    // Use PTY execution if available
+    if (this.agentConfig.usePTY && this.claudeExecutor && this.ptySessionId) {
+      try {
+        const output = await this.claudeExecutor.sendToPTYSession(this.ptySessionId, prompt);
+        return { output, exitCode: 0 };
+      } catch (error) {
+        this.logger.error('PTY execution failed, falling back to spawn', { error });
+        // Fall through to spawn execution
+      }
+    }
+
+    // Traditional spawn-based execution
     const args = ['-p', prompt];
     
     if (this.agentConfig.model) {
@@ -719,6 +753,12 @@ Provide a clear summary of what was improved and how it addresses the feedback.
     this.progressTracking.clear();
     this.messageHistory = [];
     
+    // Close PTY session if exists
+    if (this.ptySessionId && this.claudeExecutor) {
+      this.claudeExecutor.closePTYSession(this.ptySessionId);
+      this.ptySessionId = undefined;
+    }
+    
     this.logger.info('Worker agent shutdown completed', {
       performanceMetrics: {
         tasksCompleted: this.performanceMetrics.tasksCompleted,
@@ -726,7 +766,8 @@ Provide a clear summary of what was improved and how it addresses the feedback.
           ? (this.performanceMetrics.tasksSucceeded / this.performanceMetrics.tasksCompleted) * 100
           : 0,
         averageCompletionTime: Math.round(this.performanceMetrics.averageCompletionTime)
-      }
+      },
+      ptySessionClosed: this.ptySessionId === undefined
     });
     
     this.emit('agent_shutdown', { role: 'worker' });

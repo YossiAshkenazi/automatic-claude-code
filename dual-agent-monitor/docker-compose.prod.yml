@@ -99,6 +99,31 @@ services:
           cpus: '0.1'
           memory: 128M
 
+  # Frontend service for development access
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "6011:6011"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://localhost:4005
+      - VITE_WS_URL=ws://localhost:4005
+    depends_on:
+      - dual-agent-monitor
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
   # Nginx reverse proxy
   nginx:
     image: nginx:alpine
@@ -112,6 +137,7 @@ services:
       - ssl_certs:/etc/nginx/ssl:ro
     depends_on:
       - dual-agent-monitor
+      - frontend
     networks:
       - app-network
     healthcheck:

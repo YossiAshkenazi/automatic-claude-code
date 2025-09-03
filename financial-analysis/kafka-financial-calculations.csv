@@ -1,0 +1,45 @@
+Category,Item,Year 0,Year 1,Year 2,Year 3,Formula,Notes
+Investment,Personnel,700000,0,0,0,=SUM(Senior_Engineers+DevOps+Developers),70% of total investment
+Investment,Infrastructure,200000,40000,45000,50000,=Initial_Setup+Annual_Maintenance,20% initial + ongoing costs
+Investment,Technology,100000,30000,35000,40000,=Licenses+Tools+Training,10% initial + growth
+Total Investment,CAPEX,1000000,70000,80000,90000,=SUM(Personnel+Infrastructure+Technology),Total capital expenditure
+Revenue,Enterprise Deals,0,500000,750000,1000000,=Base_Case*Growth_Rate,Primary revenue driver
+Revenue,Premium Pricing,0,150000,225000,300000,=Enterprise_Deals*0.3,30% premium for Kafka features
+Revenue,Retention Improvement,0,75000,112500,150000,=Current_Revenue*0.15*Growth,15% churn reduction value
+Total Revenue,Income,0,725000,1087500,1450000,=SUM(Enterprise+Premium+Retention),All revenue streams
+Costs,Infrastructure Operating,0,120000,138000,158700,=Infrastructure*Growth_Rate,AWS/cloud costs
+Costs,Support & Maintenance,0,80000,72000,64800,=Base_Support*(1-0.1)^Year,40% reduction over time
+Costs,Personnel Ongoing,0,350000,367500,385875,=Base_Personnel*1.05^Year,5% annual increases
+Total Operating Costs,OPEX,0,550000,577500,609375,=SUM(Infrastructure+Support+Personnel),Annual operating costs
+Cash Flow,Net Cash Flow,-1000000,175000,510000,840625,=Total_Revenue-Total_Costs-Investment,After all costs
+Cash Flow,Cumulative,-1000000,-825000,-315000,525625,=Previous+Current_Year,Running total
+NPV Calculation,Discount Factor,1,0.8929,0.7972,0.7118,=1/(1+0.12)^Year,12% discount rate
+NPV Calculation,PV of Cash Flow,-1000000,156250,406566,598438,=Cash_Flow*Discount_Factor,Present value
+NPV Calculation,Cumulative NPV,-1000000,-843750,-437184,161254,=SUM(PV_Cash_Flows),Net present value
+IRR Calculation,Trial Rate,0.287,,,,"=IRR(Cash_Flow_Range)",Internal rate of return
+Payback,Months to Breakeven,21.6,,,,"=Cumulative_Months_to_Zero",Simple payback period
+Sensitivity,Revenue -20%,0,580000,870000,1160000,=Base_Revenue*0.8,Pessimistic scenario
+Sensitivity,Revenue +20%,0,870000,1305000,1740000,=Base_Revenue*1.2,Optimistic scenario
+Sensitivity,Costs +20%,0,660000,693000,731250,=Base_Costs*1.2,Cost overrun scenario
+Risk Analysis,Budget Overrun Risk,25%,200000,,,=IF(RAND()<0.25,200000,0),25% probability
+Risk Analysis,Timeline Delay Risk,30%,150000,,,=IF(RAND()<0.30,150000,0),30% probability
+Risk Analysis,Market Risk,40%,145000,,,=Revenue*0.2*Risk_Probability,40% probability
+Monte Carlo,Scenario 1,-1000000,156250,406566,598438,,Conservative case
+Monte Carlo,Scenario 2,-1000000,245000,632500,998750,,Base case
+Monte Carlo,Scenario 3,-1000000,356250,959500,1532625,,Optimistic case
+Optimization,Personnel Savings,150000,,,,=Original_Personnel-Optimized,Hybrid team structure
+Optimization,Infrastructure Savings,80000,36000,18000,15000,=Reserved_Instances+Spot_Pricing,AWS optimization
+Optimization,Technology Savings,40000,24000,16000,,=Open_Source+Community_Edition,License optimization
+TCO Analysis,Current Architecture,0,450000,472500,496125,=Base_Infrastructure*Growth,Existing costs
+TCO Analysis,Kafka Architecture,0,380000,390000,410000,=New_Infrastructure,Optimized costs
+TCO Analysis,3-Year Savings,0,70000,82500,86125,=Current-Kafka,Total cost savings
+Performance,Connections Supported,0,500,750,1000,=Target_Connections*Growth,Concurrent users
+Performance,Response Time (ms),0,95,85,75,=Target_Response_Time,Performance improvement
+Performance,Uptime %,0,99.9,99.95,99.99,=Target_Uptime,Reliability improvement
+Performance,Cost per Connection,0,0.009,0.008,0.007,=Total_Cost/Connections,Unit economics
+Market Analysis,Enterprise Market Size,5000000,,,,"=Total_Addressable_Market",TAM
+Market Analysis,Serviceable Market,500000,,,,"=SAM",Our addressable segment
+Market Analysis,Market Share Target,0,0.1%,0.15%,0.2%,=Revenue/Market_Size,Growth trajectory
+Financial Ratios,ROI %,0,17.5%,51.0%,84.1%,=(Revenue-Investment)/Investment,Return on investment
+Financial Ratios,Profit Margin,0,24.1%,46.9%,58.0%,=(Revenue-OpEx)/Revenue,Operational efficiency
+Financial Ratios,Revenue per Employee,0,21939,32917,43939,=Revenue/Employee_Count,Productivity metric

@@ -138,4 +138,4 @@ spec:
           service:
             name: dual-agent-monitor-service
             port:
-              number: 8080
+              number: 4005

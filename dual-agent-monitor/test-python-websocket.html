@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Python WebSocket Connection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        .warning { background-color: #fff3cd; color: #856404; }
+        #messages { 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            height: 300px; 
+            overflow-y: auto; 
+            background-color: #f8f9fa; 
+        }
+    </style>
+</head>
+<body>
+    <h1>Python Agent WebSocket Connection Test</h1>
+    
+    <div id="connectionStatus" class="status warning">Connecting...</div>
+    
+    <button onclick="testConnection()">Test Connection</button>
+    <button onclick="testAgentCreation()">Test Agent Creation</button>
+    <button onclick="testSystemStatus()">Test System Status</button>
+    <button onclick="clearMessages()">Clear Messages</button>
+    
+    <h3>Messages:</h3>
+    <div id="messages"></div>
+
+    <script>
+        let ws = null;
+        let connected = false;
+        
+        function log(message, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const timestamp = new Date().toLocaleTimeString();
+            messagesDiv.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function updateStatus(message, type) {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('Already connected', 'warning');
+                return;
+            }
+            
+            log('Connecting to ws://localhost:8765...', 'info');
+            updateStatus('Connecting...', 'warning');
+            
+            ws = new WebSocket('ws://localhost:8765');
+            
+            ws.onopen = () => {
+                log('✅ Connected to Python agent server', 'success');
+                updateStatus('Connected', 'success');
+                connected = true;
+            };
+            
+            ws.onclose = (event) => {
+                log(`📴 Connection closed (code: ${event.code}, reason: ${event.reason})`, 'warning');
+                updateStatus('Disconnected', 'error');
+                connected = false;
+            };
+            
+            ws.onerror = (error) => {
+                log('❌ WebSocket error: ' + error, 'error');
+                updateStatus('Connection Error', 'error');
+                connected = false;
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    log('📥 Received: ' + JSON.stringify(message, null, 2), 'info');
+                } catch (e) {
+                    log('📥 Received (raw): ' + event.data, 'info');
+                }
+            };
+        }
+        
+        function testConnection() {
+            if (!connected) {
+                connect();
+                return;
+            }
+            
+            const pingMessage = {
+                id: 'test-ping-' + Date.now(),
+                type: 'connection:ping',
+                timestamp: new Date().toISOString(),
+                payload: { 
+                    client_id: 'web-test-client',
+                    message: 'Test ping from web interface'
+                }
+            };
+            
+            log('📤 Sending ping: ' + JSON.stringify(pingMessage, null, 2), 'info');
+            ws.send(JSON.stringify(pingMessage));
+        }
+        
+        function testAgentCreation() {
+            if (!connected) {
+                log('❌ Not connected. Click Test Connection first.', 'error');
+                return;
+            }
+            
+            const createMessage = {
+                id: 'test-create-' + Date.now(),
+                type: 'agent:create',
+                timestamp: new Date().toISOString(),
+                correlation_id: 'test-create-correlation-' + Date.now(),
+                payload: {
+                    agent_type: 'manager',
+                    model: 'sonnet',
+                    capabilities: ['code_review', 'task_planning']
+                }
+            };
+            
+            log('📤 Creating agent: ' + JSON.stringify(createMessage, null, 2), 'info');
+            ws.send(JSON.stringify(createMessage));
+        }
+        
+        function testSystemStatus() {
+            if (!connected) {
+                log('❌ Not connected. Click Test Connection first.', 'error');
+                return;
+            }
+            
+            const statusMessage = {
+                id: 'test-status-' + Date.now(),
+                type: 'system:status',
+                timestamp: new Date().toISOString(),
+                correlation_id: 'test-status-correlation-' + Date.now(),
+                payload: {}
+            };
+            
+            log('📤 Requesting system status: ' + JSON.stringify(statusMessage, null, 2), 'info');
+            ws.send(JSON.stringify(statusMessage));
+        }
+        
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+        
+        // Auto-connect on page load
+        window.onload = () => {
+            setTimeout(connect, 100);
+        };
+        
+        // Clean up on page unload
+        window.onbeforeunload = () => {
+            if (ws) ws.close();
+        };
+    </script>
+</body>
+</html>

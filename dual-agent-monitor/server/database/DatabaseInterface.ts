@@ -3,7 +3,16 @@ import {
   DualAgentSession,
   AgentCommunication,
   SystemEvent,
-  PerformanceMetrics
+  PerformanceMetrics,
+  SessionRecording,
+  RecordingInteraction,
+  PlaybackSession,
+  PlaybackSettings,
+  RecordingAnnotation,
+  RecordingBookmark,
+  RecordingExport,
+  ExportOptions,
+  KeyMoment
 } from '../types';
 
 /**
@@ -116,4 +125,161 @@ export interface DatabaseInterface {
   getHealthCheck?(): Promise<{ healthy: boolean; details: any }>;
   isReady(): boolean;
   close(): Promise<void> | void;
+
+  // ===============================================
+  // SESSION RECORDING METHODS
+  // ===============================================
+
+  // Recording management
+  createSessionRecording(recording: {
+    sessionId: string;
+    recordingName?: string;
+    description?: string;
+    recordedBy?: string;
+    recordingQuality?: 'low' | 'medium' | 'high' | 'lossless';
+  }): Promise<string>;
+
+  getSessionRecording(recordingId: string): Promise<SessionRecording | null>;
+  getAllSessionRecordings(limit?: number): Promise<SessionRecording[]>;
+  updateSessionRecording(recordingId: string, updates: Partial<SessionRecording>): Promise<void>;
+  deleteSessionRecording(recordingId: string): Promise<void>;
+  
+  // Recording interactions
+  addRecordingInteraction(interaction: {
+    recordingId: string;
+    sessionId: string;
+    interactionType: string;
+    timestamp: Date;
+    relativeTimeMs: number;
+    durationMs?: number;
+    agentType?: 'manager' | 'worker' | 'system' | 'user';
+    content: string;
+    contentType?: 'text' | 'json' | 'binary' | 'image' | 'file';
+    metadata?: any;
+    relatedMessageId?: string;
+    relatedEventId?: string;
+    parentInteractionId?: string;
+  }): Promise<void>;
+
+  getRecordingInteractions(recordingId: string, startTime?: number, endTime?: number): Promise<RecordingInteraction[]>;
+  getRecordingInteractionsByTimeRange(
+    recordingId: string, 
+    startTimeMs: number, 
+    endTimeMs: number
+  ): Promise<RecordingInteraction[]>;
+
+  // Playback sessions
+  createPlaybackSession(playback: {
+    recordingId: string;
+    userId?: string;
+    playbackName?: string;
+    playbackSettings?: PlaybackSettings;
+  }): Promise<string>;
+
+  getPlaybackSession(playbackId: string): Promise<PlaybackSession | null>;
+  updatePlaybackSession(playbackId: string, updates: {
+    currentPositionMs?: number;
+    playbackSpeed?: number;
+    isPlaying?: boolean;
+    isPaused?: boolean;
+    totalWatchTimeMs?: number;
+    notes?: string;
+    playbackSettings?: PlaybackSettings;
+  }): Promise<void>;
+
+  getUserPlaybackSessions(userId: string, recordingId?: string): Promise<PlaybackSession[]>;
+  deletePlaybackSession(playbackId: string): Promise<void>;
+
+  // Annotations
+  addRecordingAnnotation(annotation: {
+    recordingId: string;
+    playbackSessionId?: string;
+    userId?: string;
+    timestampMs: number;
+    durationMs?: number;
+    annotationType: 'note' | 'highlight' | 'bookmark' | 'flag' | 'question';
+    title: string;
+    content: string;
+    color?: string;
+    isPublic?: boolean;
+    tags?: string[];
+    priority?: 'low' | 'normal' | 'high' | 'critical';
+  }): Promise<string>;
+
+  getRecordingAnnotations(recordingId: string, userId?: string): Promise<RecordingAnnotation[]>;
+  updateRecordingAnnotation(annotationId: string, updates: Partial<RecordingAnnotation>): Promise<void>;
+  deleteRecordingAnnotation(annotationId: string): Promise<void>;
+
+  // Bookmarks
+  addRecordingBookmark(bookmark: {
+    recordingId: string;
+    userId?: string;
+    timestampMs: number;
+    title: string;
+    description?: string;
+    bookmarkType?: 'user' | 'system' | 'auto' | 'key_moment';
+    icon?: string;
+    color?: string;
+    chapterMarker?: boolean;
+  }): Promise<string>;
+
+  getRecordingBookmarks(recordingId: string, userId?: string): Promise<RecordingBookmark[]>;
+  updateRecordingBookmark(bookmarkId: string, updates: Partial<RecordingBookmark>): Promise<void>;
+  deleteRecordingBookmark(bookmarkId: string): Promise<void>;
+
+  // Exports
+  createRecordingExport(exportRequest: {
+    recordingId: string;
+    requestedBy?: string;
+    exportFormat: 'json' | 'csv' | 'video' | 'html' | 'pdf' | 'zip';
+    exportOptions?: ExportOptions;
+    includeAnnotations?: boolean;
+    includeBookmarks?: boolean;
+    includeMetadata?: boolean;
+    startTimeMs?: number;
+    endTimeMs?: number;
+  }): Promise<string>;
+
+  getRecordingExport(exportId: string): Promise<RecordingExport | null>;
+  getRecordingExports(recordingId: string): Promise<RecordingExport[]>;
+  updateRecordingExport(exportId: string, updates: {
+    status?: 'pending' | 'processing' | 'completed' | 'failed';
+    filePath?: string;
+    fileSizeBytes?: number;
+    completedAt?: Date;
+    errorMessage?: string;
+  }): Promise<void>;
+  deleteRecordingExport(exportId: string): Promise<void>;
+
+  // Recording analytics
+  getRecordingAnalytics(recordingId: string): Promise<{
+    totalViews: number;
+    totalWatchTime: number;
+    averageWatchTime: number;
+    completionRate: number;
+    annotationCount: number;
+    bookmarkCount: number;
+    exportCount: number;
+    viewerCount: number;
+  }>;
+
+  getPopularRecordings(limit?: number): Promise<Array<{
+    recordingId: string;
+    recordingName: string;
+    viewCount: number;
+    downloadCount: number;
+    rating?: number;
+  }>>;
+
+  // Key moments detection
+  detectKeyMoments(recordingId: string): Promise<KeyMoment[]>;
+  addKeyMoment(recordingId: string, keyMoment: {
+    timestampMs: number;
+    title: string;
+    description: string;
+    momentType: 'error' | 'completion' | 'decision_point' | 'interaction_peak' | 'user_defined';
+    importance: 'low' | 'medium' | 'high';
+    automaticallyDetected?: boolean;
+    relatedInteractionIds?: string[];
+  }): Promise<void>;
 }

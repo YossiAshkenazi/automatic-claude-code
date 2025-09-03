@@ -1,0 +1,214 @@
+# Prometheus Configuration for Kafka Monitoring
+# High-performance metrics collection for 100K+ msgs/sec cluster
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: "{{ cluster_name }}"
+    environment: "{{ environment | default('prod') }}"
+
+rule_files:
+  - "kafka-alerts.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter - System metrics for all nodes
+  - job_name: 'node'
+    static_configs:
+      - targets:
+{% for host in groups['kafka_brokers'] %}
+        - '{{ hostvars[host]['ansible_default_ipv4']['address'] }}:9100'
+{% endfor %}
+{% if not (use_kraft_mode | default(true) | bool) %}
+{% for host in groups['zookeeper'] | default([]) %}
+        - '{{ hostvars[host]['ansible_default_ipv4']['address'] }}:9100'
+{% endfor %}
+{% endif %}
+{% for host in groups['monitoring'] %}
+        - '{{ hostvars[host]['ansible_default_ipv4']['address'] }}:9100'
+{% endfor %}
+    scrape_interval: 15s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: instance_ip
+        replacement: '${1}'
+
+  # Kafka Exporter - Kafka-specific metrics
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['localhost:9308']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    params:
+      kafka.brokers:
+{% for host in groups['kafka_brokers'] %}
+        - {{ hostvars[host]['ansible_default_ipv4']['address'] }}:9092
+{% endfor %}
+
+  # Kafka JMX Metrics - Direct from brokers
+  - job_name: 'kafka-jmx'
+    static_configs:
+      - targets:
+{% for host in groups['kafka_brokers'] %}
+        - '{{ hostvars[host]['ansible_default_ipv4']['address'] }}:7071'
+{% endfor %}
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: kafka_broker
+        replacement: '${1}'
+      - source_labels: [__address__]
+        regex: '.*:.*'
+        target_label: job
+        replacement: 'kafka-broker'
+
+{% if not (use_kraft_mode | default(true) | bool) %}
+  # ZooKeeper JMX Metrics (if using ZooKeeper mode)
+  - job_name: 'zookeeper'
+    static_configs:
+      - targets:
+{% for host in groups['zookeeper'] | default([]) %}
+        - '{{ hostvars[host]['ansible_default_ipv4']['address'] }}:7072'
+{% endfor %}
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: zk_server
+        replacement: '${1}'
+{% endif %}
+
+  # Schema Registry Metrics
+  - job_name: 'schema-registry'
+    static_configs:
+      - targets:
+        - '{{ hostvars[groups['kafka_brokers'][0]]['ansible_default_ipv4']['address'] }}:8081'
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Elasticsearch Exporter
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['localhost:9114']
+    scrape_interval: 30s
+
+  # Custom application metrics (if available)
+  - job_name: 'kafka-applications'
+    static_configs:
+      - targets: []
+    scrape_interval: 60s
+    honor_labels: true
+
+  # Blackbox exporter for endpoint monitoring
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - http://{{ hostvars[groups['kafka_brokers'][0]]['ansible_default_ipv4']['address'] }}:8081  # Schema Registry
+        - http://localhost:5601  # Kibana
+        - http://localhost:3000  # Grafana
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: localhost:9115
+
+# Alertmanager configuration (if using)
+{% if enable_alertmanager | default(false) %}
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - localhost:9093
+{% endif %}
+
+# Recording rules for performance optimization
+recording_rules:
+  - name: kafka.performance.rules
+    interval: 30s
+    rules:
+      # Message rate per broker
+      - record: kafka:message_rate_per_broker
+        expr: sum(rate(kafka_server_BrokerTopicMetrics_MessagesInPerSec[5m])) by (instance)
+        
+      # Total cluster throughput
+      - record: kafka:cluster_message_rate
+        expr: sum(kafka:message_rate_per_broker)
+        
+      # Average request latency
+      - record: kafka:avg_request_latency
+        expr: avg(kafka_network_RequestMetrics_TotalTimeMs{request="Produce"}) by (instance)
+        
+      # Consumer lag aggregated
+      - record: kafka:consumer_lag_sum
+        expr: sum(kafka_consumer_lag_sum) by (consumer_group, topic)
+        
+      # Disk usage percentage
+      - record: kafka:disk_usage_percent
+        expr: |
+          (
+            (node_filesystem_size_bytes{mountpoint="/opt/kafka/data"} - node_filesystem_free_bytes{mountpoint="/opt/kafka/data"})
+            / node_filesystem_size_bytes{mountpoint="/opt/kafka/data"}
+          ) * 100
+          
+      # Network I/O rate
+      - record: kafka:network_io_rate
+        expr: |
+          sum(
+            rate(node_network_receive_bytes_total[5m]) +
+            rate(node_network_transmit_bytes_total[5m])
+          ) by (instance)
+          
+      # JVM heap utilization
+      - record: kafka:jvm_heap_utilization
+        expr: |
+          (
+            jvm_memory_bytes_used{area="heap"} / jvm_memory_bytes_max{area="heap"}
+          ) * 100
+          
+      # Broker availability
+      - record: kafka:broker_availability
+        expr: up{job="kafka-jmx"}
+        
+      # Topic partition count per broker
+      - record: kafka:partitions_per_broker
+        expr: count(kafka_server_BrokerTopicMetrics_MessagesInPerSec) by (instance)
+
+# Remote write configuration for long-term storage (optional)
+{% if prometheus_remote_write_enabled | default(false) %}
+remote_write:
+  - url: "{{ prometheus_remote_write_url }}"
+    basic_auth:
+      username: "{{ prometheus_remote_write_username }}"
+      password: "{{ prometheus_remote_write_password }}"
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'kafka:.*|node_.*|up'
+        action: keep
+{% endif %}
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: {{ prometheus_retention | default('15d') }}
+    retention.size: 50GB
+    wal-compression: true
+
+# Performance tuning
+query:
+  max_concurrency: 20
+  max_samples: 50000000
+  timeout: 2m

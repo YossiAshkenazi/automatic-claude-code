@@ -14,17 +14,24 @@ export interface Config {
   defaultWorkDir?: string;
   systemPrompts?: string[];
   
-  // Dual-agent monitoring settings
+  // Simplified logging settings
+  logging: {
+    enableFileLogging: boolean;
+    essentialMode: boolean;
+    logLevel: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR';
+    showProgress: boolean;
+  };
+  
+  // Optional monitoring settings (disabled by default)
   monitoring: {
     enabled: boolean;
     serverUrl: string;
-    webSocketUrl: string;
     uiUrl: string;
     serverPath?: string; // Path to dual-agent-monitor
     autoStartServer: boolean;
   };
   
-  // Dual-agent settings
+  // Dual-agent settings (SDK-only)
   dualAgent: {
     enabled: boolean;
     managerModel: 'sonnet' | 'opus';
@@ -41,7 +48,7 @@ class ConfigManager {
   private config: Config;
   private defaultConfig: Config = {
     defaultModel: 'sonnet',
-    maxIterations: 10,
+    maxIterations: 15, // Increased for better SDK performance
     continueOnError: false,
     verbose: false,
     allowedTools: [
@@ -52,29 +59,38 @@ class ConfigManager {
       'Bash',
       'Glob',
       'Grep',
-      'LS',
       'WebFetch',
       'WebSearch',
       'TodoWrite',
+      'ExitPlanMode', // SDK-specific tools
     ],
-    sessionHistoryLimit: 100,
-    autoSaveInterval: 60000,
+    sessionHistoryLimit: 150, // Increased for better context retention
+    autoSaveInterval: 30000, // More frequent saves for SDK reliability
     
-    monitoring: {
-      enabled: true,
-      serverUrl: 'http://localhost:4001',
-      webSocketUrl: 'ws://localhost:4001',
-      uiUrl: 'http://localhost:8091',
-      autoStartServer: true,
+    // Optimized logging for SDK
+    logging: {
+      enableFileLogging: true,
+      essentialMode: true, // Essential mode by default for cleaner output
+      logLevel: 'INFO',
+      showProgress: true,
     },
     
+    // Monitoring optional and simplified
+    monitoring: {
+      enabled: false,
+      serverUrl: 'http://localhost:4005',
+      uiUrl: 'http://localhost:6011',
+      autoStartServer: false,
+    },
+    
+    // Optimized dual-agent for SDK
     dualAgent: {
       enabled: false,
       managerModel: 'opus',
       workerModel: 'sonnet',
-      coordinationInterval: 3,
-      qualityGateThreshold: 0.8,
-      maxConcurrentTasks: 2,
+      coordinationInterval: 2, // Faster coordination for SDK
+      qualityGateThreshold: 0.85, // Higher quality threshold
+      maxConcurrentTasks: 3, // Increased for SDK efficiency
       enableCrossValidation: true,
     },
   };
@@ -145,15 +161,31 @@ class ConfigManager {
     this.saveConfig(this.config);
   }
 
+  // Helper methods for logging
+  getLoggingConfig(): Config['logging'] {
+    return this.config.logging;
+  }
+  
+  isFileLoggingEnabled(): boolean {
+    return this.config.logging.enableFileLogging;
+  }
+  
+  isEssentialLoggingMode(): boolean {
+    return this.config.logging.essentialMode;
+  }
+  
+  shouldShowProgress(): boolean {
+    return this.config.logging.showProgress;
+  }
+  
   // Helper methods for monitoring
   isMonitoringEnabled(): boolean {
     return this.config.monitoring.enabled;
   }
   
-  getMonitoringUrls(): { server: string; webSocket: string; ui: string } {
+  getMonitoringUrls(): { server: string; ui: string } {
     return {
       server: this.config.monitoring.serverUrl,
-      webSocket: this.config.monitoring.webSocketUrl,
       ui: this.config.monitoring.uiUrl,
     };
   }

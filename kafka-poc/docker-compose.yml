@@ -1,0 +1,279 @@
+version: '3.8'
+
+services:
+  # Zookeeper - Required for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.1
+    hostname: zookeeper
+    container_name: kafka-poc-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_LOG4J_ROOT_LOGLEVEL: WARN
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - kafka-network
+
+  # Kafka Broker
+  kafka:
+    image: confluentinc/cp-kafka:7.5.1
+    hostname: kafka
+    container_name: kafka-poc-broker
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9999:9999"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_CONFLUENT_METRICS_REPORTER_TOPIC_REPLICAS: 1
+      KAFKA_CONFLUENT_METRICS_ENABLE: 'true'
+      KAFKA_CONFLUENT_SUPPORT_CUSTOMER_ID: anonymous
+      # Performance tuning
+      KAFKA_NUM_PARTITIONS: 12
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_SEGMENT_BYTES: 104857600
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      KAFKA_SOCKET_SEND_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
+      # JMX monitoring
+      KAFKA_JMX_PORT: 9999
+      KAFKA_JMX_HOSTNAME: kafka
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+      - kafka-logs:/var/lib/kafka/logs
+    networks:
+      - kafka-network
+
+  # Schema Registry
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.1
+    hostname: schema-registry
+    container_name: kafka-poc-schema-registry
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:29092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: BACKWARD
+      SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: WARN
+    volumes:
+      - schema-registry-data:/var/lib/schema-registry
+    networks:
+      - kafka-network
+
+  # Redis for idempotency and caching
+  redis:
+    image: redis:7-alpine
+    hostname: redis
+    container_name: kafka-poc-redis
+    ports:
+      - "6379:6379"
+    environment:
+      REDIS_PASSWORD: kafka-poc-redis
+    command: redis-server --requirepass kafka-poc-redis --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - kafka-network
+
+  # Kafka PoC Application
+  kafka-poc-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    hostname: kafka-poc-app
+    container_name: kafka-poc-application
+    depends_on:
+      - kafka
+      - schema-registry
+      - redis
+      - zipkin
+    ports:
+      - "8080:8080"
+      - "8082:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_PRODUCER_PROPERTIES_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SPRING_KAFKA_CONSUMER_PROPERTIES_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: kafka-poc-redis
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+      JAVA_OPTS: "-Xmx1g -Xms512m -XX:+UseG1GC"
+    volumes:
+      - app-logs:/app/logs
+      - app-data:/app/data
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Zipkin for distributed tracing
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    hostname: zipkin
+    container_name: kafka-poc-zipkin
+    ports:
+      - "9411:9411"
+    environment:
+      STORAGE_TYPE: mem
+    networks:
+      - kafka-network
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    hostname: prometheus
+    container_name: kafka-poc-prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml
+      - prometheus-data:/prometheus
+    networks:
+      - kafka-network
+
+  # Grafana for monitoring dashboards
+  grafana:
+    image: grafana/grafana:10.1.1
+    hostname: grafana
+    container_name: kafka-poc-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: kafka-poc-grafana
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+      - ./monitoring/grafana/kafka-dashboard.json:/var/lib/grafana/dashboards/kafka-dashboard.json
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    networks:
+      - kafka-network
+
+  # Kafka Manager (UI for Kafka management)
+  kafka-manager:
+    image: kafkamanager/kafka-manager:3.0.0.6
+    hostname: kafka-manager
+    container_name: kafka-poc-manager
+    ports:
+      - "9000:9000"
+    environment:
+      ZK_HOSTS: "zookeeper:2181"
+      APPLICATION_SECRET: "random-secret-key"
+    depends_on:
+      - zookeeper
+      - kafka
+    networks:
+      - kafka-network
+
+  # Kafka Exporter for detailed metrics
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.6.0
+    hostname: kafka-exporter
+    container_name: kafka-poc-exporter
+    ports:
+      - "9308:9308"
+    command:
+      - --kafka.server=kafka:29092
+      - --zookeeper.server=zookeeper:2181
+      - --topic.filter=.*
+      - --group.filter=.*
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
+  # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:v1.6.1
+    hostname: node-exporter
+    container_name: kafka-poc-node-exporter
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - '/:/host:ro,rslave'
+    networks:
+      - kafka-network
+
+  # Test Data Generator (for load testing)
+  data-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    hostname: data-generator
+    container_name: kafka-poc-data-generator
+    depends_on:
+      - kafka-poc-app
+    environment:
+      SPRING_PROFILES_ACTIVE: docker,data-generator
+      TARGET_HOST: kafka-poc-app:8080
+      GENERATION_RATE: 1000
+      BATCH_SIZE: 100
+    networks:
+      - kafka-network
+    deploy:
+      replicas: 0  # Start with 0, scale up for testing
+
+volumes:
+  zookeeper-data:
+    driver: local
+  zookeeper-logs:
+    driver: local
+  kafka-data:
+    driver: local
+  kafka-logs:
+    driver: local
+  schema-registry-data:
+    driver: local
+  redis-data:
+    driver: local
+  app-logs:
+    driver: local
+  app-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  kafka-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

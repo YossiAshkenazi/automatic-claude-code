@@ -10,13 +10,30 @@ export interface ClaudeCommandInfo {
 
 export class ClaudeUtils {
   static getClaudeCommand(): ClaudeCommandInfo {
-    // FORCE NPX USAGE - most reliable, always gets latest version
-    // This bypasses .CMD files and shell scripts that may have issues
+    const debugLogging = process.env.DEBUG_CLAUDE_PATH === 'true';
+    
+    if (debugLogging) {
+      console.log('[DEBUG] Starting Claude CLI path detection...');
+      console.log(`[DEBUG] Environment: ${process.platform}`);
+      console.log(`[DEBUG] APPDATA: ${process.env.APPDATA}`);
+      console.log(`[DEBUG] LOCALAPPDATA: ${process.env.LOCALAPPDATA}`);
+    }
+    
+    // First try the authenticated 'claude' command (browser-based auth)
+    try {
+      execSync('claude --version', { stdio: 'ignore', timeout: 5000 });
+      if (debugLogging) console.log('[DEBUG] Found claude command in PATH');
+      return { command: 'claude', baseArgs: [] };
+    } catch {
+      if (debugLogging) console.log('[DEBUG] claude command not found in PATH, trying alternatives...');
+    }
+    
+    // Try NPX as fallback - for users who prefer API key authentication
     try {
       execSync('npx @anthropic-ai/claude-code --version', { stdio: 'ignore', timeout: 10000 });
       return { command: 'npx', baseArgs: ['@anthropic-ai/claude-code'] };
     } catch {
-      // Only fall back if npx completely fails
+      // Continue to other fallback methods
     }
     
     // First check if a specific claude path is configured
@@ -50,31 +67,122 @@ export class ClaudeUtils {
       }
     }
 
-    // Try direct node execution (bypasses shell scripts and .CMD files)
+    // Try direct node execution with multiple path detection strategies
     try {
-      // Find the actual CLI script path
-      const globalNodeModules = path.join(require.resolve('npm'), '..', '..', '..', '..', 'lib', 'node_modules');
-      const claudeCliPath = path.join(globalNodeModules, '@anthropic-ai', 'claude-code', 'cli.js');
-      if (fs.existsSync(claudeCliPath)) {
-        execSync(`node "${claudeCliPath}" --version`, { stdio: 'ignore', timeout: 5000 });
-        return { command: 'node', baseArgs: [claudeCliPath] };
+      // Strategy 1: Try multiple common Claude CLI installation paths
+      const possibleCliPaths = [
+        // NPM global installations
+        path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude'),
+        path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+        path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'dist', 'cli.js'),
+        
+        // PNPM global installations  
+        path.join(process.env.LOCALAPPDATA || '', 'pnpm', 'global', '5', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude'),
+        path.join(process.env.LOCALAPPDATA || '', 'pnpm', 'global', '5', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+        path.join(process.env.LOCALAPPDATA || '', 'pnpm', 'global', '5', 'node_modules', '@anthropic-ai', 'claude-code', 'dist', 'cli.js'),
+        
+        // Standard Node.js paths
+        path.join(require.resolve('npm'), '..', '..', '..', '..', 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+        path.join(require.resolve('npm'), '..', '..', '..', '..', 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude'),
+        
+        // Unix-style installations
+        '/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js',
+        '/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js',
+      ];
+      
+      for (const claudeCliPath of possibleCliPaths) {
+        if (claudeCliPath && fs.existsSync(claudeCliPath)) {
+          try {
+            execSync(`node "${claudeCliPath}" --version`, { stdio: 'ignore', timeout: 5000 });
+            console.log(`[DEBUG] Found Claude CLI at: ${claudeCliPath}`);
+            return { command: 'node', baseArgs: [claudeCliPath] };
+          } catch (testError) {
+            // Continue to next path if this one doesn't work
+            continue;
+          }
+        }
       }
     } catch {
       // Continue to other methods
     }
 
-    // Try shell script version (POSIX, usually more reliable than .CMD)
+    // Try detecting Claude binaries dynamically
     try {
-      const claudeShellScript = 'C:\\Users\\yossi\\AppData\\Local\\pnpm\\claude'; // No extension
-      if (fs.existsSync(claudeShellScript)) {
-        execSync(`"${claudeShellScript}" --version`, { stdio: 'ignore', timeout: 5000 });
-        return { command: claudeShellScript, baseArgs: [] };
+      const possibleBinaries = [
+        // Current user specific paths (based on error message paths)
+        `${process.env.LOCALAPPDATA}\\pnpm\\claude`,
+        `${process.env.LOCALAPPDATA}\\pnpm\\claude.cmd`,
+        `${process.env.APPDATA}\\npm\\claude`,
+        `${process.env.APPDATA}\\npm\\claude.cmd`,
+        
+        // Dynamic user path detection
+        ...(() => {
+          const currentUser = process.env.USERNAME || process.env.USER || 'DefaultUser';
+          return [
+            `C:\\Users\\${currentUser}\\AppData\\Local\\pnpm\\claude`,
+            `C:\\Users\\${currentUser}\\AppData\\Roaming\\npm\\claude`,
+            `C:\\Users\\${currentUser}\\AppData\\Roaming\\npm\\claude.cmd`,
+          ];
+        })()
+      ];
+      
+      for (const claudePath of possibleBinaries) {
+        if (debugLogging) console.log(`[DEBUG] Checking binary path: ${claudePath}`);
+        if (claudePath && fs.existsSync(claudePath)) {
+          try {
+            execSync(`"${claudePath}" --version`, { stdio: 'ignore', timeout: 5000 });
+            console.log(`[INFO] Found Claude binary at: ${claudePath}`);
+            return { command: claudePath, baseArgs: [] };
+          } catch (testError) {
+            if (debugLogging) console.log(`[DEBUG] Binary exists but failed test: ${claudePath}`);
+            continue;
+          }
+        }
+      }
+    } catch {
+      // Continue to other methods
+    }
+    
+    // Try npm/pnpm prefix detection
+    try {
+      const commands = ['npm config get prefix', 'pnpm config get global-dir'];
+      
+      for (const cmd of commands) {
+        try {
+          const prefixPath = execSync(cmd, { encoding: 'utf-8', timeout: 5000 }).trim();
+          if (debugLogging) console.log(`[DEBUG] ${cmd} returned: ${prefixPath}`);
+          
+          const possiblePaths = [
+            path.join(prefixPath, 'bin', 'claude'),
+            path.join(prefixPath, 'claude'),
+            path.join(prefixPath, 'claude.cmd'),
+            path.join(prefixPath, 'node_modules', '.bin', 'claude'),
+            path.join(prefixPath, 'node_modules', '.bin', 'claude.cmd'),
+          ];
+          
+          for (const claudePath of possiblePaths) {
+            if (debugLogging) console.log(`[DEBUG] Checking prefix path: ${claudePath}`);
+            if (fs.existsSync(claudePath)) {
+              try {
+                execSync(`"${claudePath}" --version`, { stdio: 'ignore', timeout: 5000 });
+                console.log(`[INFO] Found Claude via ${cmd.split(' ')[0]} at: ${claudePath}`);
+                return { command: claudePath, baseArgs: [] };
+              } catch (testError) {
+                if (debugLogging) console.log(`[DEBUG] Prefix path exists but failed test: ${claudePath}`);
+                continue;
+              }
+            }
+          }
+        } catch (prefixError) {
+          if (debugLogging) console.log(`[DEBUG] Command failed: ${cmd} - ${prefixError}`);
+          continue;
+        }
       }
     } catch {
       // Continue to other methods
     }
 
-    // Last resort: try basic claude command (could be shell script or .CMD)
+    // Try basic claude command again as last resort
     try {
       execSync('claude --version', { stdio: 'ignore', timeout: 5000 });
       return { command: 'claude', baseArgs: [] };
@@ -108,7 +216,18 @@ export class ClaudeUtils {
             // Ignore and fall through to error
           }
           
-          throw new Error('Claude CLI not found. Please install with: npm install -g @anthropic-ai/claude-code');
+          // Provide detailed error message with debugging info
+          let errorMessage = 'Claude CLI not found after exhaustive search.\n\n';
+          errorMessage += 'Installation options:\n';
+          errorMessage += '  1. npm install -g @anthropic-ai/claude-code\n';
+          errorMessage += '  2. pnpm install -g @anthropic-ai/claude-code\n';
+          errorMessage += '  3. curl -sL https://claude.ai/install.sh | sh\n\n';
+          errorMessage += 'If you have Claude installed, try:\n';
+          errorMessage += '  - Set DEBUG_CLAUDE_PATH=true to see detailed detection logs\n';
+          errorMessage += '  - Check that claude command is in your PATH\n';
+          errorMessage += `  - Verify installation in: ${process.env.APPDATA}\\npm or ${process.env.LOCALAPPDATA}\\pnpm\n`;
+          
+          throw new Error(errorMessage);
         }
       }
     }

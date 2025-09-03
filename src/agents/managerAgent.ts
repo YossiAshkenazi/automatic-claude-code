@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import { ClaudeUtils } from '../claudeUtils';
 import { Logger } from '../logger';
 import { OutputParser, ParsedOutput } from '../outputParser';
+import { SDKClaudeExecutor } from '../services/sdkClaudeExecutor';
 import {
   AgentMessage,
   WorkItem,
@@ -19,6 +20,8 @@ export interface ManagerAgentConfig {
   timeout: number;
   verbose?: boolean;
   allowedTools?: string;
+  usePTY?: boolean;
+  claudeExecutor?: SDKClaudeExecutor;
 }
 
 export interface TaskAnalysisResult {
@@ -52,6 +55,8 @@ export class ManagerAgent extends EventEmitter {
   private messageHistory: AgentMessage[] = [];
   private activeWorkItems: Map<string, WorkItem> = new Map();
   private qualityStandards: Map<string, number> = new Map();
+  private claudeExecutor?: SDKClaudeExecutor;
+  private ptySessionId?: string;
 
   constructor(config: AgentCoordinatorConfig, logger: Logger) {
     super();
@@ -75,12 +80,29 @@ export class ManagerAgent extends EventEmitter {
   async initialize(config: ManagerAgentConfig): Promise<void> {
     this.agentConfig = config;
     this.isInitialized = true;
+    this.claudeExecutor = config.claudeExecutor;
     
-    this.logger.info('Manager agent initialized', { 
-      model: config.model,
-      workDir: config.workDir,
-      timeout: config.timeout 
-    });
+    // Initialize PTY session if enabled
+    if (config.usePTY && this.claudeExecutor) {
+      const ptySession = await this.claudeExecutor.getOrCreatePTYSession(
+        this.currentSession || 'manager',
+        config.workDir
+      );
+      this.ptySessionId = ptySession.sessionId || this.currentSession || 'manager';
+      
+      this.logger.info('Manager agent initialized with PTY', {
+        model: config.model,
+        workDir: config.workDir,
+        timeout: config.timeout,
+        ptySessionId: this.ptySessionId
+      });
+    } else {
+      this.logger.info('Manager agent initialized with spawn', {
+        model: config.model,
+        workDir: config.workDir,
+        timeout: config.timeout
+      });
+    }
 
     this.emit('agent_initialized', { role: 'manager', config });
   }
@@ -547,6 +569,18 @@ Provide actionable insights that will help coordinate the next phase of work.
       throw new Error('Manager agent not initialized');
     }
 
+    // Use PTY execution if available
+    if (this.agentConfig.usePTY && this.claudeExecutor && this.ptySessionId) {
+      try {
+        const output = await this.claudeExecutor.sendToPTYSession(this.ptySessionId, prompt);
+        return { output, exitCode: 0 };
+      } catch (error) {
+        this.logger.error('PTY execution failed, falling back to spawn', { error });
+        // Fall through to spawn execution
+      }
+    }
+
+    // Traditional spawn-based execution
     const args = ['-p', prompt];
     
     if (this.agentConfig.model) {
@@ -1047,7 +1081,15 @@ Provide actionable insights that will help coordinate the next phase of work.
     this.activeWorkItems.clear();
     this.messageHistory = [];
     
-    this.logger.info('Manager agent shutdown completed');
+    // Close PTY session if exists
+    if (this.ptySessionId && this.claudeExecutor) {
+      this.claudeExecutor.closePTYSession(this.ptySessionId);
+      this.ptySessionId = undefined;
+    }
+    
+    this.logger.info('Manager agent shutdown completed', {
+      ptySessionClosed: this.ptySessionId === undefined
+    });
     this.emit('agent_shutdown', { role: 'manager' });
   }
 

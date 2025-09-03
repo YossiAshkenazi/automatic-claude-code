@@ -1,0 +1,205 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for the Claude Code Python SDK
+title: "[FEATURE] "
+labels: ["enhancement", "needs-triage"]
+projects: ["yossiashkenazi/automatic-claude-code"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please provide detailed information to help us understand your request.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm you've completed these steps
+      options:
+        - label: I have searched existing issues and this feature hasn't been requested
+          required: true
+        - label: I have reviewed the roadmap and planned features
+          required: true
+        - label: I have considered if this could be implemented as a community extension
+          required: true
+
+  - type: textarea
+    id: feature-summary
+    attributes:
+      label: Feature Summary
+      description: A clear and concise summary of the feature you're requesting
+      placeholder: Briefly describe the feature in 1-2 sentences
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? What use case does it address?
+      placeholder: Describe the problem or limitation you're experiencing
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your ideal solution in detail
+      placeholder: |
+        How would you like this feature to work?
+        - API design suggestions
+        - Usage examples
+        - Integration points
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative approaches?
+      placeholder: Describe alternative solutions you've considered and why they might not work
+    validations:
+      required: false
+
+  - type: dropdown
+    id: feature-category
+    attributes:
+      label: Feature Category
+      description: What category does this feature belong to?
+      options:
+        - Core SDK functionality
+        - Dual-agent integration
+        - Monitoring and observability
+        - Error handling and resilience
+        - Performance optimization
+        - Developer experience
+        - Documentation and examples
+        - Testing and quality assurance
+        - Security and authentication
+        - Cross-platform compatibility
+        - Other (please specify in description)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Level
+      description: How important is this feature to you?
+      options:
+        - Critical (blocks major use cases)
+        - High (significantly improves workflow)
+        - Medium (nice to have improvement)
+        - Low (minor enhancement)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Implementation Complexity (Your Assessment)
+      description: How complex do you think this feature would be to implement?
+      options:
+        - Simple (single method/function)
+        - Medium (multiple components affected)
+        - Complex (architectural changes required)
+        - Major (requires significant redesign)
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: usage-example
+    attributes:
+      label: Usage Example
+      description: Show how you would use this feature with code examples
+      render: python
+      placeholder: |
+        from claude_code_sdk import ClaudeSDKClient
+        
+        # Example of how you'd like to use this feature
+        client = ClaudeSDKClient()
+        result = client.new_feature_method(...)
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: related-components
+    attributes:
+      label: Related Components
+      description: Which parts of the SDK would this feature interact with?
+      options:
+        - label: Core client (ClaudeSDKClient)
+        - label: High-level functions (query, conversation)
+        - label: Streaming functionality
+        - label: Error handling system
+        - label: Automatic Claude Code integration
+        - label: Dual-agent architecture
+        - label: Monitoring and metrics
+        - label: CLI detection and management
+        - label: Type system and validation
+
+  - type: textarea
+    id: breaking-changes
+    attributes:
+      label: Breaking Changes Consideration
+      description: Would this feature require any breaking changes to the current API?
+      placeholder: Consider backward compatibility and migration requirements
+    validations:
+      required: false
+
+  - type: textarea
+    id: testing-strategy
+    attributes:
+      label: Testing Strategy
+      description: How should this feature be tested?
+      placeholder: |
+        - Unit tests needed
+        - Integration tests required
+        - Performance testing considerations
+        - Cross-platform testing requirements
+    validations:
+      required: false
+
+  - type: textarea
+    id: documentation-needs
+    attributes:
+      label: Documentation Requirements
+      description: What documentation would be needed for this feature?
+      placeholder: |
+        - API documentation
+        - Usage examples
+        - Migration guides (if breaking changes)
+        - Tutorial content
+    validations:
+      required: false
+
+  - type: dropdown
+    id: contribution-intent
+    attributes:
+      label: Contribution Intent
+      description: Are you interested in contributing this feature?
+      options:
+        - Yes, I'd like to implement this myself
+        - Yes, I can help with implementation
+        - Yes, I can help with testing/documentation
+        - Maybe, depending on complexity and guidance
+        - No, I'm requesting this for others to implement
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information, links, or context relevant to this feature request
+      placeholder: |
+        - Links to relevant documentation
+        - Similar features in other libraries
+        - User research or feedback
+        - Business justification
+    validations:
+      required: false

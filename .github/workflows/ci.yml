@@ -51,11 +51,9 @@ jobs:
 
     - name: Run linting
       run: pnpm run lint
-      continue-on-error: true
 
     - name: Run type checking
       run: pnpm run typecheck
-      continue-on-error: true
 
     - name: Test CLI
       run: |
@@ -128,14 +126,12 @@ jobs:
       run: |
         cd dual-agent-monitor
         npm run typecheck || echo "Type checking failed, continuing..."
-      continue-on-error: true
 
     - name: Build monitoring dashboard
       run: |
         cd dual-agent-monitor
         npm run client:build || echo "Client build failed, continuing..."
         npm run server:build || echo "Server build failed, continuing..."
-      continue-on-error: true
 
     - name: Check build output
       run: |
@@ -197,17 +193,14 @@ jobs:
       run: |
         node monitoring-server.js &
         sleep 5
-      continue-on-error: true
 
     - name: Test monitoring health endpoint
       run: |
-        curl -f http://localhost:6007/health || echo "Health check failed"
-      continue-on-error: true
+        curl -f http://localhost:4005/health || echo "Health check failed"
 
     - name: Test monitoring API
       run: |
-        curl -f http://localhost:6007/api/status || echo "API status check failed"
-      continue-on-error: true
+        curl -f http://localhost:4005/api/status || echo "API status check failed"
 
   # Security scan
   security-scan:
@@ -233,14 +226,12 @@ jobs:
 
     - name: Run audit
       run: pnpm audit --audit-level=high
-      continue-on-error: true
 
     - name: Check for known vulnerabilities
       run: |
         echo "Checking for vulnerabilities..."
         pnpm audit --json > audit-report.json || true
         cat audit-report.json | jq '.metadata.vulnerabilities' || echo "No vulnerabilities section found"
-      continue-on-error: true
 
   # All tests pass check
   ci-success:

@@ -1,7 +1,7 @@
-import { DualAgentSession, AgentMessage } from '../types';
+import { DualAgentSession, AgentMessage, Task, TaskFilter, TaskMetrics, TaskQueue, TaskTemplate } from '../types';
 
-// Use Vite proxy in development, direct connection in production
-const API_BASE = import.meta.env.DEV ? '/api' : 'http://localhost:4001/api';
+// Use Vite proxy in development, nginx proxy in production
+const API_BASE = '/api';
 
 interface ApiError {
   message: string;
@@ -596,6 +596,242 @@ class ApiClient {
     activeSessionIds: string[];
   }> {
     return this.request('/replay/status');
+  }
+
+  // Task Management API methods
+  async getTasks(filter?: TaskFilter): Promise<Task[]> {
+    const endpoint = filter ? '/tasks/filter' : '/tasks';
+    return this.request<Task[]>(endpoint, filter ? {
+      method: 'POST',
+      body: JSON.stringify({ filter })
+    } : {});
+  }
+
+  async getTask(id: string): Promise<Task> {
+    if (!id?.trim()) {
+      throw new Error('Task ID is required');
+    }
+    return this.request<Task>(`/tasks/${id}`);
+  }
+
+  async createTask(taskData: Partial<Task>): Promise<Task> {
+    if (!taskData.title?.trim()) {
+      throw new Error('Task title is required');
+    }
+    if (!taskData.description?.trim()) {
+      throw new Error('Task description is required');
+    }
+    
+    return this.request<Task>('/tasks', {
+      method: 'POST',
+      body: JSON.stringify(taskData)
+    });
+  }
+
+  async updateTask(id: string, updates: Partial<Task>): Promise<Task> {
+    if (!id?.trim()) {
+      throw new Error('Task ID is required');
+    }
+    
+    return this.request<Task>(`/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates)
+    });
+  }
+
+  async deleteTask(id: string): Promise<void> {
+    if (!id?.trim()) {
+      throw new Error('Task ID is required');
+    }
+    
+    await this.request(`/tasks/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async assignTask(id: string, agentType: Task['assignedAgent'], sessionId?: string): Promise<Task> {
+    if (!id?.trim()) {
+      throw new Error('Task ID is required');
+    }
+    
+    return this.request<Task>(`/tasks/${id}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ assignedAgent: agentType, sessionId })
+    });
+  }
+
+  async updateTaskProgress(id: string, progress: number, status?: Task['status']): Promise<Task> {
+    if (!id?.trim()) {
+      throw new Error('Task ID is required');
+    }
+    if (progress < 0 || progress > 100) {
+      throw new Error('Progress must be between 0 and 100');
+    }
+    
+    return this.request<Task>(`/tasks/${id}/progress`, {
+      method: 'POST',
+      body: JSON.stringify({ progress, status })
+    });
+  }
+
+  async duplicateTask(id: string): Promise<Task> {
+    if (!id?.trim()) {
+      throw new Error('Task ID is required');
+    }
+    
+    return this.request<Task>(`/tasks/${id}/duplicate`, {
+      method: 'POST'
+    });
+  }
+
+  async bulkUpdateTasks(taskIds: string[], updates: Partial<Task>): Promise<Task[]> {
+    if (!taskIds.length) {
+      throw new Error('At least one task ID is required');
+    }
+    
+    return this.request<Task[]>('/tasks/bulk-update', {
+      method: 'POST',
+      body: JSON.stringify({ taskIds, updates })
+    });
+  }
+
+  async getTaskMetrics(): Promise<TaskMetrics> {
+    return this.request<TaskMetrics>('/tasks/metrics');
+  }
+
+  async getTaskQueues(): Promise<TaskQueue[]> {
+    return this.request<TaskQueue[]>('/task-queues');
+  }
+
+  async createTaskQueue(queueData: Partial<TaskQueue>): Promise<TaskQueue> {
+    if (!queueData.name?.trim()) {
+      throw new Error('Queue name is required');
+    }
+    
+    return this.request<TaskQueue>('/task-queues', {
+      method: 'POST',
+      body: JSON.stringify(queueData)
+    });
+  }
+
+  async updateTaskQueue(id: string, updates: Partial<TaskQueue>): Promise<TaskQueue> {
+    if (!id?.trim()) {
+      throw new Error('Queue ID is required');
+    }
+    
+    return this.request<TaskQueue>(`/task-queues/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates)
+    });
+  }
+
+  async deleteTaskQueue(id: string): Promise<void> {
+    if (!id?.trim()) {
+      throw new Error('Queue ID is required');
+    }
+    
+    await this.request(`/task-queues/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async getTaskTemplates(): Promise<TaskTemplate[]> {
+    return this.request<TaskTemplate[]>('/task-templates');
+  }
+
+  async createTaskTemplate(templateData: Partial<TaskTemplate>): Promise<TaskTemplate> {
+    if (!templateData.name?.trim()) {
+      throw new Error('Template name is required');
+    }
+    
+    return this.request<TaskTemplate>('/task-templates', {
+      method: 'POST',
+      body: JSON.stringify(templateData)
+    });
+  }
+
+  async updateTaskTemplate(id: string, updates: Partial<TaskTemplate>): Promise<TaskTemplate> {
+    if (!id?.trim()) {
+      throw new Error('Template ID is required');
+    }
+    
+    return this.request<TaskTemplate>(`/task-templates/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates)
+    });
+  }
+
+  async deleteTaskTemplate(id: string): Promise<void> {
+    if (!id?.trim()) {
+      throw new Error('Template ID is required');
+    }
+    
+    await this.request(`/task-templates/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Task export functionality
+  async exportTasks(filter?: TaskFilter, format: 'json' | 'csv' = 'json'): Promise<void> {
+    try {
+      const tasks = await this.getTasks(filter);
+      
+      if (tasks.length === 0) {
+        throw new Error('No tasks to export');
+      }
+      
+      const timestamp = new Date().toISOString().split('T')[0];
+      
+      if (format === 'json') {
+        const exportData = {
+          exportedAt: new Date().toISOString(),
+          filter: filter || {},
+          tasks: tasks,
+          summary: {
+            total: tasks.length,
+            byStatus: tasks.reduce((acc, task) => {
+              acc[task.status] = (acc[task.status] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>),
+            byPriority: tasks.reduce((acc, task) => {
+              acc[task.priority] = (acc[task.priority] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>)
+          }
+        };
+        
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        this.triggerDownload(blob, `tasks-export-${timestamp}.json`);
+      } else {
+        const csvData = tasks.map(task => ({
+          id: task.id,
+          title: task.title,
+          description: task.description.replace(/["\n\r]/g, ' '),
+          status: task.status,
+          priority: task.priority,
+          assignedAgent: task.assignedAgent || 'unassigned',
+          progress: task.progress,
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+          estimatedDuration: task.estimatedDuration || '',
+          actualDuration: task.actualDuration || '',
+          tags: task.tags.join(';'),
+          complexity: task.metadata?.complexity || ''
+        }));
+        
+        const headers = Object.keys(csvData[0]);
+        const csvContent = [
+          headers.join(','),
+          ...csvData.map(row => headers.map(header => `"${row[header as keyof typeof row] || ''}"`).join(','))
+        ].join('\n');
+        
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        this.triggerDownload(blob, `tasks-export-${timestamp}.csv`);
+      }
+    } catch (error: any) {
+      console.error('Failed to export tasks:', error);
+      throw error;
+    }
   }
 }
 

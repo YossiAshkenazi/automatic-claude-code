@@ -1,0 +1,173 @@
+{
+  "dashboard": {
+    "title": "Claude Code Python SDK Metrics",
+    "description": "Real-time analytics and insights for the claude-code-sdk",
+    "version": "1.0.0",
+    "layout": {
+      "theme": "dark",
+      "refresh_interval": 300,
+      "auto_refresh": true,
+      "responsive": true
+    },
+    "panels": [
+      {
+        "id": "pypi_downloads",
+        "title": "PyPI Download Statistics",
+        "type": "time_series",
+        "position": {"x": 0, "y": 0, "w": 6, "h": 3},
+        "datasource": "pypi_api",
+        "metrics": [
+          {
+            "name": "daily_downloads",
+            "label": "Daily Downloads",
+            "color": "#3498db"
+          },
+          {
+            "name": "weekly_downloads", 
+            "label": "Weekly Downloads",
+            "color": "#2ecc71"
+          }
+        ],
+        "timeRange": "30d",
+        "yAxis": {"scale": "linear", "min": 0}
+      },
+      {
+        "id": "version_distribution",
+        "title": "Version Distribution",
+        "type": "pie_chart",
+        "position": {"x": 6, "y": 0, "w": 6, "h": 3},
+        "datasource": "pypi_api",
+        "metric": "version_breakdown",
+        "colors": ["#e74c3c", "#f39c12", "#f1c40f", "#2ecc71", "#3498db"]
+      },
+      {
+        "id": "github_metrics",
+        "title": "GitHub Repository Metrics",
+        "type": "stat_panel",
+        "position": {"x": 0, "y": 3, "w": 12, "h": 2},
+        "datasource": "github_api",
+        "stats": [
+          {"metric": "stars", "label": "Stars", "icon": "star"},
+          {"metric": "forks", "label": "Forks", "icon": "git-branch"},
+          {"metric": "issues", "label": "Open Issues", "icon": "issue-opened"},
+          {"metric": "pull_requests", "label": "Open PRs", "icon": "git-pull-request"}
+        ]
+      },
+      {
+        "id": "usage_analytics",
+        "title": "SDK Usage Patterns",
+        "type": "heatmap",
+        "position": {"x": 0, "y": 5, "w": 8, "h": 4},
+        "datasource": "usage_api",
+        "metric": "feature_usage",
+        "xAxis": "features",
+        "yAxis": "time_of_day",
+        "aggregation": "count"
+      },
+      {
+        "id": "error_rates",
+        "title": "Error Rate Trends",
+        "type": "time_series",
+        "position": {"x": 8, "y": 5, "w": 4, "h": 4},
+        "datasource": "error_api",
+        "metrics": [
+          {
+            "name": "error_rate",
+            "label": "Error Rate (%)",
+            "color": "#e74c3c"
+          },
+          {
+            "name": "critical_errors",
+            "label": "Critical Errors",
+            "color": "#c0392b"
+          }
+        ],
+        "alert_threshold": 5
+      },
+      {
+        "id": "performance_metrics",
+        "title": "Performance Metrics",
+        "type": "gauge",
+        "position": {"x": 0, "y": 9, "w": 6, "h": 3},
+        "datasource": "performance_api",
+        "metrics": [
+          {
+            "name": "avg_response_time",
+            "label": "Avg Response Time (ms)",
+            "min": 0,
+            "max": 5000,
+            "thresholds": [1000, 2000, 3000]
+          },
+          {
+            "name": "memory_usage",
+            "label": "Memory Usage (MB)",
+            "min": 0,
+            "max": 1000,
+            "thresholds": [200, 500, 800]
+          }
+        ]
+      },
+      {
+        "id": "geographic_distribution",
+        "title": "Geographic Usage Distribution",
+        "type": "world_map",
+        "position": {"x": 6, "y": 9, "w": 6, "h": 3},
+        "datasource": "pypi_api",
+        "metric": "country_distribution",
+        "color_scale": ["#f7fbff", "#08519c"]
+      }
+    ],
+    "datasources": [
+      {
+        "name": "pypi_api",
+        "type": "http",
+        "url": "https://pypistats.org/api",
+        "auth": {"type": "none"}
+      },
+      {
+        "name": "github_api",
+        "type": "http", 
+        "url": "https://api.github.com",
+        "auth": {"type": "token", "token": "${GITHUB_TOKEN}"}
+      },
+      {
+        "name": "usage_api",
+        "type": "http",
+        "url": "${ANALYTICS_API_URL}",
+        "auth": {"type": "api_key", "key": "${ANALYTICS_API_KEY}"}
+      },
+      {
+        "name": "error_api",
+        "type": "sentry",
+        "dsn": "${SENTRY_DSN}",
+        "project": "claude-code-sdk"
+      },
+      {
+        "name": "performance_api",
+        "type": "http",
+        "url": "${PERFORMANCE_API_URL}",
+        "auth": {"type": "bearer", "token": "${PERFORMANCE_TOKEN}"}
+      }
+    ],
+    "alerts": [
+      {
+        "name": "High Error Rate",
+        "condition": "error_rate > 5",
+        "duration": "5m",
+        "channels": ["slack", "email"]
+      },
+      {
+        "name": "Download Drop",
+        "condition": "daily_downloads < previous_day * 0.5",
+        "duration": "1h", 
+        "channels": ["slack"]
+      },
+      {
+        "name": "Performance Degradation",
+        "condition": "avg_response_time > 3000",
+        "duration": "10m",
+        "channels": ["email"]
+      }
+    ]
+  }
+}

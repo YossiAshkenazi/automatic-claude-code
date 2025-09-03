@@ -1,0 +1,52 @@
+# Development Dockerfile for Python Orchestrator
+FROM python:3.11-slim AS development
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js and Claude CLI (required for CLI wrapper)
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g @anthropic-ai/claude-code
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements files
+COPY requirements.txt requirements-dev.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements-dev.txt \
+    && pip install debugpy uvicorn fastapi
+
+# Copy source code
+COPY . .
+
+# Expose development ports
+EXPOSE 4005
+EXPOSE 5678
+
+# Set development environment
+ENV PYTHONPATH=/app
+ENV PYTHON_ENV=development
+ENV PYTHON_DEBUG=true
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Create volume mount points for hot reload
+VOLUME ["/app"]
+
+# Install development dependencies
+RUN pip install --no-cache-dir watchdog
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:4005/health || exit 1
+
+# Start development server with auto-reload and debugging
+CMD ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client", "-m", "uvicorn", "multi_agent_wrapper:app", "--reload", "--host", "0.0.0.0", "--port", "4005"]

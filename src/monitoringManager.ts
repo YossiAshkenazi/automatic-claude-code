@@ -7,9 +7,17 @@ import { config } from './config';
 export class MonitoringManager {
   private serverProcess: ChildProcess | null = null;
   private isStarting = false;
+  
+  // Rate limiting for monitoring data
+  private lastSentTime: number = 0;
+  private sendCooldown: number = 2000; // 2 seconds minimum between sends
+  private eventBuffer: any[] = [];
+  private maxBufferSize: number = 10;
+  private flushInterval: NodeJS.Timeout | null = null;
 
   async startServer(): Promise<boolean> {
     if (!config.isMonitoringEnabled()) {
+      console.log(chalk.gray('ℹ️  Monitoring disabled - use --enable-monitoring to enable dashboard'));
       return false;
     }
 
@@ -117,6 +125,12 @@ export class MonitoringManager {
       this.serverProcess.kill('SIGTERM');
       this.serverProcess = null;
     }
+    
+    // Clean up rate limiting timers
+    if (this.flushInterval) {
+      clearInterval(this.flushInterval);
+      this.flushInterval = null;
+    }
   }
 
   private delay(ms: number): Promise<void> {
@@ -127,7 +141,7 @@ export class MonitoringManager {
   async getStatus(): Promise<{ 
     serverRunning: boolean; 
     serverPath: string | null; 
-    urls: { server: string; webSocket: string; ui: string } 
+    urls: { server: string; ui: string } 
   }> {
     return {
       serverRunning: await this.isServerRunning(),
@@ -136,14 +150,24 @@ export class MonitoringManager {
     };
   }
 
-  // Send data to monitoring server
+  // Send data to monitoring server with rate limiting
   async sendMonitoringData(data: any): Promise<boolean> {
-    console.log(chalk.blue('🔍 Attempting to send monitoring data:', data.messageType));
-    
     if (!config.isMonitoringEnabled()) {
-      console.log(chalk.yellow('⚠️  Monitoring disabled'));
+      // Silently ignore if monitoring is disabled
       return false;
     }
+
+    const now = Date.now();
+    
+    // Rate limit sends to prevent spam
+    if (now - this.lastSentTime < this.sendCooldown) {
+      // Add to buffer for later processing
+      this.addToBuffer(data);
+      return false;
+    }
+
+    this.lastSentTime = now;
+    console.log(chalk.blue('🔍 Sending monitoring data:', data.messageType));
 
     return new Promise((resolve) => {
       try {
@@ -194,6 +218,38 @@ export class MonitoringManager {
         resolve(false);
       }
     });
+  }
+
+  private addToBuffer(data: any): void {
+    // Add data to buffer, maintaining max size
+    this.eventBuffer.push(data);
+    
+    if (this.eventBuffer.length > this.maxBufferSize) {
+      this.eventBuffer.shift(); // Remove oldest event
+    }
+
+    // Start flush timer if not already running
+    if (!this.flushInterval) {
+      this.flushInterval = setInterval(() => {
+        this.flushBuffer();
+      }, 10000); // Flush every 10 seconds
+    }
+  }
+
+  private async flushBuffer(): Promise<void> {
+    if (this.eventBuffer.length === 0) {
+      if (this.flushInterval) {
+        clearInterval(this.flushInterval);
+        this.flushInterval = null;
+      }
+      return;
+    }
+
+    // Send the most recent buffered event
+    const data = this.eventBuffer.shift();
+    if (data) {
+      await this.sendMonitoringData(data);
+    }
   }
 
   // WebSocket functionality placeholder (implement when needed)

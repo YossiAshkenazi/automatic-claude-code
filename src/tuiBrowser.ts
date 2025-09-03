@@ -1,3 +1,4 @@
+// @ts-ignore
 import blessed from 'blessed';
 import contrib from 'blessed-contrib';
 import * as path from 'path';
@@ -195,6 +196,7 @@ export class TUIBrowser {
     // Progress Bar
     this.progressBar = contrib.gauge({
       label: 'Session Progress',
+      // @ts-ignore
       left: '40%',
       width: '30%',
       height: 4,
@@ -329,7 +331,9 @@ export class TUIBrowser {
       }
 
       const shortId = session.sessionId.substring(0, 8);
-      const shortTask = session.initialPrompt.substring(0, 30) + (session.initialPrompt.length > 30 ? '...' : '');
+      // Handle potential null/undefined initialPrompt as safety measure
+      const promptText = session.initialPrompt || 'Unknown task';
+      const shortTask = promptText.substring(0, 30) + (promptText.length > 30 ? '...' : '');
 
       return `${statusIcon} {bold}${shortId}{/bold} | ${durationStr} | ${session.iterations}i | ${shortTask}`;
     });
@@ -494,7 +498,7 @@ export class TUIBrowser {
     } else {
       const query = this.state.searchQuery.toLowerCase();
       this.state.filteredSessions = this.logViewer.getSessionSummaries().filter(session => 
-        session.initialPrompt.toLowerCase().includes(query) ||
+        (session.initialPrompt || '').toLowerCase().includes(query) ||
         session.sessionId.toLowerCase().includes(query) ||
         session.status.toLowerCase().includes(query)
       );

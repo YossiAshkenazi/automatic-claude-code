@@ -16,8 +16,23 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    "downlevelIteration": true,
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ],
+    "types": [
+      "node"
+    ]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": [
+    "node_modules", 
+    "dist", 
+    "src/__tests__/**/*", 
+    "**/*.test.ts", 
+    "**/*.spec.ts",
+    "src/kafka.disabled/**/*"
+  ]
 }

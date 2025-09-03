@@ -1,0 +1,2 @@
+[console_scripts]
+claude-code-sdk = claude_code_sdk.cli:main

@@ -59,6 +59,7 @@ export declare class AgentIntegrationService extends EventEmitter {
     private claudeSessionsPath;
     private accPath;
     constructor();
+    private findAccExecutable;
     private setupDirectories;
     startAgents(task: string, options?: {
         managerModel?: string;

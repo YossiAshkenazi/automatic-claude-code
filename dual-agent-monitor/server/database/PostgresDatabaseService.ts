@@ -6,7 +6,16 @@ import {
   SessionSummary,
   AgentCommunication,
   SystemEvent,
-  PerformanceMetrics
+  PerformanceMetrics,
+  SessionRecording,
+  RecordingInteraction,
+  PlaybackSession,
+  PlaybackSettings,
+  RecordingAnnotation,
+  RecordingBookmark,
+  RecordingExport,
+  ExportOptions,
+  KeyMoment
 } from '../types';
 import { DatabaseInterface } from './DatabaseInterface';
 
@@ -660,5 +669,255 @@ export class PostgresDatabaseService implements DatabaseInterface {
 
   isReady(): boolean {
     return this.isInitialized;
+  }
+
+  // ===============================================
+  // SESSION RECORDING METHODS - STUB IMPLEMENTATIONS
+  // ===============================================
+
+  async createSessionRecording(recording: {
+    sessionId: string;
+    recordingName?: string;
+    description?: string;
+    recordedBy?: string;
+    recordingQuality?: 'low' | 'medium' | 'high' | 'lossless';
+  }): Promise<string> {
+    // Stub implementation - returns a UUID
+    return uuidv4();
+  }
+
+  async getSessionRecording(recordingId: string): Promise<SessionRecording | null> {
+    // Stub implementation - returns null
+    return null;
+  }
+
+  async getAllSessionRecordings(limit?: number): Promise<SessionRecording[]> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async updateSessionRecording(recordingId: string, updates: Partial<SessionRecording>): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async deleteSessionRecording(recordingId: string): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async addRecordingInteraction(interaction: {
+    recordingId: string;
+    sessionId: string;
+    interactionType: string;
+    timestamp: Date;
+    relativeTimeMs: number;
+    durationMs?: number;
+    agentType?: 'manager' | 'worker' | 'system' | 'user';
+    content: string;
+    contentType?: 'text' | 'json' | 'binary' | 'image' | 'file';
+    metadata?: any;
+    relatedMessageId?: string;
+    relatedEventId?: string;
+    parentInteractionId?: string;
+  }): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async getRecordingInteractions(recordingId: string, startTime?: number, endTime?: number): Promise<RecordingInteraction[]> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async getRecordingInteractionsByTimeRange(
+    recordingId: string, 
+    startTimeMs: number, 
+    endTimeMs: number
+  ): Promise<RecordingInteraction[]> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async createPlaybackSession(playback: {
+    recordingId: string;
+    userId?: string;
+    playbackName?: string;
+    playbackSettings?: PlaybackSettings;
+  }): Promise<string> {
+    // Stub implementation - returns a UUID
+    return uuidv4();
+  }
+
+  async getPlaybackSession(playbackId: string): Promise<PlaybackSession | null> {
+    // Stub implementation - returns null
+    return null;
+  }
+
+  async updatePlaybackSession(playbackId: string, updates: {
+    currentPositionMs?: number;
+    playbackSpeed?: number;
+    isPlaying?: boolean;
+    isPaused?: boolean;
+    totalWatchTimeMs?: number;
+    notes?: string;
+    playbackSettings?: PlaybackSettings;
+  }): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async getUserPlaybackSessions(userId: string, recordingId?: string): Promise<PlaybackSession[]> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async deletePlaybackSession(playbackId: string): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async addRecordingAnnotation(annotation: {
+    recordingId: string;
+    playbackSessionId?: string;
+    userId?: string;
+    timestampMs: number;
+    durationMs?: number;
+    annotationType: 'note' | 'highlight' | 'bookmark' | 'flag' | 'question';
+    title: string;
+    content: string;
+    color?: string;
+    isPublic?: boolean;
+    tags?: string[];
+    priority?: 'low' | 'normal' | 'high' | 'critical';
+  }): Promise<string> {
+    // Stub implementation - returns a UUID
+    return uuidv4();
+  }
+
+  async getRecordingAnnotations(recordingId: string, userId?: string): Promise<RecordingAnnotation[]> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async updateRecordingAnnotation(annotationId: string, updates: Partial<RecordingAnnotation>): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async deleteRecordingAnnotation(annotationId: string): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async addRecordingBookmark(bookmark: {
+    recordingId: string;
+    userId?: string;
+    timestampMs: number;
+    title: string;
+    description?: string;
+    bookmarkType?: 'user' | 'system' | 'auto' | 'key_moment';
+    icon?: string;
+    color?: string;
+    chapterMarker?: boolean;
+  }): Promise<string> {
+    // Stub implementation - returns a UUID
+    return uuidv4();
+  }
+
+  async getRecordingBookmarks(recordingId: string, userId?: string): Promise<RecordingBookmark[]> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async updateRecordingBookmark(bookmarkId: string, updates: Partial<RecordingBookmark>): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async deleteRecordingBookmark(bookmarkId: string): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async createRecordingExport(exportRequest: {
+    recordingId: string;
+    requestedBy?: string;
+    exportFormat: 'json' | 'csv' | 'video' | 'html' | 'pdf' | 'zip';
+    exportOptions?: ExportOptions;
+    includeAnnotations?: boolean;
+    includeBookmarks?: boolean;
+    includeMetadata?: boolean;
+    startTimeMs?: number;
+    endTimeMs?: number;
+  }): Promise<string> {
+    // Stub implementation - returns a UUID
+    return uuidv4();
+  }
+
+  async getRecordingExport(exportId: string): Promise<RecordingExport | null> {
+    // Stub implementation - returns null
+    return null;
+  }
+
+  async getRecordingExports(recordingId: string): Promise<RecordingExport[]> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async updateRecordingExport(exportId: string, updates: {
+    status?: 'pending' | 'processing' | 'completed' | 'failed';
+    filePath?: string;
+    fileSizeBytes?: number;
+    completedAt?: Date;
+    errorMessage?: string;
+  }): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async deleteRecordingExport(exportId: string): Promise<void> {
+    // Stub implementation - does nothing
+  }
+
+  async getRecordingAnalytics(recordingId: string): Promise<{
+    totalViews: number;
+    totalWatchTime: number;
+    averageWatchTime: number;
+    completionRate: number;
+    annotationCount: number;
+    bookmarkCount: number;
+    exportCount: number;
+    viewerCount: number;
+  }> {
+    // Stub implementation - returns zero values
+    return {
+      totalViews: 0,
+      totalWatchTime: 0,
+      averageWatchTime: 0,
+      completionRate: 0,
+      annotationCount: 0,
+      bookmarkCount: 0,
+      exportCount: 0,
+      viewerCount: 0
+    };
+  }
+
+  async getPopularRecordings(limit?: number): Promise<Array<{
+    recordingId: string;
+    recordingName: string;
+    viewCount: number;
+    downloadCount: number;
+    rating?: number;
+  }>> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async detectKeyMoments(recordingId: string): Promise<KeyMoment[]> {
+    // Stub implementation - returns empty array
+    return [];
+  }
+
+  async addKeyMoment(recordingId: string, keyMoment: {
+    timestampMs: number;
+    title: string;
+    description: string;
+    momentType: 'error' | 'completion' | 'decision_point' | 'interaction_peak' | 'user_defined';
+    importance: 'low' | 'medium' | 'high';
+    automaticallyDetected?: boolean;
+    relatedInteractionIds?: string[];
+  }): Promise<void> {
+    // Stub implementation - does nothing
   }
 }

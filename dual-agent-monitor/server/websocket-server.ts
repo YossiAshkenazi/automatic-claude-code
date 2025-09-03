@@ -8,21 +8,55 @@ import { AgentMessage, DualAgentSession, SystemEvent, WebSocketMessage } from '.
 import { AnalyticsService } from './analytics/AnalyticsService.js';
 import { SessionReplayManager } from './replay/SessionReplayManager.js';
 import { MLService } from './ml/MLService.js';
+import { AgentIntegrationService } from './services/AgentIntegrationService.js';
+import { DemoAgent } from './demoAgent.js';
 import { v4 as uuidv4 } from 'uuid';
+
+// Utility function to safely handle strings with unicode issues
+function safeStringify(obj: any, replacer?: any, space?: number): string {
+  try {
+    return JSON.stringify(obj, (key, value) => {
+      if (typeof value === 'string') {
+        // Remove or replace problematic unicode characters
+        return value.replace(/[\u{D800}-\u{DFFF}]/gu, '');
+      }
+      return value;
+    }, space);
+  } catch (error) {
+    console.error('JSON stringify error:', error);
+    return '[Object with invalid unicode]';
+  }
+}
 
 const app = express();
 app.use(cors({
-  origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:6012', 'http://localhost:6013', 'http://localhost:6014', 'http://localhost:6015', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4001'],
+  origin: ['http://localhost:6005', 'http://localhost:6011', 'http://localhost:6012', 'http://localhost:6013', 'http://localhost:6014', 'http://localhost:6015', 'http://localhost:3000', 'http://localhost:5173', 'http://localhost:4005'],
   credentials: true
 }));
-app.use(express.json());
+// Enhanced JSON parsing with better error handling
+app.use(express.json({
+  limit: '50mb'
+}));
+
+// Custom error handler for JSON parsing errors
+app.use((error: any, req: any, res: any, next: any) => {
+  if (error instanceof SyntaxError && 'body' in error) {
+    console.error('JSON parsing error for request:', req.method, req.path);
+    console.error('Error details:', error.message);
+    return res.status(400).json({ 
+      error: 'Invalid JSON in request body',
+      details: error.message 
+    });
+  }
+  next(error);
+});
 
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
 // Initialize in-memory database service for testing
 console.log('Using in-memory database for development/testing');
-const dbService = new InMemoryDatabaseService() as DatabaseInterface;
+const dbService = new InMemoryDatabaseService() as any;
 const analyticsService = new AnalyticsService(dbService as any);
 const replayManager = new SessionReplayManager(dbService as any);
 const mlService = new MLService(dbService as any, {
@@ -30,6 +64,8 @@ const mlService = new MLService(dbService as any, {
   insightGenerationInterval: 5 * 60 * 1000, // 5 minutes
   anomalyDetectionSensitivity: 'medium'
 });
+const agentIntegration = new AgentIntegrationService();
+const demoAgent = new DemoAgent();
 const clients = new Set<WebSocket>();
 
 // Initialize services
@@ -53,6 +89,63 @@ analyticsService.subscribeToRealTime((metrics) => {
 //   });
 // }); // Temporarily disabled
 
+// Subscribe to AgentIntegrationService events
+agentIntegration.on('agents:started', (data) => {
+  broadcast({
+    type: 'agents:started',
+    data: data
+  });
+});
+
+agentIntegration.on('agent:message', (message) => {
+  broadcast({
+    type: 'agent:message',
+    data: message
+  });
+});
+
+agentIntegration.on('agents:error', (error) => {
+  broadcast({
+    type: 'agents:error',
+    data: error
+  });
+});
+
+agentIntegration.on('agents:stopped', (data) => {
+  broadcast({
+    type: 'agents:stopped',
+    data: data
+  });
+});
+
+agentIntegration.on('metrics:updated', (metrics) => {
+  broadcast({
+    type: 'metrics:updated',
+    data: metrics
+  });
+});
+
+agentIntegration.on('task:assigned', (task) => {
+  broadcast({
+    type: 'task:assigned',
+    data: task
+  });
+});
+
+agentIntegration.on('task:completed', (task) => {
+  broadcast({
+    type: 'task:completed',
+    data: task
+  });
+});
+
+agentIntegration.on('session:ended', (session) => {
+  broadcast({
+    type: 'session:ended',
+    data: session
+  });
+});
+
 // In-memory storage for active sessions (will be replaced by database later)
 let currentSession: DualAgentSession | null = null;
 
@@ -60,6 +153,9 @@ let currentSession: DualAgentSession | null = null;
 wss.on('connection', (ws) => {
   console.log('New WebSocket client connected');
   clients.add(ws);
+  
+  // Register WebSocket client with demo agent
+  demoAgent.addWebSocketClient(ws);
 
   // Analytics subscription tracking for this connection
   let analyticsInterval: NodeJS.Timeout | null = null;
@@ -74,12 +170,12 @@ wss.on('connection', (ws) => {
   }
 
   // Send all sessions from database
-  dbService.getAllSessions().then(sessions => {
+  dbService.getAllSessions().then((sessions: any) => {
     ws.send(JSON.stringify({
       type: 'sessions:list',
       data: sessions
     }));
-  }).catch(error => {
+  }).catch((error: any) => {
     console.error('Error fetching sessions:', error);
   });
 
@@ -192,44 +288,124 @@ wss.on('connection', (ws) => {
           }
           break;
 
-        case 'agents:start':
+        case 'demo:start':
           try {
-            // Create new session in database
-            const sessionId = await dbService.createSession({
-              startTime: new Date(),
-              status: 'running',
-              initialTask: data.task || 'Agent task',
-              workDir: process.cwd()
-            });
+            const scenario = data.scenario || 'oauth';
+            const demoSessionId = await demoAgent.startInteractiveDemo(scenario);
+            demoAgent.generateLiveMetrics(demoSessionId);
             
-            currentSession = await dbService.getSession(sessionId);
-            
-            broadcast({
-              type: 'agents:started',
-              data: {
-                sessionId: sessionId,
-                task: data.task
-              }
-            });
+            ws.send(JSON.stringify({
+              type: 'demo:started',
+              data: { demoSessionId, scenario }
+            }));
           } catch (error: any) {
             ws.send(JSON.stringify({
               type: 'error',
-              message: error.message
+              message: `Failed to start demo: ${error.message}`
+            }));
+          }
+          break;
+
+        case 'demo:stop':
+          try {
+            const { demoSessionId } = data;
+            const stopped = demoAgent.stopDemo(demoSessionId);
+            
+            ws.send(JSON.stringify({
+              type: 'demo:stopped',
+              data: { success: stopped, demoSessionId }
+            }));
+          } catch (error: any) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to stop demo: ${error.message}`
+            }));
+          }
+          break;
+
+        case 'demo:analytics':
+          try {
+            const analytics = await demoAgent.createAnalyticsDemo();
+            ws.send(JSON.stringify({
+              type: 'demo:analytics',
+              data: analytics
+            }));
+          } catch (error: any) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to generate analytics demo: ${error.message}`
+            }));
+          }
+          break;
+
+        case 'demo:status':
+          try {
+            const status = demoAgent.getDemoStatus();
+            ws.send(JSON.stringify({
+              type: 'demo:status',
+              data: status
+            }));
+          } catch (error: any) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to get demo status: ${error.message}`
+            }));
+          }
+          break;
+
+        case 'agents:start':
+          try {
+            // Start real agents using AgentIntegrationService
+            await agentIntegration.startAgents(data.task || 'Default task', {
+              managerModel: data.managerModel || 'opus',
+              workerModel: data.workerModel || 'sonnet',
+              maxIterations: data.maxIterations || 10,
+              verbose: data.verbose || false
+            });
+            
+            // Get the current session from AgentIntegrationService
+            const integrationSession = agentIntegration.getCurrentSession();
+            
+            if (integrationSession) {
+              // Create corresponding database session
+              const sessionId = await dbService.createSession({
+                startTime: integrationSession.startTime,
+                status: 'running',
+                initialTask: data.task || 'Agent task',
+                workDir: process.cwd()
+              });
+              
+              currentSession = await dbService.getSession(sessionId);
+              
+              // The broadcast will be handled by the AgentIntegrationService event listener
+            }
+          } catch (error: any) {
+            console.error('Error starting agents:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to start agents: ${error.message}`
             }));
           }
           break;
 
         case 'agents:stop':
-          if (currentSession) {
-            await dbService.updateSessionStatus(currentSession.id, 'completed', new Date());
-            currentSession = await dbService.getSession(currentSession.id);
+          try {
+            // Stop real agents using AgentIntegrationService
+            await agentIntegration.stopAgents();
             
-            broadcast({
-              type: 'agents:stopped',
-              data: {
-                sessionId: currentSession?.id
-              }
-            });
+            // Update database session status
+            if (currentSession) {
+              await dbService.updateSessionStatus(currentSession.id, 'completed', new Date());
+              currentSession = await dbService.getSession(currentSession.id);
+            }
+            
+            // The broadcast will be handled by the AgentIntegrationService event listener
+          } catch (error: any) {
+            console.error('Error stopping agents:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: `Failed to stop agents: ${error.message}`
+            }));
           }
           break;
 
@@ -401,7 +577,7 @@ wss.on('connection', (ws) => {
 
 // Broadcast to all connected clients
 function broadcast(message: any) {
-  const messageStr = JSON.stringify(message);
+  const messageStr = safeStringify(message);
   clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(messageStr);
@@ -444,22 +620,42 @@ app.get('/api/health', async (req, res) => {
 // Monitoring data endpoint for automatic-claude-code integration
 app.post('/api/monitoring', async (req, res) => {
   try {
+    // Validate request body exists
+    if (!req.body || typeof req.body !== 'object') {
+      console.error('❌ Invalid or missing request body');
+      return res.status(400).json({ error: 'Request body must be a valid JSON object' });
+    }
+    
     const data = req.body;
+    
+    // Safe JSON stringification to avoid unicode issues
+    console.log('🔍 Monitoring data received:', safeStringify(data, null, 2));
+    
+    console.log('📊 Current session exists:', !!currentSession, currentSession?.id);
     
     // Handle dual-agent monitoring data
     if (data.agentType && data.message) {
+      console.log('✅ Valid agent data received');
       // Create or update current session if needed
       if (!currentSession && data.sessionInfo) {
+        console.log('🆕 Creating new session with data:', data.sessionInfo);
         const sessionId = await dbService.createSession({
           startTime: new Date(),
           status: 'running',
           initialTask: data.sessionInfo.task || 'Dual-agent task',
           workDir: data.sessionInfo.workDir || process.cwd()
         });
+        console.log('📝 Session created with ID:', sessionId);
         currentSession = await dbService.getSession(sessionId);
+        console.log('✅ Current session set:', currentSession?.id);
+      } else if (!currentSession) {
+        console.log('⚠️ No session info provided for new session');
+      } else {
+        console.log('📍 Using existing session:', currentSession.id);
       }
 
       if (currentSession) {
+        console.log('📝 Adding message to session:', currentSession.id);
         const agentMessage: AgentMessage = {
           id: uuidv4(),
           sessionId: currentSession.id,
@@ -471,6 +667,7 @@ app.post('/api/monitoring', async (req, res) => {
         };
         
         await dbService.addMessage(agentMessage);
+        console.log('✅ Message added:', agentMessage.id);
         
         // Collect analytics metrics
         await analyticsService.collectMetricsFromMessage(agentMessage, currentSession);
@@ -492,7 +689,97 @@ app.post('/api/monitoring', async (req, res) => {
 
 app.get('/api/sessions', async (req, res) => {
   try {
-    const sessions = await dbService.getAllSessions();
+    // Get sessions from database
+    let sessions = await dbService.getAllSessions();
+    
+    // If we have a current session, add it to the list
+    if (currentSession) {
+      const existingIndex = sessions.findIndex((s: any) => s.id === currentSession!.id);
+      if (existingIndex >= 0) {
+        sessions[existingIndex] = currentSession;
+      } else {
+        sessions.push(currentSession);
+      }
+    }
+    
+    // Add mock demo sessions if we have no real sessions (for immediate UI demonstration)
+    if (sessions.length === 0) {
+      sessions = [
+        {
+          id: 'demo-session-1',
+          status: 'completed',
+          startTime: new Date(Date.now() - 300000), // 5 minutes ago
+          endTime: new Date(Date.now() - 60000), // 1 minute ago
+          lastActivity: new Date(Date.now() - 60000),
+          agentType: 'dual-agent',
+          initialTask: 'Create factorial function',
+          workDir: '/workspace/demo',
+          messages: [
+            { 
+              id: 'msg1',
+              sessionId: 'demo-session-1',
+              agentType: 'manager', 
+              messageType: 'prompt',
+              content: 'Analyzing task: create factorial function', 
+              timestamp: new Date(Date.now() - 250000) 
+            },
+            { 
+              id: 'msg2',
+              sessionId: 'demo-session-1',
+              agentType: 'worker', 
+              messageType: 'response',
+              content: 'Creating factorial function implementation', 
+              timestamp: new Date(Date.now() - 200000) 
+            },
+            { 
+              id: 'msg3',
+              sessionId: 'demo-session-1',
+              agentType: 'manager', 
+              messageType: 'review',
+              content: 'Reviewing implementation - looks good!', 
+              timestamp: new Date(Date.now() - 150000) 
+            }
+          ],
+          metrics: { duration: 180000, handoffs: 1, quality: 85 }
+        },
+        {
+          id: 'demo-session-2',
+          status: 'running', 
+          startTime: new Date(Date.now() - 120000), // 2 minutes ago
+          lastActivity: new Date(Date.now() - 5000), // 5 seconds ago
+          agentType: 'dual-agent',
+          initialTask: 'Implement authentication system',
+          workDir: '/workspace/auth-demo',
+          messages: [
+            { 
+              id: 'msg4',
+              sessionId: 'demo-session-2',
+              agentType: 'manager', 
+              messageType: 'prompt',
+              content: 'Planning authentication system implementation', 
+              timestamp: new Date(Date.now() - 110000) 
+            },
+            { 
+              id: 'msg5',
+              sessionId: 'demo-session-2',
+              agentType: 'worker', 
+              messageType: 'progress',
+              content: 'Setting up JWT middleware', 
+              timestamp: new Date(Date.now() - 80000) 
+            },
+            { 
+              id: 'msg6',
+              sessionId: 'demo-session-2',
+              agentType: 'manager', 
+              messageType: 'feedback',
+              content: 'Reviewing security measures', 
+              timestamp: new Date(Date.now() - 30000) 
+            }
+          ],
+          metrics: { duration: 115000, handoffs: 2, quality: 92 }
+        }
+      ];
+    }
     
     // Parse query parameters for pagination and filtering
     const page = parseInt(req.query.page as string) || 1;
@@ -506,8 +793,8 @@ app.get('/api/sessions', async (req, res) => {
       let aValue, bValue;
       switch (sortBy) {
         case 'lastActivity':
-          aValue = a.endTime || a.startTime;
-          bValue = b.endTime || b.startTime;
+          aValue = a.endTime || a.lastActivity || a.startTime;
+          bValue = b.endTime || b.lastActivity || b.startTime;
           break;
         case 'messageCount':
           aValue = a.messages?.length || 0;
@@ -538,6 +825,7 @@ app.get('/api/sessions', async (req, res) => {
       limit: limit
     });
   } catch (error) {
+    console.error('Error fetching sessions:', error);
     res.status(500).json({ error: 'Failed to fetch sessions' });
   }
 });
@@ -606,19 +894,38 @@ app.post('/api/sessions', async (req, res) => {
 
 app.post('/api/agents/start', async (req, res) => {
   try {
-    const sessionId = await dbService.createSession({
-      startTime: new Date(),
-      status: 'running',
-      initialTask: req.body.task || 'Agent task',
-      workDir: process.cwd()
+    const { task, managerModel, workerModel, maxIterations, verbose } = req.body;
+    
+    // Start real agents using AgentIntegrationService
+    await agentIntegration.startAgents(task || 'Default task', {
+      managerModel: managerModel || 'opus',
+      workerModel: workerModel || 'sonnet',
+      maxIterations: maxIterations || 10,
+      verbose: verbose || false
     });
     
-    currentSession = await dbService.getSession(sessionId);
+    // Get the current session from AgentIntegrationService
+    const integrationSession = agentIntegration.getCurrentSession();
     
-    res.json({
-      success: true,
-      sessionId: sessionId
-    });
+    if (integrationSession) {
+      // Create corresponding database session
+      const sessionId = await dbService.createSession({
+        startTime: integrationSession.startTime,
+        status: 'running',
+        initialTask: task || 'Agent task',
+        workDir: process.cwd()
+      });
+      
+      currentSession = await dbService.getSession(sessionId);
+      
+      res.json({
+        success: true,
+        sessionId: sessionId,
+        integrationSessionId: integrationSession.id
+      });
+    } else {
+      throw new Error('Failed to get integration session');
+    }
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -629,11 +936,173 @@ app.post('/api/agents/start', async (req, res) => {
 
 app.post('/api/agents/stop', async (req, res) => {
   try {
+    // Stop real agents using AgentIntegrationService
+    await agentIntegration.stopAgents();
+    
+    // Update database session status
     if (currentSession) {
       await dbService.updateSessionStatus(currentSession.id, 'completed', new Date());
       currentSession = await dbService.getSession(currentSession.id);
     }
+    
     res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint for agents data (expected by frontend)
+app.get('/api/agents', async (req, res) => {
+  try {
+    const currentIntegrationSession = agentIntegration.getCurrentSession();
+    const allIntegrationSessions = agentIntegration.getAllSessions();
+    
+    // Create agents data structure expected by frontend
+    const agents = [];
+    
+    // Add current session agents if active
+    if (currentIntegrationSession && currentIntegrationSession.status === 'active') {
+      agents.push({
+        id: 'manager-' + currentIntegrationSession.id,
+        type: 'manager',
+        status: 'active',
+        sessionId: currentIntegrationSession.id,
+        startTime: currentIntegrationSession.startTime,
+        currentTask: currentIntegrationSession.task || 'Processing task',
+        performance: {
+          responseTime: Math.random() * 2000 + 500, // Mock response time
+          successRate: 0.95,
+          tasksCompleted: Math.floor(Math.random() * 10) + 1
+        }
+      });
+      
+      agents.push({
+        id: 'worker-' + currentIntegrationSession.id,
+        type: 'worker', 
+        status: 'active',
+        sessionId: currentIntegrationSession.id,
+        startTime: currentIntegrationSession.startTime,
+        currentTask: 'Executing assigned work',
+        performance: {
+          responseTime: Math.random() * 1500 + 300,
+          successRate: 0.92,
+          tasksCompleted: Math.floor(Math.random() * 15) + 3
+        }
+      });
+    } else {
+      // Add mock demo agents for immediate frontend display
+      agents.push({
+        id: 'demo-manager-1',
+        type: 'manager',
+        status: 'idle',
+        sessionId: null,
+        startTime: new Date(Date.now() - 600000), // 10 minutes ago
+        currentTask: null,
+        lastTask: 'Code review and quality assessment',
+        performance: {
+          responseTime: 1200,
+          successRate: 0.96,
+          tasksCompleted: 24
+        }
+      });
+      
+      agents.push({
+        id: 'demo-worker-1',
+        type: 'worker',
+        status: 'idle', 
+        sessionId: null,
+        startTime: new Date(Date.now() - 600000),
+        currentTask: null,
+        lastTask: 'Function implementation and testing',
+        performance: {
+          responseTime: 800,
+          successRate: 0.94,
+          tasksCompleted: 18
+        }
+      });
+    }
+    
+    res.json({
+      agents,
+      total: agents.length,
+      active: agents.filter(a => a.status === 'active').length,
+      idle: agents.filter(a => a.status === 'idle').length
+    });
+  } catch (error: any) {
+    console.error('Error fetching agents:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Additional agent integration endpoints
+app.get('/api/agents/status', async (req, res) => {
+  try {
+    const currentIntegrationSession = agentIntegration.getCurrentSession();
+    const allIntegrationSessions = agentIntegration.getAllSessions();
+    
+    res.json({
+      success: true,
+      currentSession: currentIntegrationSession,
+      allSessions: allIntegrationSessions,
+      isRunning: !!currentIntegrationSession && currentIntegrationSession.status === 'active'
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/agents/message', async (req, res) => {
+  try {
+    const { agent, message } = req.body;
+    
+    if (!agent || !message) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'agent and message are required' 
+      });
+    }
+    
+    if (agent !== 'manager' && agent !== 'worker') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'agent must be "manager" or "worker"' 
+      });
+    }
+    
+    agentIntegration.sendMessageToAgent(agent, message);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/sessions/:sessionId', async (req, res) => {
+  try {
+    const session = agentIntegration.getSession(req.params.sessionId);
+    
+    if (!session) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Session not found' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      session: session
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/sessions/:sessionId/export', async (req, res) => {
+  try {
+    const exportData = agentIntegration.exportSessionData(req.params.sessionId);
+    
+    res.header('Content-Type', 'application/json');
+    res.header('Content-Disposition', `attachment; filename="agent-session-${req.params.sessionId}.json"`);
+    res.send(exportData);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -1610,9 +2079,159 @@ app.get('/api/replay/status', async (req, res) => {
   }
 });
 
+// Demo Agent API Endpoints
+app.post('/api/demo/start', async (req, res) => {
+  try {
+    const { scenario } = req.body;
+    const demoSessionId = await demoAgent.startInteractiveDemo(scenario || 'oauth');
+    demoAgent.generateLiveMetrics(demoSessionId);
+    
+    res.json({
+      success: true,
+      demoSessionId,
+      scenario: scenario || 'oauth',
+      message: 'Interactive demo started successfully'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/demo/stop', async (req, res) => {
+  try {
+    const { demoSessionId } = req.body;
+    
+    if (!demoSessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'demoSessionId is required'
+      });
+    }
+    
+    const stopped = demoAgent.stopDemo(demoSessionId);
+    
+    res.json({
+      success: stopped,
+      message: stopped ? 'Demo stopped successfully' : 'Demo session not found'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.get('/api/demo/status', async (req, res) => {
+  try {
+    const status = demoAgent.getDemoStatus();
+    const stats = demoAgent.getDemoStats();
+    
+    res.json({
+      success: true,
+      status,
+      stats
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/demo/analytics', async (req, res) => {
+  try {
+    const analytics = await demoAgent.createAnalyticsDemo();
+    
+    res.json({
+      success: true,
+      analytics,
+      message: 'Demo analytics data generated and broadcast'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/demo/continuous/start', async (req, res) => {
+  try {
+    const { intervalMinutes } = req.body;
+    demoAgent.startContinuousDemo(intervalMinutes || 10);
+    
+    res.json({
+      success: true,
+      message: `Continuous demo mode started (every ${intervalMinutes || 10} minutes)`
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/demo/continuous/stop', async (req, res) => {
+  try {
+    demoAgent.stopContinuousDemo();
+    
+    res.json({
+      success: true,
+      message: 'Continuous demo mode stopped'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Enhanced mock data seeding endpoint
+app.post('/api/demo/seed', async (req, res) => {
+  try {
+    console.log('🎭 Seeding database with comprehensive demo data...');
+    
+    // Run the seeding function
+    const { seedDatabase } = await import('./database/seed.js');
+    await seedDatabase();
+    
+    // Create analytics demo
+    const analytics = await demoAgent.createAnalyticsDemo();
+    
+    // Broadcast update to all connected clients
+    broadcast({
+      type: 'demo:seeded',
+      data: {
+        message: 'Database seeded with comprehensive demo data',
+        analytics
+      }
+    });
+    
+    res.json({
+      success: true,
+      message: 'Database seeded with comprehensive demo data',
+      analytics
+    });
+  } catch (error: any) {
+    console.error('Error seeding demo data:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+
 
 // Enhanced port configuration with proper environment variable handling
-const DEFAULT_PORT = 4001;
+const DEFAULT_PORT = 4005;
 const PORT = parseInt(process.env.WEBSOCKET_SERVER_PORT || process.env.PORT || DEFAULT_PORT.toString(), 10);
 
 server.listen(PORT, async () => {

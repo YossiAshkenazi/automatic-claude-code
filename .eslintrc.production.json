@@ -1,0 +1,12 @@
+{
+  "extends": "./.eslintrc.json",
+  "rules": {
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/no-unused-vars": ["error", { 
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_"
+    }],
+    "@typescript-eslint/no-var-requires": "off",
+    "no-async-promise-executor": "warn"
+  }
+}

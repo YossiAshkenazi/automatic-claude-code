@@ -1,0 +1,406 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Kafka Performance & Operations Dashboard",
+    "description": "Comprehensive monitoring for Kafka producers, consumers, and cluster health",
+    "tags": ["kafka", "monitoring", "performance"],
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 1,
+    "refresh": "5s",
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Producer Throughput",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(kafka_producer_success_total[5m])) by (application)",
+            "legendFormat": "Messages/sec"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "msgs/sec",
+            "min": 0,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 10000},
+                {"color": "green", "value": 50000}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Consumer Lag",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(kafka_consumer_lag_max) by (topic)",
+            "legendFormat": "Max Lag"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "messages",
+            "min": 0,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 1000},
+                {"color": "red", "value": 10000}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Producer Success Rate",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(kafka_producer_success_total[5m])) / (sum(rate(kafka_producer_success_total[5m])) + sum(rate(kafka_producer_error_total[5m]))) * 100",
+            "legendFormat": "Success Rate %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 95},
+                {"color": "green", "value": 99}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Average Processing Latency",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(kafka_consumer_user_events_processing_time_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P95 Latency"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "min": 0,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 50}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Message Throughput Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(kafka_producer_success_total[1m])) by (application)",
+            "legendFormat": "Producer - {{application}}"
+          },
+          {
+            "expr": "sum(rate(kafka_consumer_user_events_consumed_total[1m])) by (application)",
+            "legendFormat": "Consumer - {{application}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Messages/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Error Rate Trends",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(kafka_producer_error_total[1m])) by (application)",
+            "legendFormat": "Producer Errors - {{application}}"
+          },
+          {
+            "expr": "sum(rate(kafka_consumer_user_events_error_total[1m])) by (application)",
+            "legendFormat": "Consumer Errors - {{application}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Errors/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 7,
+        "title": "Kafka Cluster Health",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "kafka_brokers",
+            "legendFormat": "Active Brokers"
+          },
+          {
+            "expr": "kafka_topic_partitions",
+            "legendFormat": "Total Partitions"
+          },
+          {
+            "expr": "kafka_topic_partition_replicas",
+            "legendFormat": "Total Replicas"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Consumer Lag by Topic",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "kafka_consumer_lag_max",
+            "legendFormat": "{{topic}} - {{partition}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Messages",
+            "min": 0,
+            "logBase": 2
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 9,
+        "title": "Event Type Distribution",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "sum by (event_type) (user_events_created_total)",
+            "legendFormat": "{{event_type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 24}
+      },
+      {
+        "id": 10,
+        "title": "Processing Time Percentiles",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(kafka_consumer_user_events_processing_time_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.90, sum(rate(kafka_consumer_user_events_processing_time_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P90"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(kafka_consumer_user_events_processing_time_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(kafka_consumer_user_events_processing_time_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P99"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Latency (ms)",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 24}
+      },
+      {
+        "id": 11,
+        "title": "JVM Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "jvm_memory_used_bytes{area=\"heap\"}",
+            "legendFormat": "Heap Used - {{instance}}"
+          },
+          {
+            "expr": "jvm_memory_max_bytes{area=\"heap\"}",
+            "legendFormat": "Heap Max - {{instance}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Bytes",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 24}
+      },
+      {
+        "id": 12,
+        "title": "Circuit Breaker Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "resilience4j_circuitbreaker_state{name=\"kafka-producer\"}",
+            "legendFormat": "Producer CB State"
+          },
+          {
+            "expr": "resilience4j_circuitbreaker_state{name=\"user-event-processor\"}",
+            "legendFormat": "Consumer CB State"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"options": {"0": {"text": "CLOSED"}}, "type": "value"},
+              {"options": {"1": {"text": "OPEN"}}, "type": "value"},
+              {"options": {"2": {"text": "HALF_OPEN"}}, "type": "value"}
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 12, "x": 0, "y": 32}
+      },
+      {
+        "id": 13,
+        "title": "Dead Letter Queue Messages",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(kafka_producer_dlq_messages_total[5m]))",
+            "legendFormat": "DLQ Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "msgs/sec",
+            "min": 0,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 10}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 12, "x": 12, "y": 32}
+      },
+      {
+        "id": 14,
+        "title": "Schema Registry Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "schema_registry_up",
+            "legendFormat": "Schema Registry"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"options": {"0": {"text": "DOWN", "color": "red"}}, "type": "value"},
+              {"options": {"1": {"text": "UP", "color": "green"}}, "type": "value"}
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 36}
+      },
+      {
+        "id": 15,
+        "title": "Kafka Connect Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "kafka_connect_up",
+            "legendFormat": "Kafka Connect"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"options": {"0": {"text": "DOWN", "color": "red"}}, "type": "value"},
+              {"options": {"1": {"text": "UP", "color": "green"}}, "type": "value"}
+            ]
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 36}
+      },
+      {
+        "id": 16,
+        "title": "Network I/O Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(kafka_network_io_bytes_total[1m])) by (direction)",
+            "legendFormat": "{{direction}}"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Bytes/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 4, "w": 12, "x": 12, "y": 36}
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "application",
+          "type": "query",
+          "query": "label_values(kafka_producer_success_total, application)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        },
+        {
+          "name": "topic",
+          "type": "query",
+          "query": "label_values(kafka_consumer_lag_max, topic)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "prometheus",
+          "enable": true,
+          "expr": "resets(kafka_producer_success_total[1h])",
+          "iconColor": "green",
+          "titleFormat": "Application Restart"
+        }
+      ]
+    }
+  }
+}

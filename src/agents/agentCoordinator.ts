@@ -3,6 +3,7 @@ import { Logger } from '../logger';
 import { SessionManager } from '../sessionManager';
 import { monitoringManager } from '../monitoringManager';
 import { OutputParser, ParsedOutput } from '../outputParser';
+import { SDKClaudeExecutor } from '../services/sdkClaudeExecutor';
 import {
   AgentRole,
   AgentMessage,
@@ -36,6 +37,7 @@ export interface AgentCoordinatorOptions {
   timeout?: number;
   continueOnError?: boolean;
   allowedTools?: string;
+  usePTY?: boolean; // Enable PTY-based execution
 }
 
 /**
@@ -49,6 +51,7 @@ export class AgentCoordinator extends EventEmitter {
   private outputParser: OutputParser;
   private managerAgent: ManagerAgent;
   private workerAgent: WorkerAgent;
+  private claudeExecutor: SDKClaudeExecutor;
 
   private executionContext: ExecutionContext;
   private messageQueue: AgentMessage[] = [];
@@ -58,12 +61,19 @@ export class AgentCoordinator extends EventEmitter {
   private lastHandoffTime?: Date;
   private handoffCount: number = 0;
 
+  // Rate limiting for monitoring events
+  private lastMonitoringEventTime: Map<string, number> = new Map();
+  private monitoringEventCooldown: number = 10000; // 10 seconds minimum between similar events
+  private lastProgressUpdate: number = 0;
+  private progressUpdateThreshold: number = 0.05; // Only send updates for 5% progress changes
+
   constructor(config: AgentCoordinatorConfig) {
     super();
     
     this.logger = new Logger();
     this.sessionManager = new SessionManager();
     this.outputParser = new OutputParser();
+    this.claudeExecutor = new SDKClaudeExecutor(this.logger);
     
     // Initialize execution context with default values
     this.executionContext = {
@@ -148,7 +158,25 @@ export class AgentCoordinator extends EventEmitter {
    * Initialize both agents with execution context
    */
   private async initializeAgents(options: AgentCoordinatorOptions): Promise<void> {
-    this.logger.info('Initializing agents');
+    this.logger.info('Initializing agents with PTY support', { usePTY: options.usePTY });
+
+    // Create PTY sessions for agents if enabled
+    if (options.usePTY) {
+      const managerSession = await this.claudeExecutor.getOrCreatePTYSession(
+        `manager-${this.executionContext.sessionId}`,
+        options.workDir
+      );
+      
+      const workerSession = await this.claudeExecutor.getOrCreatePTYSession(
+        `worker-${this.executionContext.sessionId}`,
+        options.workDir
+      );
+      
+      this.logger.info('PTY sessions created for both agents', { 
+        managerSessionId: managerSession.sessionId,
+        workerSessionId: workerSession.sessionId
+      });
+    }
 
     // Initialize manager agent
     await this.managerAgent.initialize({
@@ -156,7 +184,9 @@ export class AgentCoordinator extends EventEmitter {
       workDir: options.workDir,
       timeout: options.timeout || 1800000,
       verbose: options.verbose,
-      allowedTools: options.allowedTools
+      allowedTools: options.allowedTools,
+      usePTY: options.usePTY,
+      claudeExecutor: this.claudeExecutor
     });
 
     // Initialize worker agent
@@ -165,7 +195,9 @@ export class AgentCoordinator extends EventEmitter {
       workDir: options.workDir,
       timeout: options.timeout || 1800000,
       verbose: options.verbose,
-      allowedTools: options.allowedTools
+      allowedTools: options.allowedTools,
+      usePTY: options.usePTY,
+      claudeExecutor: this.claudeExecutor
     });
 
     // Update agent states
@@ -182,7 +214,8 @@ export class AgentCoordinator extends EventEmitter {
    * Start the coordination monitoring loop
    */
   private startCoordinationLoop(): void {
-    const interval = this.executionContext.config.coordinationInterval || 5000;
+    // Increase default interval to reduce frequency of monitoring events
+    const interval = this.executionContext.config.coordinationInterval || 15000; // Changed from 5s to 15s
     
     this.coordinationInterval = setInterval(() => {
       this.performCoordinationTasks();
@@ -207,12 +240,18 @@ export class AgentCoordinator extends EventEmitter {
       // Check for quality gates
       this.checkQualityGates();
 
-      // Emit coordination event
-      this.emitCoordinationEvent('AGENT_COORDINATION', null, {
-        messageQueueLength: this.messageQueue.length,
-        workflowProgress: this.executionContext.workflowState.overallProgress,
-        activePhase: this.executionContext.workflowState.phase
-      });
+      // Only emit coordination events if there's meaningful change
+      const currentProgress = this.executionContext.workflowState.overallProgress;
+      const shouldEmitProgressUpdate = Math.abs(currentProgress - this.lastProgressUpdate) >= this.progressUpdateThreshold;
+      
+      if (shouldEmitProgressUpdate || this.messageQueue.length > 0) {
+        this.emitCoordinationEvent('AGENT_COORDINATION', null, {
+          messageQueueLength: this.messageQueue.length,
+          workflowProgress: currentProgress,
+          activePhase: this.executionContext.workflowState.phase
+        });
+        this.lastProgressUpdate = currentProgress;
+      }
 
     } catch (error) {
       this.logger.error('Coordination task failed', { error });
@@ -277,10 +316,16 @@ export class AgentCoordinator extends EventEmitter {
    * Execute the main coordination workflow
    */
   private async executeCoordinationWorkflow(options: AgentCoordinatorOptions): Promise<void> {
-    const maxIterations = options.maxIterations || 10;
+    const maxIterations = Math.min(options.maxIterations || 10, 25); // Hard cap at 25
     let currentIteration = 0;
+    let idleIterations = 0;
+    let consecutiveErrors = 0;
+    const maxIdleIterations = 5; // Stop if no progress for 5 iterations
+    const maxConsecutiveErrors = 3;
+    let lastWorkflowState = { ...this.executionContext.workflowState };
 
     this.updateWorkflowPhase('execution');
+    this.logger.info(`Starting coordination workflow (max ${maxIterations} iterations)`);
 
     while (currentIteration < maxIterations && this.isActive) {
       currentIteration++;
@@ -297,34 +342,94 @@ export class AgentCoordinator extends EventEmitter {
         // Validate agents are ready
         if (!this.validateAgentsReady()) {
           this.logger.warning('Agents not ready, waiting...');
-          await this.delay(1000);
+          await this.delay(2000); // Longer wait for agent readiness
           continue;
         }
+        
+        // Check for workflow progress (prevent endless loops)
+        const currentWorkflowState = { ...this.executionContext.workflowState };
+        const hasProgress = this.hasWorkflowProgressed(lastWorkflowState, currentWorkflowState);
+        
+        if (!hasProgress) {
+          idleIterations++;
+          this.logger.warning(`No workflow progress detected (idle iteration ${idleIterations}/${maxIdleIterations})`);
+          
+          if (idleIterations >= maxIdleIterations) {
+            this.logger.error('Workflow appears stuck - no progress after multiple iterations');
+            this.logger.info('Workflow State Analysis:', {
+              totalWorkItems: currentWorkflowState.totalWorkItems,
+              completedWorkItems: currentWorkflowState.completedWorkItems,
+              pendingHandoffs: this.handoffQueue.length,
+              activeWorkItems: currentWorkflowState.activeWorkItems.length,
+              phase: currentWorkflowState.phase
+            });
+            
+            // Only try to restart analysis once, then exit to prevent infinite loops
+            if (currentWorkflowState.totalWorkItems === 0 && idleIterations === maxIdleIterations) {
+              this.logger.info('Attempting to restart manager analysis due to lack of work items (final attempt)');
+              await this.initiateManagerAnalysis(this.executionContext.userRequest);
+              // Continue the loop for one more cycle to see if analysis produces work items
+            } else {
+              // Force completion if still no progress after restart attempt
+              this.logger.warning('Forcing workflow completion due to lack of progress');
+              this.updateWorkflowPhase('completion');
+              break;
+            }
+          }
+        } else {
+          idleIterations = 0; // Reset idle counter on progress
+          consecutiveErrors = 0; // Reset error counter on progress
+        }
+        
+        lastWorkflowState = currentWorkflowState;
 
         // Coordinate next steps between agents
         await this.coordinateAgentWork();
 
-        // Brief pause between iterations
-        await this.delay(1500);
+        // Progressive delay - longer delays for later iterations
+        const iterationDelay = Math.min(1500 + (currentIteration * 200), 5000);
+        await this.delay(iterationDelay);
 
       } catch (error) {
-        this.logger.error(`Coordination iteration ${currentIteration} failed`, { error });
+        consecutiveErrors++;
+        this.logger.error(`Coordination iteration ${currentIteration} failed (consecutive error ${consecutiveErrors}/${maxConsecutiveErrors})`, { error });
+        
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          this.logger.error('Too many consecutive coordination errors - stopping workflow');
+          throw new Error(`Coordination failed after ${maxConsecutiveErrors} consecutive errors. Last error: ${error instanceof Error ? error.message : String(error)}`);
+        }
         
         if (!options.continueOnError) {
           throw error;
         }
+        
+        // Add delay for error recovery
+        await this.delay(3000 * consecutiveErrors);
       }
     }
 
     if (currentIteration >= maxIterations) {
       this.logger.warning('Maximum coordination iterations reached');
-      this.logger.info('Final workflow state', {
+      this.emitCoordinationEvent('WORKFLOW_TRANSITION', 'manager', {
+        reason: 'max_iterations_reached',
+        currentIteration,
+        maxIterations
+      });
+    }
+    
+    // Final workflow analysis
+    this.logger.info('Coordination workflow completed', {
+      totalIterations: currentIteration,
+      finalState: {
         totalWorkItems: this.executionContext.workflowState.totalWorkItems,
         completedWorkItems: this.executionContext.workflowState.completedWorkItems,
         pendingHandoffs: this.handoffQueue.length,
-        pendingWorkItems: this.pendingWorkItems.size
-      });
-    }
+        pendingWorkItems: this.pendingWorkItems.size,
+        idleIterations,
+        consecutiveErrors
+      },
+      workflowPhase: this.executionContext.workflowState.phase
+    });
   }
 
   /**
@@ -1402,26 +1507,58 @@ QUALITY REQUIREMENTS:
 
     this.emit('coordination_event', event);
 
-    // Send to monitoring server
-    monitoringManager.sendMonitoringData({
-      agentType: agentRole || 'manager',
-      messageType: 'coordination_event',
-      message: type,
-      metadata: {
-        eventType: type,
-        eventData: data,
-        timestamp: event.timestamp,
-        workflowPhase: this.executionContext.workflowState.phase,
-        overallProgress: this.executionContext.workflowState.overallProgress
-      },
-      sessionInfo: {
-        task: this.executionContext.userRequest,
-        workDir: process.cwd()
-      }
-    }).catch(error => {
-      // Don't let monitoring errors break execution
-      this.logger.debug('Failed to send monitoring data', { error });
-    });
+    // Rate limit monitoring events to prevent spam
+    if (this.shouldSendMonitoringEvent(type)) {
+      monitoringManager.sendMonitoringData({
+        agentType: agentRole || 'manager',
+        messageType: 'coordination_event',
+        message: type,
+        metadata: {
+          eventType: type,
+          eventData: data,
+          timestamp: event.timestamp,
+          workflowPhase: this.executionContext.workflowState.phase,
+          overallProgress: this.executionContext.workflowState.overallProgress
+        },
+        sessionInfo: {
+          task: this.executionContext.userRequest,
+          workDir: process.cwd()
+        }
+      }).catch(error => {
+        // Don't let monitoring errors break execution
+        this.logger.debug('Failed to send monitoring data', { error });
+      });
+    }
+  }
+
+  /**
+   * Rate limiting logic for monitoring events
+   */
+  private shouldSendMonitoringEvent(eventType: string): boolean {
+    const now = Date.now();
+    const lastTime = this.lastMonitoringEventTime.get(eventType) || 0;
+    
+    // Always send important events
+    const criticalEvents = [
+      'MANAGER_TASK_ASSIGNMENT',
+      'WORKER_PROGRESS_UPDATE', 
+      'MANAGER_QUALITY_CHECK',
+      'MANAGER_WORKER_HANDOFF',
+      'WORKFLOW_TRANSITION'
+    ];
+    
+    if (criticalEvents.includes(eventType)) {
+      this.lastMonitoringEventTime.set(eventType, now);
+      return true;
+    }
+    
+    // Rate limit routine coordination events
+    if (now - lastTime > this.monitoringEventCooldown) {
+      this.lastMonitoringEventTime.set(eventType, now);
+      return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -1433,6 +1570,42 @@ QUALITY REQUIREMENTS:
 
   private generateErrorId(): string {
     return `err-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  }
+
+  /**
+   * Check if workflow has progressed between iterations
+   */
+  private hasWorkflowProgressed(
+    previousState: WorkflowState, 
+    currentState: WorkflowState
+  ): boolean {
+    // Check for progress indicators
+    const progressIndicators = [
+      currentState.completedWorkItems > previousState.completedWorkItems,
+      currentState.totalWorkItems > previousState.totalWorkItems,
+      currentState.activeWorkItems.length !== previousState.activeWorkItems.length,
+      currentState.phase !== previousState.phase,
+      currentState.overallProgress > previousState.overallProgress
+    ];
+    
+    const hasProgress = progressIndicators.some(indicator => indicator);
+    
+    if (!hasProgress) {
+      this.logger.debug('No workflow progress detected', {
+        previous: {
+          totalWorkItems: previousState.totalWorkItems,
+          completedWorkItems: previousState.completedWorkItems,
+          phase: previousState.phase
+        },
+        current: {
+          totalWorkItems: currentState.totalWorkItems,
+          completedWorkItems: currentState.completedWorkItems,
+          phase: currentState.phase
+        }
+      });
+    }
+    
+    return hasProgress;
   }
 
   private delay(ms: number): Promise<void> {
@@ -1463,6 +1636,11 @@ QUALITY REQUIREMENTS:
       await this.workerAgent.shutdown();
     }
 
+    // Shutdown Claude executor and PTY sessions
+    if (this.claudeExecutor) {
+      await this.claudeExecutor.shutdown();
+    }
+
     // Save session
     await this.sessionManager.saveSession();
 
@@ -1479,7 +1657,8 @@ QUALITY REQUIREMENTS:
         handoffsTriggered: validation.handoffsTriggered,
         workerExecutions: validation.workerExecutions,
         issues: validation.issues
-      }
+      },
+      pTYSessions: this.claudeExecutor ? this.claudeExecutor.getActivePTYSessions().length : 0
     });
 
     if (validation.issues.length > 0) {

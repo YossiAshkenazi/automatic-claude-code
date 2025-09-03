@@ -1,0 +1,111 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "🚀 Debug CLI",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dist/index.js",
+      "args": ["run", "test task", "--verbose"],
+      "preLaunchTask": "build-cli",
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "sourceMaps": true,
+      "console": "integratedTerminal",
+      "env": {
+        "NODE_ENV": "development",
+        "DEBUG": "*"
+      },
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "🎨 Debug Dashboard (Attach)",
+      "type": "node",
+      "request": "attach",
+      "port": 9230,
+      "localRoot": "${workspaceFolder}/dual-agent-monitor",
+      "remoteRoot": "/app",
+      "sourceMaps": true,
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "🐍 Debug Python Orchestrator",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/python-sdk/claude_cli_wrapper.py",
+      "cwd": "${workspaceFolder}/python-sdk",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/python-sdk",
+        "PYTHON_ENV": "development",
+        "PYTHON_DEBUG": "true"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "🔧 Debug Multi-Agent System",
+      "type": "python", 
+      "request": "launch",
+      "program": "${workspaceFolder}/python-sdk/multi_agent_demo.py",
+      "cwd": "${workspaceFolder}/python-sdk",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/python-sdk",
+        "PYTHON_ENV": "development"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "🪝 Debug Hook System",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/config/monitoring/monitoring-server.js",
+      "env": {
+        "NODE_ENV": "development",
+        "HOOKS_PORT": "4000",
+        "HOOKS_DASHBOARD_PORT": "6001"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "🧪 Debug Tests",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "args": [
+        "--runInBand",
+        "--no-cache",
+        "--watchAll=false"
+      ],
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "env": {
+        "NODE_ENV": "test"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "🚀 Debug Full Platform",
+      "configurations": [
+        "🚀 Debug CLI",
+        "🎨 Debug Dashboard (Attach)",
+        "🐍 Debug Python Orchestrator",
+        "🪝 Debug Hook System"
+      ],
+      "stopAll": true,
+      "preLaunchTask": "setup-debug-environment"
+    },
+    {
+      "name": "🔄 Debug Multi-Agent Workflow",
+      "configurations": [
+        "🐍 Debug Python Orchestrator", 
+        "🔧 Debug Multi-Agent System",
+        "🎨 Debug Dashboard (Attach)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

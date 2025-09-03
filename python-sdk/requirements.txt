@@ -1,0 +1,10 @@
+# Claude Code SDK Runtime Dependencies
+# 
+# Required dependencies for WebSocket and HTTP communication
+aiohttp>=3.8.0
+
+# Note: Claude Code CLI must be installed separately via:
+#   npm install -g @anthropic-ai/claude-code
+#
+# Verify Claude CLI installation:
+#   claude --version

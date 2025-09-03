@@ -188,3 +188,250 @@ export interface WebhookIntegration {
     options?: string[];
   }>;
 }
+
+// ===============================================
+// SESSION RECORDING TYPES
+// ===============================================
+
+export interface SessionRecording {
+  id: string;
+  sessionId: string;
+  recordingName?: string;
+  description?: string;
+  recordedBy?: string;
+  recordingStartedAt: Date;
+  recordingCompletedAt?: Date;
+  status: 'recording' | 'completed' | 'failed' | 'processing';
+  
+  // Recording metadata
+  totalInteractions: number;
+  totalSizeBytes: number;
+  compressionType?: string;
+  recordingQuality: 'low' | 'medium' | 'high' | 'lossless';
+  
+  // Playback metadata
+  playbackDurationMs?: number;
+  keyMoments?: KeyMoment[];
+  annotations?: RecordingAnnotation[];
+  bookmarks?: RecordingBookmark[];
+  
+  // Export and sharing
+  exportFormats?: string[];
+  sharedPublicly: boolean;
+  downloadCount: number;
+  
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RecordingInteraction {
+  id: string;
+  recordingId: string;
+  sessionId: string;
+  
+  // Interaction metadata
+  sequenceNumber: number;
+  interactionType: 'message' | 'agent_communication' | 'system_event' | 'tool_call' |
+                  'file_operation' | 'command_execution' | 'user_input' | 'agent_switch' |
+                  'performance_metric' | 'error' | 'state_change';
+  
+  // Timing information
+  timestamp: Date;
+  relativeTimeMs: number;
+  durationMs?: number;
+  
+  // Agent context
+  agentType?: 'manager' | 'worker' | 'system' | 'user';
+  agentContext?: any;
+  
+  // Interaction content
+  content: string;
+  contentType: 'text' | 'json' | 'binary' | 'image' | 'file';
+  contentHash?: string;
+  
+  // Related data
+  relatedMessageId?: string;
+  relatedEventId?: string;
+  parentInteractionId?: string;
+  
+  // Metadata and context
+  metadata?: any;
+  screenshotPath?: string;
+  filesTouched?: string[];
+  commandsExecuted?: string[];
+  toolsUsed?: string[];
+  
+  // Compression and storage
+  isCompressed: boolean;
+  compressedSize?: number;
+  originalSize?: number;
+}
+
+export interface PlaybackSession {
+  id: string;
+  recordingId: string;
+  userId?: string;
+  playbackName?: string;
+  
+  // Playback state
+  currentPositionMs: number;
+  playbackSpeed: number;
+  isPlaying: boolean;
+  isPaused: boolean;
+  
+  // Playback metadata
+  startedAt: Date;
+  lastAccessedAt: Date;
+  completedAt?: Date;
+  totalWatchTimeMs: number;
+  
+  // User interactions during playback
+  annotationsAdded: number;
+  bookmarksAdded: number;
+  notes?: string;
+  
+  // Settings and preferences
+  playbackSettings?: PlaybackSettings;
+  filtersApplied?: string[];
+  
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PlaybackSettings {
+  autoPlay: boolean;
+  showAnnotations: boolean;
+  showBookmarks: boolean;
+  showTimestamps: boolean;
+  highlightChanges: boolean;
+  filterInteractionTypes?: string[];
+  showOnlyAgentType?: 'manager' | 'worker' | null;
+  skipLongPauses: boolean;
+  maxPauseDurationMs: number;
+}
+
+export interface RecordingAnnotation {
+  id: string;
+  recordingId: string;
+  playbackSessionId?: string;
+  userId?: string;
+  
+  // Annotation positioning
+  timestampMs: number;
+  durationMs?: number;
+  
+  // Annotation content
+  annotationType: 'note' | 'highlight' | 'bookmark' | 'flag' | 'question';
+  title: string;
+  content: string;
+  color: string;
+  
+  // Metadata
+  isPublic: boolean;
+  tags?: string[];
+  priority: 'low' | 'normal' | 'high' | 'critical';
+  
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RecordingBookmark {
+  id: string;
+  recordingId: string;
+  userId?: string;
+  
+  // Bookmark positioning and metadata
+  timestampMs: number;
+  title: string;
+  description?: string;
+  bookmarkType: 'user' | 'system' | 'auto' | 'key_moment';
+  
+  // Visual and navigation
+  icon: string;
+  color: string;
+  chapterMarker: boolean;
+  
+  // Usage tracking
+  accessCount: number;
+  lastAccessedAt?: Date;
+  
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RecordingExport {
+  id: string;
+  recordingId: string;
+  requestedBy?: string;
+  
+  // Export configuration
+  exportFormat: 'json' | 'csv' | 'video' | 'html' | 'pdf' | 'zip';
+  exportOptions?: ExportOptions;
+  includeAnnotations: boolean;
+  includeBookmarks: boolean;
+  includeMetadata: boolean;
+  
+  // Time range filtering
+  startTimeMs?: number;
+  endTimeMs?: number;
+  
+  // Export status and results
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  filePath?: string;
+  fileSizeBytes?: number;
+  downloadCount: number;
+  
+  // Timestamps
+  requestedAt: Date;
+  completedAt?: Date;
+  expiresAt?: Date;
+  
+  errorMessage?: string;
+}
+
+export interface ExportOptions {
+  // JSON export options
+  prettyPrint?: boolean;
+  includeRawContent?: boolean;
+  
+  // CSV export options
+  delimiter?: string;
+  includeHeaders?: boolean;
+  
+  // Video export options
+  frameRate?: number;
+  resolution?: string;
+  includeAudio?: boolean;
+  
+  // HTML export options
+  template?: string;
+  includeStyles?: boolean;
+  interactive?: boolean;
+  
+  // PDF export options
+  pageSize?: string;
+  margin?: number;
+  includeToc?: boolean;
+}
+
+export interface KeyMoment {
+  timestampMs: number;
+  title: string;
+  description: string;
+  momentType: 'error' | 'completion' | 'decision_point' | 'interaction_peak' | 'user_defined';
+  importance: 'low' | 'medium' | 'high';
+  automaticallyDetected: boolean;
+  relatedInteractionIds?: string[];
+}
+
+// Recording-related WebSocket message types
+export interface RecordingWebSocketMessage {
+  type: 'recording_started' | 'recording_stopped' | 'recording_updated' | 
+        'playback_state_changed' | 'annotation_added' | 'bookmark_added' |
+        'export_completed' | 'export_failed';
+  data: SessionRecording | PlaybackSession | RecordingAnnotation | 
+        RecordingBookmark | RecordingExport | any;
+}
+
+// Combined WebSocket message type
+export type ExtendedWebSocketMessage = WebSocketMessage | RecordingWebSocketMessage;

@@ -1,0 +1,27 @@
+{
+  "options_creation": {
+    "configs_created": 500,
+    "time_seconds": 0.062,
+    "rate_per_second": 8079.4,
+    "passed": true
+  },
+  "cli_detection": {
+    "time_ms": 944.3,
+    "cli_found": true,
+    "cli_path": "C:\\Users\\yossi\\AppData\\Roaming\\npm\\claude.cmd",
+    "passed": true
+  },
+  "memory_efficiency": {
+    "objects_created": 1000,
+    "memory_growth_mb": 0.88,
+    "memory_per_object_kb": 0.904,
+    "passed": true
+  },
+  "concurrent_operations": {
+    "total_tasks": 50,
+    "successful_tasks": 50,
+    "time_seconds": 0.023,
+    "success_rate": 1.0,
+    "passed": true
+  }
+}

@@ -1,0 +1,45 @@
+# Development Dockerfile for React Dashboard
+FROM node:18-alpine AS development
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies for development
+RUN apk add --no-cache git curl bash
+
+# Copy package files
+COPY package*.json pnpm-lock.yaml* ./
+
+# Install dependencies with development packages
+RUN pnpm install
+
+# Copy source code
+COPY . .
+
+# Expose development ports
+EXPOSE 6011
+EXPOSE 9230
+
+# Set development environment
+ENV NODE_ENV=development
+ENV CHOKIDAR_USEPOLLING=true
+ENV REACT_APP_API_BASE_URL=http://localhost:4005
+ENV REACT_APP_WS_BASE_URL=ws://localhost:4005
+
+# Create volume mount points for hot reload
+VOLUME ["/app/src", "/app/public"]
+
+# Start development server with debugging
+CMD ["pnpm", "run", "dev"]
+
+# Production stage (for multi-stage builds)
+FROM development AS build
+RUN pnpm run build
+
+FROM nginx:alpine AS production
+COPY --from=build /app/dist/client /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automatic Claude Code Documentation</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        .header {
+            text-align: center;
+            background: #fff;
+            padding: 2rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .nav-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 2rem 0;
+        }
+        .nav-card {
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .nav-card:hover {
+            transform: translateY(-2px);
+        }
+        .nav-card h3 {
+            color: #2563eb;
+            margin-top: 0;
+        }
+        .nav-card a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        .nav-card a:hover {
+            text-decoration: underline;
+        }
+        .quick-links {
+            background: #e0f2fe;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+        .badge {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Automatic Claude Code Documentation <span class="badge">v2.0.0</span></h1>
+        <p>SDK-powered TypeScript CLI for dual-agent AI development automation</p>
+        <p><strong>Status:</strong> ✅ OPERATIONAL | <strong>Dashboard:</strong> <a href="http://localhost:6011">localhost:6011</a> | <strong>API:</strong> <a href="http://localhost:4005/api/health">localhost:4005/api/health</a></p>
+    </div>
+
+    <div class="quick-links">
+        <h3>🔗 Quick Links</h3>
+        <a href="./setup/QUICK_START.md">Quick Start Guide</a> | 
+        <a href="../README.md">Main README</a> | 
+        <a href="../CLAUDE.md">Claude Configuration</a> | 
+        <a href="./releases/RELEASE_NOTES_v2.0.md">Latest Release</a>
+    </div>
+
+    <div class="nav-grid">
+        <div class="nav-card">
+            <h3>🚀 Setup</h3>
+            <p>Get started with installation and configuration</p>
+            <ul>
+                <li><a href="./setup/QUICK_START.md">Quick Start Guide</a></li>
+                <li><a href="./setup/QUICK-SETUP.md">Quick Setup</a></li>
+                <li><a href="./setup/getting-started.md">Getting Started</a></li>
+                <li><a href="./setup/DOCKER.md">Docker Setup</a></li>
+            </ul>
+        </div>
+
+        <div class="nav-card">
+            <h3>🏗️ Architecture</h3>
+            <p>System design and architectural patterns</p>
+            <ul>
+                <li><a href="./architecture/overview.md">Architecture Overview</a></li>
+                <li><a href="./architecture/dual-agent-architecture.md">Dual-Agent Architecture</a></li>
+                <li><a href="./architecture/pty-technical-guide.md">PTY Technical Guide</a></li>
+            </ul>
+        </div>
+
+        <div class="nav-card">
+            <h3>💻 Development</h3>
+            <p>Development guides and implementation details</p>
+            <ul>
+                <li><a href="./development/prd.md">Product Requirements Document</a></li>
+                <li><a href="./development/PHASE3_ROADMAP.md">Phase 3 Roadmap</a></li>
+                <li><a href="./development/CLAUDE-HEADLESS-ALTERNATIVE.md">Claude Headless Alternative</a></li>
+            </ul>
+        </div>
+
+        <div class="nav-card">
+            <h3>🔧 Operations</h3>
+            <p>Usage guides and troubleshooting</p>
+            <ul>
+                <li><a href="./operations/usage-guide.md">Usage Guide</a></li>
+                <li><a href="./operations/troubleshooting.md">Troubleshooting</a></li>
+                <li><a href="./operations/PRODUCTION_CHECKLIST.md">Production Checklist</a></li>
+            </ul>
+        </div>
+
+        <div class="nav-card">
+            <h3>🧪 Testing</h3>
+            <p>Testing strategies and reports</p>
+            <ul>
+                <li><a href="./testing/TESTING_GUIDE_ROOT.md">Testing Guide</a></li>
+                <li><a href="./testing/BUILD-AND-TEST-REPORT-2025-09-01.md">Latest Build Report</a></li>
+                <li><a href="./testing/SDK-INTEGRATION-TEST-RESULTS.md">SDK Integration Tests</a></li>
+            </ul>
+        </div>
+
+        <div class="nav-card">
+            <h3>📖 Reference</h3>
+            <p>API documentation and configuration guides</p>
+            <ul>
+                <li><a href="./reference/api-documentation.md">API Documentation</a></li>
+                <li><a href="./reference/MCP_SERVERS.md">MCP Servers</a></li>
+                <li><a href="./reference/parallel-agents-guide.md">Parallel Agents Guide</a></li>
+            </ul>
+        </div>
+
+        <div class="nav-card">
+            <h3>📦 Releases</h3>
+            <p>Version history and release notes</p>
+            <ul>
+                <li><a href="./releases/CHANGELOG.md">Changelog</a></li>
+                <li><a href="./releases/RELEASE_NOTES_v2.0.md">Release Notes v2.0</a></li>
+            </ul>
+        </div>
+
+        <div class="nav-card">
+            <h3>🔄 Migration</h3>
+            <p>Migration guides for version updates</p>
+            <ul>
+                <li><a href="./migration/MIGRATION_GUIDE.md">Migration Guide</a></li>
+                <li><a href="./migration/MIGRATION-v1.2.0.md">Migration v1.2.0</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 2rem; padding: 1rem; color: #666;">
+        <p><em>Documentation last organized: 2025-09-02</em></p>
+        <p>Built with ❤️ for Claude Code developers</p>
+    </div>
+</body>
+</html>

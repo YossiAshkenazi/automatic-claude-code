@@ -1,0 +1,206 @@
+groups:
+  - name: kafka_alerts
+    rules:
+      - alert: KafkaProducerHighErrorRate
+        expr: (sum(rate(kafka_producer_error_total[5m])) / sum(rate(kafka_producer_success_total[5m]) + rate(kafka_producer_error_total[5m]))) * 100 > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: kafka-producer
+        annotations:
+          summary: "Kafka producer error rate is high"
+          description: "Producer error rate is {{ $value }}% which is above the 5% threshold"
+
+      - alert: KafkaProducerCriticalErrorRate
+        expr: (sum(rate(kafka_producer_error_total[5m])) / sum(rate(kafka_producer_success_total[5m]) + rate(kafka_producer_error_total[5m]))) * 100 > 20
+        for: 1m
+        labels:
+          severity: critical
+          component: kafka-producer
+        annotations:
+          summary: "Kafka producer error rate is critical"
+          description: "Producer error rate is {{ $value }}% which is above the 20% critical threshold"
+
+      - alert: KafkaConsumerLagHigh
+        expr: sum(kafka_consumer_lag_max) by (topic) > 10000
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka-consumer
+        annotations:
+          summary: "High consumer lag detected"
+          description: "Consumer lag for topic {{ $labels.topic }} is {{ $value }} messages"
+
+      - alert: KafkaConsumerLagCritical
+        expr: sum(kafka_consumer_lag_max) by (topic) > 100000
+        for: 2m
+        labels:
+          severity: critical
+          component: kafka-consumer
+        annotations:
+          summary: "Critical consumer lag detected"
+          description: "Consumer lag for topic {{ $labels.topic }} is {{ $value }} messages - immediate attention required"
+
+      - alert: KafkaProducerThroughputLow
+        expr: sum(rate(kafka_producer_success_total[5m])) < 100
+        for: 10m
+        labels:
+          severity: warning
+          component: kafka-producer
+        annotations:
+          summary: "Kafka producer throughput is low"
+          description: "Producer throughput is {{ $value }} messages/sec which is below expected minimum of 100 msg/sec"
+
+      - alert: KafkaProcessingLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(kafka_consumer_user_events_processing_time_bucket[5m])) by (le)) * 1000 > 50
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka-consumer
+        annotations:
+          summary: "High processing latency detected"
+          description: "95th percentile processing latency is {{ $value }}ms which is above the 50ms threshold"
+
+      - alert: KafkaProcessingLatencyCritical
+        expr: histogram_quantile(0.95, sum(rate(kafka_consumer_user_events_processing_time_bucket[5m])) by (le)) * 1000 > 200
+        for: 2m
+        labels:
+          severity: critical
+          component: kafka-consumer
+        annotations:
+          summary: "Critical processing latency detected"
+          description: "95th percentile processing latency is {{ $value }}ms which is above the 200ms critical threshold"
+
+      - alert: KafkaCircuitBreakerOpen
+        expr: resilience4j_circuitbreaker_state > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: circuit-breaker
+        annotations:
+          summary: "Circuit breaker is open"
+          description: "Circuit breaker {{ $labels.name }} is in state {{ $value }} (0=CLOSED, 1=OPEN, 2=HALF_OPEN)"
+
+      - alert: KafkaDeadLetterQueueGrowth
+        expr: rate(kafka_producer_dlq_messages_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: dead-letter-queue
+        annotations:
+          summary: "Dead letter queue growth detected"
+          description: "Dead letter queue is receiving {{ $value }} messages/sec - investigate failed message processing"
+
+      - alert: KafkaBrokerDown
+        expr: kafka_brokers < 1
+        for: 30s
+        labels:
+          severity: critical
+          component: kafka-broker
+        annotations:
+          summary: "Kafka broker is down"
+          description: "Number of active Kafka brokers is {{ $value }} - cluster availability compromised"
+
+      - alert: KafkaSchemaRegistryDown
+        expr: schema_registry_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: schema-registry
+        annotations:
+          summary: "Schema Registry is down"
+          description: "Schema Registry is not responding - schema evolution and compatibility checks are unavailable"
+
+      - alert: JVMMemoryUsageHigh
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: jvm
+        annotations:
+          summary: "High JVM memory usage"
+          description: "JVM heap memory usage is {{ $value }}% on instance {{ $labels.instance }}"
+
+      - alert: JVMMemoryUsageCritical
+        expr: (jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: jvm
+        annotations:
+          summary: "Critical JVM memory usage"
+          description: "JVM heap memory usage is {{ $value }}% on instance {{ $labels.instance }} - potential OutOfMemoryError"
+
+      - alert: KafkaTopicPartitionOffline
+        expr: kafka_topic_partition_leader == -1
+        for: 1m
+        labels:
+          severity: critical
+          component: kafka-topic
+        annotations:
+          summary: "Kafka topic partition offline"
+          description: "Topic {{ $labels.topic }} partition {{ $labels.partition }} has no leader"
+
+      - alert: KafkaReplicationLagHigh
+        expr: kafka_replica_manager_leader_replica_expiration_rate > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka-replication
+        annotations:
+          summary: "High Kafka replication lag"
+          description: "Replica expiration rate is {{ $value }} - check broker health and network connectivity"
+
+  - name: business_logic_alerts
+    rules:
+      - alert: UserEventProcessingFailures
+        expr: sum(rate(user_events_error_total[5m])) by (event_type) > 5
+        for: 3m
+        labels:
+          severity: warning
+          component: business-logic
+        annotations:
+          summary: "High user event processing failures"
+          description: "Event type {{ $labels.event_type }} is failing at {{ $value }} failures/sec"
+
+      - alert: IdempotencyViolations
+        expr: sum(rate(idempotency_violations_total[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+          component: idempotency
+        annotations:
+          summary: "Idempotency violations detected"
+          description: "{{ $value }} idempotency violations/sec detected - check duplicate message handling"
+
+      - alert: SchemaEvolutionFailures
+        expr: sum(rate(schema_evolution_failures_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: schema-evolution
+        annotations:
+          summary: "Schema evolution failures detected"
+          description: "{{ $value }} schema evolution failures/sec - check schema compatibility"
+
+  - name: performance_alerts
+    rules:
+      - alert: ThroughputBelowSLA
+        expr: sum(rate(kafka_producer_success_total[5m])) < 50000
+        for: 10m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "Throughput below SLA"
+          description: "Current throughput is {{ $value }} msg/sec, below SLA of 50,000 msg/sec"
+
+      - alert: LatencyAboveSLA
+        expr: histogram_quantile(0.99, sum(rate(kafka_consumer_user_events_processing_time_bucket[5m])) by (le)) * 1000 > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "Latency above SLA"
+          description: "99th percentile latency is {{ $value }}ms, above SLA of 100ms"

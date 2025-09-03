@@ -1,0 +1,194 @@
+name: ❓ Question
+description: Ask a question about usage, implementation, or best practices
+title: "[QUESTION] "
+labels: ["question", "needs-response"]
+projects: ["yossiashkenazi/automatic-claude-code"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about the Claude Code Python SDK? We're here to help!
+        
+        Before submitting, please check:
+        - 📚 [Documentation](https://github.com/yossiashkenazi/automatic-claude-code/tree/main/python-sdk/docs)
+        - 🚀 [Quickstart Guide](https://github.com/yossiashkenazi/automatic-claude-code/blob/main/python-sdk/QUICKSTART.md)
+        - 📖 [Usage Guide](https://github.com/yossiashkenazi/automatic-claude-code/blob/main/python-sdk/USAGE_GUIDE.md)
+        - 💬 [GitHub Discussions](https://github.com/yossiashkenazi/automatic-claude-code/discussions)
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm you've completed these steps
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have reviewed the documentation
+          required: true
+        - label: I have tried the suggested solutions in troubleshooting guides
+          required: false
+
+  - type: dropdown
+    id: question-category
+    attributes:
+      label: Question Category
+      description: What category best describes your question?
+      options:
+        - Installation and Setup
+        - Basic Usage and Getting Started
+        - Advanced Features and Customization
+        - Integration with Automatic Claude Code
+        - Dual-agent Architecture
+        - Error Handling and Troubleshooting
+        - Performance and Optimization
+        - Best Practices and Patterns
+        - Cross-platform Compatibility
+        - Contributing and Development
+        - Security and Authentication
+        - Other (please specify in question)
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: Ask your question in detail. Be as specific as possible.
+      placeholder: What would you like to know about the Claude Code Python SDK?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and Background
+      description: Provide context about what you're trying to achieve
+      placeholder: |
+        - What are you trying to build or accomplish?
+        - What specific use case are you working on?
+        - Any relevant background information
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: SDK Version
+      description: What version of claude-code-sdk are you using?
+      placeholder: e.g., 0.1.0
+    validations:
+      required: false
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: What version of Python are you using?
+      placeholder: e.g., 3.11.0
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Windows
+        - macOS
+        - Linux (Ubuntu)
+        - Linux (Other)
+        - Not applicable
+        - Other (please specify in question)
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-tried
+    attributes:
+      label: What Have You Tried?
+      description: What approaches or solutions have you already attempted?
+      placeholder: |
+        - Code snippets you've tried
+        - Documentation sections you've read
+        - Solutions that didn't work
+        - Error messages you encountered
+    validations:
+      required: false
+
+  - type: textarea
+    id: code-sample
+    attributes:
+      label: Relevant Code
+      description: Share any relevant code (optional but helpful)
+      render: python
+      placeholder: |
+        # Share your current code or what you're trying to achieve
+        from claude_code_sdk import ClaudeSDKClient
+        
+        # Your code here
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: Expected Outcome
+      description: What outcome or behavior are you expecting?
+      placeholder: Describe what you hope to achieve or what result you're looking for
+    validations:
+      required: false
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency Level
+      description: How urgent is this question for your project?
+      options:
+        - Critical (blocking current development)
+        - High (needed soon for ongoing work)
+        - Medium (helpful for current project)
+        - Low (general curiosity or future planning)
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: question-type
+    attributes:
+      label: Question Type
+      description: What type of help are you looking for? (Check all that apply)
+      options:
+        - label: How-to guidance
+        - label: Best practices recommendation
+        - label: Architecture or design advice
+        - label: Troubleshooting assistance
+        - label: Feature clarification
+        - label: Performance optimization
+        - label: Integration guidance
+        - label: Code review or feedback
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: Any other details that might be relevant to your question
+      placeholder: |
+        - Links to relevant resources
+        - Screenshots or diagrams
+        - Any other context that might help
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: follow-up
+    attributes:
+      label: Follow-up Actions
+      description: How would you like to proceed after getting an answer?
+      options:
+        - label: I'm willing to contribute documentation improvements based on the answer
+        - label: I'd like to help others with similar questions in the future
+        - label: I might submit a feature request based on the discussion
+        - label: I'm interested in contributing code improvements
+        - label: Just need the answer for my current project

@@ -1,0 +1,198 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claude-sdk-deployment
+  namespace: default
+  labels:
+    app: claude-sdk
+    version: v0.1.0
+    component: python-sdk
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: claude-sdk
+  template:
+    metadata:
+      labels:
+        app: claude-sdk
+        version: v0.1.0
+        component: python-sdk
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4005"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      containers:
+      - name: claude-sdk
+        image: claude-code-sdk:0.1.0
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - containerPort: 6011
+          name: dashboard
+          protocol: TCP
+        - containerPort: 4005
+          name: api
+          protocol: TCP
+        
+        env:
+        - name: PYTHONPATH
+          value: "/app"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: CLAUDE_SDK_DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: claude-sdk-config
+              key: debug
+              optional: true
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import claude_code_sdk; print('OK')"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import claude_code_sdk; print('Ready')"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        volumeMounts:
+        - name: workspace
+          mountPath: /app/workspace
+        - name: claude-config
+          mountPath: /home/claude/.claude
+          readOnly: true
+        - name: tmp-volume
+          mountPath: /tmp
+      
+      volumes:
+      - name: workspace
+        emptyDir: {}
+      - name: claude-config
+        secret:
+          secretName: claude-cli-config
+          optional: true
+      - name: tmp-volume
+        emptyDir: {}
+      
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claude-sdk-service
+  namespace: default
+  labels:
+    app: claude-sdk
+    component: python-sdk
+spec:
+  type: ClusterIP
+  selector:
+    app: claude-sdk
+  ports:
+  - name: dashboard
+    port: 6011
+    targetPort: 6011
+    protocol: TCP
+  - name: api
+    port: 4005
+    targetPort: 4005
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: claude-sdk-config
+  namespace: default
+  labels:
+    app: claude-sdk
+data:
+  debug: "false"
+  log_level: "INFO"
+  max_workers: "4"
+  timeout: "300"
+
+---
+# Optional: Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: claude-sdk-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: claude-sdk-deployment
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Optional: Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: claude-sdk-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: claude-sdk

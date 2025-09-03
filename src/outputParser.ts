@@ -1,3 +1,5 @@
+import stripAnsi from 'strip-ansi';
+
 export interface ParsedOutput {
   result?: string;
   sessionId?: string;
@@ -12,6 +14,24 @@ export interface ParsedOutput {
   taskBreakdown?: string[];
   readyForWorker?: boolean;
   managerAnalysisComplete?: boolean;
+}
+
+export interface JsonParseResult {
+  isComplete: boolean;
+  data: any;
+  error?: string;
+}
+
+export interface FileOperations {
+  modified: string[];
+  created: string[];
+  read: string[];
+}
+
+export interface SessionMetadata {
+  sessionId?: string;
+  totalCost?: number;
+  timestamp?: string;
 }
 
 interface ToolCall {
@@ -99,7 +119,7 @@ export class OutputParser {
       tools.push(...jsonOutput.tool_calls.map((tc) => tc.tool));
     }
     
-    return [...new Set(tools)];
+    return Array.from(new Set(tools));
   }
 
   private extractFiles(jsonOutput: ClaudeJsonOutput): string[] {
@@ -117,7 +137,7 @@ export class OutputParser {
       files.push(...jsonOutput.files_read);
     }
     
-    return [...new Set(files)];
+    return Array.from(new Set(files));
   }
 
   private extractCommands(jsonOutput: ClaudeJsonOutput): string[] {
@@ -345,5 +365,398 @@ export class OutputParser {
     ];
 
     return completionPatterns.some(pattern => pattern.test(result));
+  }
+}
+
+/**
+ * StreamJsonParser - Advanced parser for Claude Code's streaming JSON output
+ * Handles partial messages, ANSI stripping, and real-time processing
+ */
+export class StreamJsonParser {
+  private buffer: string = '';
+  private completeMessages: any[] = [];
+  private completionPatterns: RegExp[] = [
+    // Task completion patterns
+    /(?:task|implementation|analysis).*(?:complete|finished|done)/i,
+    /successfully.*(?:implemented|created|completed|executed)/i,
+    /(?:ready|available).*(?:for|to).*(?:review|test|use)/i,
+    
+    // Error completion patterns
+    /error.*(?:occurred|found|detected)/i,
+    /failed.*(?:to|at).*(?:execute|process|complete)/i,
+    /execution.*(?:terminated|stopped|failed)/i,
+    
+    // Session completion patterns
+    /session.*(?:ended|terminated|completed)/i,
+    /total.*cost/i,
+    /goodbye|farewell/i,
+    
+    // Status patterns
+    /status.*(?:success|complete|failed)/i,
+    /result.*(?:success|complete|error)/i
+  ];
+
+  /**
+   * Strip ANSI escape codes from text
+   */
+  stripAnsi(text: string): string {
+    return stripAnsi(text);
+  }
+
+  /**
+   * Parse a JSON chunk and determine if it's complete
+   */
+  parseJsonChunk(chunk: string): JsonParseResult {
+    try {
+      const cleanChunk = this.stripAnsi(chunk.trim());
+      if (!cleanChunk) {
+        return { isComplete: false, data: null };
+      }
+
+      const data = JSON.parse(cleanChunk);
+      return { isComplete: true, data };
+    } catch (error) {
+      return { 
+        isComplete: false, 
+        data: null, 
+        error: error instanceof Error ? error.message : 'JSON parse error' 
+      };
+    }
+  }
+
+  /**
+   * Add a chunk of streaming data to the buffer
+   */
+  addChunk(chunk: string): void {
+    const cleanChunk = this.stripAnsi(chunk);
+    this.buffer += cleanChunk;
+    this.processBuffer();
+  }
+
+  /**
+   * Process the current buffer to extract complete messages
+   */
+  private processBuffer(): void {
+    // First try to parse the entire buffer as JSON
+    const parseResult = this.parseJsonChunk(this.buffer);
+    if (parseResult.isComplete && parseResult.data) {
+      this.completeMessages.push(parseResult.data);
+      this.buffer = '';
+      return;
+    }
+    
+    // Try to find complete JSON objects within the buffer
+    const jsonObjects = this.extractJsonObjects(this.buffer);
+    if (jsonObjects.length > 0) {
+      this.completeMessages.push(...jsonObjects);
+      // Clear buffer after extracting JSON objects
+      this.buffer = '';
+      return;
+    }
+    
+    // If that fails, try line by line approach
+    const lines = this.buffer.split('\n');
+    let remainingBuffer = '';
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      if (i === lines.length - 1) {
+        // Last line might be incomplete, keep in buffer
+        remainingBuffer = line;
+      } else if (line.trim()) {
+        const lineParseResult = this.parseJsonChunk(line);
+        if (lineParseResult.isComplete && lineParseResult.data) {
+          this.completeMessages.push(lineParseResult.data);
+        } else if (lineParseResult.error) {
+          // If it's an error, try to continue with next line
+          continue;
+        }
+      }
+    }
+    
+    this.buffer = remainingBuffer;
+  }
+
+  /**
+   * Extract JSON objects from mixed text content
+   */
+  private extractJsonObjects(text: string): any[] {
+    const objects: any[] = [];
+    const jsonPattern = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g;
+    
+    let match;
+    while ((match = jsonPattern.exec(text)) !== null) {
+      const result = this.parseJsonChunk(match[0]);
+      if (result.isComplete && result.data) {
+        objects.push(result.data);
+      }
+    }
+    
+    return objects;
+  }
+
+  /**
+   * Check if there's at least one complete message available
+   */
+  hasCompleteMessage(): boolean {
+    return this.completeMessages.length > 0;
+  }
+
+  /**
+   * Get the next complete message
+   */
+  getCompleteMessage(): any {
+    return this.completeMessages.shift();
+  }
+
+  /**
+   * Get all complete messages
+   */
+  getCompleteMessages(): any[] {
+    const messages = [...this.completeMessages];
+    this.completeMessages = [];
+    return messages;
+  }
+
+  /**
+   * Check if a response is complete based on content analysis
+   */
+  isResponseComplete(output: string): boolean {
+    const cleanOutput = this.stripAnsi(output);
+    
+    // Try to parse as JSON first
+    try {
+      const jsonData = JSON.parse(cleanOutput);
+      if (jsonData.status === 'complete' || jsonData.status === 'success' || jsonData.status === 'error') {
+        return true;
+      }
+      if (jsonData.result && typeof jsonData.result === 'string') {
+        return this.completionPatterns.some(pattern => pattern.test(jsonData.result));
+      }
+    } catch {
+      // Not JSON, continue with text analysis
+    }
+
+    // Text-based completion detection
+    return this.completionPatterns.some(pattern => pattern.test(cleanOutput));
+  }
+
+  /**
+   * Extract tool usage from output
+   */
+  extractToolUsage(output: string): string[] {
+    const tools: string[] = [];
+    
+    try {
+      const jsonData = JSON.parse(this.stripAnsi(output));
+      
+      // Extract from tools_used array
+      if (jsonData.tools_used && Array.isArray(jsonData.tools_used)) {
+        tools.push(...jsonData.tools_used);
+      }
+      
+      // Extract from tool_calls array
+      if (jsonData.tool_calls && Array.isArray(jsonData.tool_calls)) {
+        tools.push(...jsonData.tool_calls.map((tc: any) => tc.tool).filter(Boolean));
+      }
+    } catch {
+      // Text-based tool extraction
+      const cleanOutput = this.stripAnsi(output);
+      const toolPatterns = [
+        /(?:using|invoking|running|executing).*?(?:the\s+)?(\w+)\s+tool/gi,
+        /(\w+)\s+tool.*(?:to|for)/gi,
+        /tool:\s*(\w+)/gi,
+        /(?:the\s+)?(\w+)\s+tool/gi,
+        /running\s+(\w+)\s+command/gi,
+        /executing\s+(\w+)\s+command/gi
+      ];
+
+      for (const pattern of toolPatterns) {
+        let match;
+        const regex = new RegExp(pattern.source, pattern.flags);
+        while ((match = regex.exec(cleanOutput)) !== null) {
+          if (match[1] && match[1].length > 1) {
+            tools.push(match[1]);
+          }
+        }
+      }
+    }
+
+    return Array.from(new Set(tools)); // Remove duplicates
+  }
+
+  /**
+   * Extract error messages from output
+   */
+  extractErrors(output: string): string[] {
+    const errors: string[] = [];
+    
+    try {
+      const jsonData = JSON.parse(this.stripAnsi(output));
+      if (jsonData.error) {
+        errors.push(jsonData.error);
+      }
+    } catch {
+      // Text-based error extraction
+      const errorPatterns = [
+        /error:.*$/gim,
+        /failed.*$/gim,
+        /cannot.*$/gim,
+        /unable.*$/gim,
+        /permission denied.*$/gim,
+        /not found.*$/gim,
+        /invalid.*$/gim
+      ];
+
+      const cleanOutput = this.stripAnsi(output);
+      for (const pattern of errorPatterns) {
+        const matches = cleanOutput.match(pattern);
+        if (matches) {
+          errors.push(...matches.map(m => m.trim()));
+        }
+      }
+    }
+
+    return Array.from(new Set(errors)); // Remove duplicates
+  }
+
+  /**
+   * Extract file operations from output
+   */
+  extractFileOperations(output: string): FileOperations {
+    const fileOps: FileOperations = {
+      modified: [],
+      created: [],
+      read: []
+    };
+
+    try {
+      const jsonData = JSON.parse(this.stripAnsi(output));
+      
+      if (jsonData.files_modified && Array.isArray(jsonData.files_modified)) {
+        fileOps.modified.push(...jsonData.files_modified);
+      }
+      
+      if (jsonData.files_created && Array.isArray(jsonData.files_created)) {
+        fileOps.created.push(...jsonData.files_created);
+      }
+      
+      if (jsonData.files_read && Array.isArray(jsonData.files_read)) {
+        fileOps.read.push(...jsonData.files_read);
+      }
+    } catch {
+      // Text-based file operation extraction
+      const filePatterns = {
+        modified: /(?:modified|updated|changed).*?file.*?([^\s\n]+)/gi,
+        created: /(?:created|added|generated).*?file.*?([^\s\n]+)/gi,
+        read: /(?:read|reading|examined).*?file.*?([^\s\n]+)/gi
+      };
+
+      const cleanOutput = this.stripAnsi(output);
+      
+      Array.from(Object.entries(filePatterns)).forEach(([operation, pattern]) => {
+        const matches = cleanOutput.matchAll(pattern);
+        Array.from(matches).forEach(match => {
+          if (match[1]) {
+            (fileOps as any)[operation].push(match[1]);
+          }
+        });
+      });
+    }
+
+    return fileOps;
+  }
+
+  /**
+   * Extract commands executed from output
+   */
+  extractCommands(output: string): string[] {
+    const commands: string[] = [];
+
+    try {
+      const jsonData = JSON.parse(this.stripAnsi(output));
+      
+      if (jsonData.commands_executed && Array.isArray(jsonData.commands_executed)) {
+        commands.push(...jsonData.commands_executed);
+      }
+      
+      if (jsonData.bash_commands && Array.isArray(jsonData.bash_commands)) {
+        commands.push(...jsonData.bash_commands);
+      }
+    } catch {
+      // Text-based command extraction
+      const commandPatterns = [
+        /(?:executing|running).*?command:?\s*(.+)$/gim,
+        /^\$\s*(.+)$/gim,
+        />\s*(.+)$/gim
+      ];
+
+      const cleanOutput = this.stripAnsi(output);
+      
+      commandPatterns.forEach(pattern => {
+        const matches = cleanOutput.matchAll(pattern);
+        Array.from(matches).forEach(match => {
+          if (match[1]) {
+            commands.push(match[1].trim());
+          }
+        });
+      });
+    }
+
+    return Array.from(new Set(commands)); // Remove duplicates
+  }
+
+  /**
+   * Extract session metadata from output
+   */
+  extractSessionMetadata(output: string): SessionMetadata {
+    const metadata: SessionMetadata = {};
+
+    try {
+      const jsonData = JSON.parse(this.stripAnsi(output));
+      
+      metadata.sessionId = jsonData.session_id || jsonData.sessionId;
+      metadata.totalCost = jsonData.total_cost_usd || jsonData.totalCost;
+      metadata.timestamp = jsonData.timestamp;
+    } catch {
+      // Text-based metadata extraction
+      const cleanOutput = this.stripAnsi(output);
+      
+      const sessionIdMatch = cleanOutput.match(/session.*?id:?\s*([^\s\n]+)/i);
+      if (sessionIdMatch) {
+        metadata.sessionId = sessionIdMatch[1];
+      }
+      
+      const costMatch = cleanOutput.match(/(?:total\s+)?cost:?\s*\$?([\d.]+)/i);
+      if (costMatch) {
+        metadata.totalCost = parseFloat(costMatch[1]);
+      }
+      
+      const timestampMatch = cleanOutput.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)/);
+      if (timestampMatch) {
+        metadata.timestamp = timestampMatch[1];
+      }
+    }
+
+    return metadata;
+  }
+
+  /**
+   * Reset the parser state
+   */
+  reset(): void {
+    this.buffer = '';
+    this.completeMessages = [];
+  }
+
+  /**
+   * Get current buffer state (for debugging)
+   */
+  getBufferState(): { buffer: string; messageCount: number } {
+    return {
+      buffer: this.buffer,
+      messageCount: this.completeMessages.length
+    };
   }
 }

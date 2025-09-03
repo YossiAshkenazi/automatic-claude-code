@@ -16,6 +16,8 @@ services:
       - acc_config:/home/nodejs/.automatic-claude-code
       # Claude config (read-only if available)
       - ~/.claude:/home/nodejs/.claude:ro
+      # Mount centralized config
+      - ./config:/workspace/config:ro
     environment:
       - NODE_ENV=production
       - ACC_WORKSPACE=/workspace
@@ -39,7 +41,7 @@ services:
     environment:
       - POSTGRES_DB=dual_agent_monitor
       - POSTGRES_USER=acc_user
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-acc_secure_password_123}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
       - POSTGRES_INITDB_ARGS=--auth-local=trust --auth-host=md5
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -96,11 +98,11 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://acc_user:${POSTGRES_PASSWORD:-acc_secure_password_123}@postgres:5432/dual_agent_monitor
       - REDIS_URL=redis://redis:6379
-      - PORT=4001
+      - PORT=4005
       - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_here}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-your_webhook_secret_here}
     ports:
-      - "4001:4001"
+      - "4005:4005"
     networks:
       - acc-network
     depends_on:
@@ -109,7 +111,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:4005/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -130,8 +132,8 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - VITE_API_URL=http://localhost:4001
-      - VITE_WS_URL=ws://localhost:4001
+      - VITE_API_URL=http://localhost:4005
+      - VITE_WS_URL=ws://localhost:4005
     ports:
       - "6011:80"
     networks:

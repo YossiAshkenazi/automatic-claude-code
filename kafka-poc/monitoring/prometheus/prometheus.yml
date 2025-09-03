@@ -1,0 +1,87 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'kafka-poc'
+    environment: 'development'
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+scrape_configs:
+  # Kafka PoC Application
+  - job_name: 'kafka-poc-app'
+    static_configs:
+      - targets: ['app:8080']
+    scrape_interval: 5s
+    metrics_path: '/actuator/prometheus'
+    scrape_timeout: 10s
+
+  # Kafka Brokers (JMX Metrics)
+  - job_name: 'kafka-brokers'
+    static_configs:
+      - targets: ['kafka:9999']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    
+  # Schema Registry
+  - job_name: 'schema-registry'
+    static_configs:
+      - targets: ['schema-registry:8081']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # JVM Metrics for Kafka
+  - job_name: 'kafka-jvm'
+    static_configs:
+      - targets: ['kafka:9999']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    params:
+      format: ['prometheus']
+
+  # Redis (for idempotency tracking)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+
+  # Kafka Exporter for detailed Kafka metrics
+  - job_name: 'kafka-exporter'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+    scrape_interval: 10s
+
+  # Custom application metrics
+  - job_name: 'kafka-poc-custom'
+    static_configs:
+      - targets: ['app:8080']
+    scrape_interval: 5s
+    metrics_path: '/actuator/metrics'
+    params:
+      name: ['kafka.producer.success', 'kafka.consumer.user_events.consumed', 'kafka.consumer.user_events.error']
+
+  # Node Exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+# Remote write configuration for long-term storage (optional)
+# remote_write:
+#   - url: 'http://victoria-metrics:8428/api/v1/write'
+#     queue_config:
+#       max_samples_per_send: 1000
+#       batch_send_deadline: 5s

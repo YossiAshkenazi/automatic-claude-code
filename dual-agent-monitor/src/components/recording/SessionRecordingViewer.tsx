@@ -195,17 +195,55 @@ export const SessionRecordingViewer: React.FC<SessionRecordingViewerProps> = ({
     seekTo(newPosition);
   }, [playbackState.duration, seekTo]);
 
-  const addAnnotation = useCallback(() => {
-    if (!onAddAnnotation) return;
+  const addAnnotation = useCallback(async () => {
+    if (!onAddAnnotation) {
+      // Handle annotation creation directly via API
+      const annotation = {
+        timestampMs: playbackState.currentPosition,
+        annotationType: 'note' as const,
+        title: 'New Annotation',
+        content: 'Click to edit...',
+        color: '#ffeb3b',
+        priority: 'normal' as const
+      };
+      
+      try {
+        const annotationId = await addRecordingAnnotation(recording.id, annotation);
+        // Refresh annotations
+        const updatedAnnotations = await fetchRecordingAnnotations(recording.id);
+        setAnnotations(updatedAnnotations);
+      } catch (error) {
+        console.error('Failed to add annotation:', error);
+      }
+      return;
+    }
     
     setShowAnnotationModal(true);
-  }, [onAddAnnotation]);
+  }, [onAddAnnotation, recording.id, playbackState.currentPosition]);
 
-  const addBookmark = useCallback(() => {
-    if (!onAddBookmark) return;
+  const addBookmark = useCallback(async () => {
+    if (!onAddBookmark) {
+      // Handle bookmark creation directly via API
+      const bookmark = {
+        timestampMs: playbackState.currentPosition,
+        title: `Bookmark at ${formatTime(playbackState.currentPosition)}`,
+        description: 'Important moment',
+        bookmarkType: 'user' as const
+      };
+      
+      try {
+        const bookmarkId = await addRecordingBookmark(recording.id, bookmark);
+        // Refresh bookmarks
+        const updatedBookmarks = await fetchRecordingBookmarks(recording.id);
+        setBookmarks(updatedBookmarks);
+      } catch (error) {
+        console.error('Failed to add bookmark:', error);
+      }
+      return;
+    }
     
     setShowBookmarkModal(true);
-  }, [onAddBookmark]);
+  }, [onAddBookmark, recording.id, playbackState.currentPosition, formatTime]);
 
   const formatTime = (ms: number): string => {
     const seconds = Math.floor(ms / 1000) % 60;
@@ -268,7 +306,7 @@ export const SessionRecordingViewer: React.FC<SessionRecordingViewerProps> = ({
               <Settings className="w-4 h-4" />
             </button>
             
-            {onExportRecording && (
+            {onExportRecording ? (
               <button
                 onClick={() => onExportRecording('json')}
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -276,6 +314,59 @@ export const SessionRecordingViewer: React.FC<SessionRecordingViewerProps> = ({
               >
                 <Download className="w-4 h-4" />
               </button>
+            ) : (
+              <div className="relative group">
+                <button
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Export Recording"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="p-2">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await exportRecording(recording.id, 'json');
+                          // Show success message
+                          console.log('Export started successfully');
+                        } catch (error) {
+                          console.error('Export failed:', error);
+                        }
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                    >
+                      Export as JSON
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await exportRecording(recording.id, 'csv');
+                          console.log('Export started successfully');
+                        } catch (error) {
+                          console.error('Export failed:', error);
+                        }
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                    >
+                      Export as CSV
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await exportRecording(recording.id, 'html');
+                          console.log('Export started successfully');
+                        } catch (error) {
+                          console.error('Export failed:', error);
+                        }
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                    >
+                      Export as HTML
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -509,20 +600,143 @@ export const SessionRecordingViewer: React.FC<SessionRecordingViewerProps> = ({
   );
 };
 
-// Mock API functions - replace with real API calls
+// Real API functions integrated with PostgreSQL backend
 const fetchRecordingInteractions = async (recordingId: string): Promise<RecordingInteraction[]> => {
-  // This would be replaced with actual API call
-  return [];
+  try {
+    const response = await fetch(`/api/recordings/${recordingId}/interactions`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recording interactions');
+    }
+    const data = await response.json();
+    return data.interactions || [];
+  } catch (error) {
+    console.error('Error fetching recording interactions:', error);
+    return [];
+  }
 };
 
 const fetchRecordingAnnotations = async (recordingId: string): Promise<RecordingAnnotation[]> => {
-  // This would be replaced with actual API call
-  return [];
+  try {
+    const response = await fetch(`/api/recordings/${recordingId}/annotations`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recording annotations');
+    }
+    const data = await response.json();
+    return data.annotations || [];
+  } catch (error) {
+    console.error('Error fetching recording annotations:', error);
+    return [];
+  }
 };
 
 const fetchRecordingBookmarks = async (recordingId: string): Promise<RecordingBookmark[]> => {
-  // This would be replaced with actual API call
-  return [];
+  try {
+    const response = await fetch(`/api/recordings/${recordingId}/bookmarks`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recording bookmarks');
+    }
+    const data = await response.json();
+    return data.bookmarks || [];
+  } catch (error) {
+    console.error('Error fetching recording bookmarks:', error);
+    return [];
+  }
+};
+
+// Additional API functions for annotations and bookmarks
+const addRecordingAnnotation = async (
+  recordingId: string,
+  annotation: {
+    timestampMs: number;
+    annotationType: 'note' | 'highlight' | 'bookmark' | 'flag' | 'question';
+    title: string;
+    content: string;
+    color?: string;
+    priority?: 'low' | 'normal' | 'high' | 'critical';
+  }
+): Promise<string> => {
+  try {
+    const response = await fetch(`/api/recordings/${recordingId}/annotations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(annotation),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to add annotation');
+    }
+    const data = await response.json();
+    return data.annotationId;
+  } catch (error) {
+    console.error('Error adding annotation:', error);
+    throw error;
+  }
+};
+
+const addRecordingBookmark = async (
+  recordingId: string,
+  bookmark: {
+    timestampMs: number;
+    title: string;
+    description?: string;
+    bookmarkType?: 'user' | 'system' | 'auto' | 'key_moment';
+  }
+): Promise<string> => {
+  try {
+    const response = await fetch(`/api/recordings/${recordingId}/bookmarks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(bookmark),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to add bookmark');
+    }
+    const data = await response.json();
+    return data.bookmarkId;
+  } catch (error) {
+    console.error('Error adding bookmark:', error);
+    throw error;
+  }
+};
+
+const exportRecording = async (
+  recordingId: string,
+  exportFormat: 'json' | 'csv' | 'video' | 'html' | 'pdf' | 'zip',
+  options?: {
+    includeAnnotations?: boolean;
+    includeBookmarks?: boolean;
+    includeMetadata?: boolean;
+    startTimeMs?: number;
+    endTimeMs?: number;
+  }
+): Promise<string> => {
+  try {
+    const response = await fetch(`/api/recordings/${recordingId}/export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        exportFormat,
+        includeAnnotations: options?.includeAnnotations ?? true,
+        includeBookmarks: options?.includeBookmarks ?? true,
+        includeMetadata: options?.includeMetadata ?? true,
+        startTimeMs: options?.startTimeMs,
+        endTimeMs: options?.endTimeMs,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to start export');
+    }
+    const data = await response.json();
+    return data.exportId;
+  } catch (error) {
+    console.error('Error starting export:', error);
+    throw error;
+  }
 };
 
 export default SessionRecordingViewer;

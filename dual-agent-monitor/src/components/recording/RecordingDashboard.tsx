@@ -50,7 +50,11 @@ export const RecordingDashboard: React.FC<RecordingDashboardProps> = ({
       try {
         setLoading(true);
         const [recordingsData, statsData] = await Promise.all([
-          fetchRecordings(),
+          fetchRecordings({
+            limit: 100,
+            status: filterStatus === 'all' ? undefined : filterStatus,
+            search: searchQuery || undefined
+          }),
           fetchRecordingStats()
         ]);
         setRecordings(recordingsData);
@@ -67,7 +71,7 @@ export const RecordingDashboard: React.FC<RecordingDashboardProps> = ({
     // Set up polling for live updates
     const interval = setInterval(loadData, 30000); // Every 30 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [searchQuery, filterStatus]);
 
   // Filter and sort recordings
   const filteredRecordings = React.useMemo(() => {
@@ -152,9 +156,51 @@ export const RecordingDashboard: React.FC<RecordingDashboardProps> = ({
     }
   };
 
-  const handleExportRecording = (recordingId: string, format: string) => {
+  const handleExportRecording = async (recordingId: string, format: string) => {
     if (onExportRecording) {
       onExportRecording(recordingId, format);
+      return;
+    }
+    
+    try {
+      await exportRecording(recordingId, format);
+      // Show success notification
+      console.log(`Export started for recording ${recordingId} in ${format} format`);
+    } catch (error) {
+      console.error('Export failed:', error);
+      // Show error notification
+    }
+  };
+  
+  const handleStartRecording = async (sessionId: string) => {
+    if (onStartRecording) {
+      onStartRecording(sessionId, {});
+      return;
+    }
+    
+    try {
+      const recordingId = await startRecording(sessionId, {
+        recordingName: `Recording for session ${sessionId.slice(0, 8)}`,
+        recordingQuality: 'high'
+      });
+      console.log('Recording started:', recordingId);
+      // Refresh recordings
+      const updatedRecordings = await fetchRecordings();
+      setRecordings(updatedRecordings);
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+    }
+  };
+  
+  const handleStopRecording = async (recordingId: string) => {
+    try {
+      await stopRecording(recordingId);
+      console.log('Recording stopped:', recordingId);
+      // Refresh recordings
+      const updatedRecordings = await fetchRecordings();
+      setRecordings(updatedRecordings);
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
     }
   };
 
@@ -389,7 +435,13 @@ export const RecordingDashboard: React.FC<RecordingDashboardProps> = ({
               <div className="flex items-center space-x-2 ml-4">
                 {recording.status === 'recording' && (
                   <button
-                    onClick={() => onStopRecording?.(recording.sessionId)}
+                    onClick={() => {
+                      if (onStopRecording) {
+                        onStopRecording(recording.sessionId);
+                      } else {
+                        handleStopRecording(recording.id);
+                      }
+                    }}
                     className="flex items-center px-3 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors"
                   >
                     <Square className="w-4 h-4 mr-2" />
@@ -407,12 +459,39 @@ export const RecordingDashboard: React.FC<RecordingDashboardProps> = ({
                       Play
                     </button>
 
-                    <div className="relative">
+                    <div className="relative group">
                       <button className="flex items-center px-3 py-2 text-gray-600 hover:bg-gray-50 border border-gray-200 rounded-lg transition-colors">
                         <Download className="w-4 h-4 mr-2" />
                         Export
                       </button>
-                      {/* Export dropdown would go here */}
+                      <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                        <div className="p-1">
+                          <button
+                            onClick={() => handleExportRecording(recording.id, 'json')}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                          >
+                            Export as JSON
+                          </button>
+                          <button
+                            onClick={() => handleExportRecording(recording.id, 'csv')}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                          >
+                            Export as CSV
+                          </button>
+                          <button
+                            onClick={() => handleExportRecording(recording.id, 'html')}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                          >
+                            Export as HTML
+                          </button>
+                          <button
+                            onClick={() => handleExportRecording(recording.id, 'pdf')}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded"
+                          >
+                            Export as PDF
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}
@@ -442,38 +521,121 @@ export const RecordingDashboard: React.FC<RecordingDashboardProps> = ({
   );
 };
 
-// Mock API functions - replace with real API calls
-const fetchRecordings = async (): Promise<SessionRecording[]> => {
-  // This would be replaced with actual API call
-  return [
-    {
-      id: 'rec-1',
-      sessionId: 'session-1',
-      recordingName: 'Authentication Implementation',
-      description: 'Recording of implementing user authentication system',
-      recordingStartedAt: new Date('2024-01-15T10:00:00Z'),
-      recordingCompletedAt: new Date('2024-01-15T10:30:00Z'),
-      status: 'completed',
-      totalInteractions: 45,
-      totalSizeBytes: 1024000,
-      recordingQuality: 'high',
-      playbackDurationMs: 1800000, // 30 minutes
-      sharedPublicly: false,
-      downloadCount: 3,
-      createdAt: new Date('2024-01-15T10:00:00Z'),
-      updatedAt: new Date('2024-01-15T10:30:00Z')
+// Real API functions integrated with PostgreSQL backend
+const fetchRecordings = async (params?: {
+  limit?: number;
+  status?: string;
+  quality?: string;
+  search?: string;
+}): Promise<SessionRecording[]> => {
+  try {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', params.limit.toString());
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.quality) searchParams.set('quality', params.quality);
+    if (params?.search) searchParams.set('search', params.search);
+    
+    const response = await fetch(`/api/recordings?${searchParams.toString()}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch recordings');
     }
-  ];
+    const data = await response.json();
+    return data.recordings || [];
+  } catch (error) {
+    console.error('Error fetching recordings:', error);
+    return [];
+  }
 };
 
 const fetchRecordingStats = async (): Promise<RecordingStats> => {
-  // This would be replaced with actual API call
-  return {
-    activeRecordings: 2,
-    totalRecordings: 15,
-    autoRecordingSessions: 8,
-    recordingPoliciesCount: 3
-  };
+  try {
+    const response = await fetch('/api/recordings/stats');
+    if (!response.ok) {
+      throw new Error('Failed to fetch recording stats');
+    }
+    const data = await response.json();
+    return data.stats || {
+      activeRecordings: 0,
+      totalRecordings: 0,
+      autoRecordingSessions: 0,
+      recordingPoliciesCount: 0
+    };
+  } catch (error) {
+    console.error('Error fetching recording stats:', error);
+    return {
+      activeRecordings: 0,
+      totalRecordings: 0,
+      autoRecordingSessions: 0,
+      recordingPoliciesCount: 0
+    };
+  }
+};
+
+// Additional API functions for recording management
+const startRecording = async (sessionId: string, options?: {
+  recordingName?: string;
+  description?: string;
+  recordingQuality?: 'low' | 'medium' | 'high' | 'lossless';
+}): Promise<string> => {
+  try {
+    const response = await fetch('/api/recordings/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sessionId,
+        ...options,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to start recording');
+    }
+    const data = await response.json();
+    return data.recordingId;
+  } catch (error) {
+    console.error('Error starting recording:', error);
+    throw error;
+  }
+};
+
+const stopRecording = async (recordingId: string): Promise<void> => {
+  try {
+    const response = await fetch(`/api/recordings/${recordingId}/stop`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to stop recording');
+    }
+  } catch (error) {
+    console.error('Error stopping recording:', error);
+    throw error;
+  }
+};
+
+const exportRecording = async (recordingId: string, format: string): Promise<void> => {
+  try {
+    const response = await fetch(`/api/recordings/${recordingId}/export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        exportFormat: format,
+        includeAnnotations: true,
+        includeBookmarks: true,
+        includeMetadata: true,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to export recording');
+    }
+    const data = await response.json();
+    console.log('Export started:', data.exportId);
+  } catch (error) {
+    console.error('Error exporting recording:', error);
+    throw error;
+  }
 };
 
 export default RecordingDashboard;

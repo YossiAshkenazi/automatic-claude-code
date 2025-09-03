@@ -1244,10 +1244,16 @@ class ClaudeCliWrapper:
             # Enhanced authentication error detection for comprehensive test coverage
             auth_error_patterns = [
                 'invalid api key', 'authentication failed', 'unauthorized access',
-                'token expired', 'subscription required', 'permission denied'
+                'token expired', 'subscription required'
             ]
             
-            if any(pattern in line_lower for pattern in auth_error_patterns):
+            # Check for authentication-specific permission denied (not general file permissions)
+            is_auth_permission_error = (
+                'permission denied' in line_lower and 
+                any(auth_context in line_lower for auth_context in ['api', 'claude', 'auth', 'token', 'credential'])
+            )
+            
+            if any(pattern in line_lower for pattern in auth_error_patterns) or is_auth_permission_error:
                 return CliMessage(
                     type="auth_error",
                     content=f"{line}\n\nPlease run: claude setup-token",

@@ -91,9 +91,9 @@ export function MultiAgentDashboard({ className }: MultiAgentDashboardProps) {
   const getOverviewStats = () => {
     const totalTasks = tasks.length;
     const completedTasks = tasks.filter(t => t.status === 'completed').length;
-    const totalCost = agents.reduce((sum, agent) => sum + (agent.metrics?.tokensUsed || 0) * 0.001, 0);
+    const totalCost = agents.reduce((sum, agent) => sum + (agent.metrics?.totalCost || 0), 0);
     const avgHealthScore = agents.length > 0 
-      ? agents.reduce((sum, agent) => sum + ((agent.metrics?.successRate || 1) * 100), 0) / agents.length
+      ? agents.reduce((sum, agent) => sum + (agent.metrics?.healthScore || 100), 0) / agents.length
       : 100;
 
     return {

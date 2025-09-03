@@ -44,10 +44,14 @@ function convertPythonAgent(pythonAgent: AgentInfo): Agent {
     lastActivity: pythonAgent.last_activity,
     currentTask: pythonAgent.current_task || null,
     metrics: {
-      tasksCompleted: pythonAgent.metrics.tasks_completed || 0,
+      totalTasks: (pythonAgent.metrics.tasks_completed || 0) + (pythonAgent.metrics.tasks_failed || 0),
+      completedTasks: pythonAgent.metrics.tasks_completed || 0,
+      failedTasks: pythonAgent.metrics.tasks_failed || 0,
       averageResponseTime: pythonAgent.metrics.avg_response_time || 0,
-      successRate: pythonAgent.metrics.success_rate || 1.0,
-      tokensUsed: pythonAgent.metrics.tokens_used || 0
+      totalTokensUsed: pythonAgent.metrics.tokens_used || 0,
+      totalCost: (pythonAgent.metrics.tokens_used || 0) * 0.001,
+      uptime: pythonAgent.metrics.uptime || 0,
+      healthScore: (pythonAgent.metrics.success_rate || 1.0) * 100
     },
     configuration: {
       model: pythonAgent.model,
@@ -368,7 +372,7 @@ export function useRealAgentManager(options: UseRealAgentManagerOptions = {}) {
         if (enableToasts) {
           toast.warning('Lost connection to Python agent orchestrator');
         }
-      } else if (connected && prev => prev.connected === false) {
+      } else if (connected && !state.connected) {
         if (enableToasts) {
           toast.success('Reconnected to Python agent orchestrator');
         }

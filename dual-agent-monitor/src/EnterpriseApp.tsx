@@ -9,6 +9,7 @@ import { EnhancedSessionList } from './components/enhanced/EnhancedSessionList';
 import { EnhancedMessagePane } from './components/enhanced/EnhancedMessagePane';
 import { EnhancedPerformanceMetrics } from './components/enhanced/EnhancedPerformanceMetrics';
 import { MessageInput } from './components/MessageInput';
+import { MultiAgentDashboard } from './components/AgentManagement';
 import { useSessionStore } from './store/useSessionStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import { WebSocketMessage } from './types';
@@ -418,11 +419,8 @@ function EnterpriseAppInner() {
 
       case 'agents':
         return (
-          <div className="flex-1 p-6">
-            <EmptyState
-              title="Agent Management"
-              description="Advanced agent configuration and monitoring capabilities are coming soon"
-            />
+          <div className="flex-1">
+            <MultiAgentDashboard className="h-full" />
           </div>
         );
 

@@ -4,7 +4,7 @@ export interface Agent {
   name: string;
   type: 'manager' | 'worker' | 'specialist';
   role: 'claude-opus' | 'claude-sonnet' | 'claude-haiku';
-  status: 'idle' | 'active' | 'working' | 'error' | 'offline' | 'starting' | 'stopping';
+  status: 'idle' | 'active' | 'working' | 'error' | 'offline' | 'starting' | 'stopping' | 'stopped';
   createdAt: Date;
   lastActivity?: Date;
   configuration: AgentConfiguration;
@@ -63,7 +63,7 @@ export interface AgentTask {
   description: string;
   assignedTo: string;
   status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;
@@ -71,7 +71,10 @@ export interface AgentTask {
   actualDuration?: number; // minutes
   dependencies?: string[]; // task IDs
   results?: any;
+  result?: any;
   error?: string;
+  metadata?: Record<string, any>;
+  progress?: number;
 }
 
 export interface AgentWorkflow {
